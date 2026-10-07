@@ -11,7 +11,8 @@ import { isLinkedInEntry } from './channels.mjs';
 import { readLinkedInMap } from './tt-linkedin.mjs';
 import { outreachCapState, isChannelCapped } from './correspondence-context.mjs';
 import { parseReferralsMd, readReferralCorrespondence } from './referrals.mjs';
-import { resolvePeople } from './contact-identity.mjs';
+import { resolvePeople, cleanName, contactRef, linkedinKey } from './contact-identity.mjs';
+import { sameContact } from '../../../lib/contact-match.mjs';
 import { readPins } from './contact-links.mjs';
 import { buildTimeline } from './contact-timeline.mjs';
 import { parseConnectedOn } from './linkedin-acceptance.mjs';
@@ -373,6 +374,10 @@ function computeDueSequenceContacts({ apps } = {}) {
   try { taContacts = parseTargetTalentMd(); } catch { /* */ }
   const byId = new Map(taContacts.map(c => [String(c.id), c]));
   const today = _localToday();
+  // A cadence started on a fresh twin of a contact who already has history must
+  // not come due: it would re-pitch a person already invited or emailed.
+  const siblings = _personSiblings(_bothBooks({ taRows: taContacts }));
+  const liMap = readLinkedInMap() ?? {};
 
   const due = [];
   for (const active of getActiveSequences()) {
@@ -387,6 +392,7 @@ function computeDueSequenceContacts({ apps } = {}) {
     if (!c) continue;
     if (c.status === 'Archived') continue;
     if (!eligible.has(normalizeCompany(c.company))) continue;
+    if (_shadowedBySibling(c, siblings.get(c.id), liMap)) continue;
 
     const template = getTemplate(active.sequenceId);
     if (!template) continue;
@@ -452,6 +458,73 @@ const EMAIL_QUEUE_EXCLUDE_STATUS = new Set(['Archived', 'Sent', 'Replied', 'Meet
 
 function _hasLinkedIn(row) {
   return !!(row && (row.linkedin || '').trim());
+}
+
+// One human can be filed under two TA rows (the company label changed between
+// applications, so the add path missed the match). Each row is excluded from the
+// queues by its OWN status, so the older row (Sent, invite pending) dropped out
+// while its fresh twin (Not Contacted, no history) surfaced as a stranger and
+// offered a second invite. Grouping uses the shared person engine, so a manual
+// pin or "keep separate" is honored. Map: TA row id -> the OTHER rows of that person.
+function _personSiblings({ ta, referrals, influencers }) {
+  const out = new Map();
+  const link = (a, b) => {
+    for (const [x, y] of [[a, b], [b, a]]) {
+      const list = out.get(x.id) || [];
+      if (!list.includes(y)) list.push(y);
+      out.set(x.id, list);
+    }
+  };
+  let pins = {};
+  try { pins = readPins() || {}; } catch { /* no pins file */ }
+  // 1) Same LinkedIn profile, plus any user pin, via the shared person engine.
+  try {
+    const byId = new Map(ta.map(row => [row.id, row]));
+    for (const person of resolvePeople({ ta, referrals, influencers, pins })) {
+      const rows = person.refs
+        .filter(ref => ref.startsWith('ta:'))
+        .map(ref => byId.get(Number(ref.slice(3))))
+        .filter(Boolean);
+      for (let i = 0; i < rows.length; i++) for (let j = i + 1; j < rows.length; j++) link(rows[i], rows[j]);
+    }
+  } catch { /* fall through to the name pass */ }
+  // 2) Same name at a compatible company label, for rows with no shared profile.
+  //    Bucketed by cleaned name so 1,000+ rows stay near-linear.
+  const buckets = new Map();
+  for (const row of ta) {
+    const key = cleanName(`${row.first || ''} ${row.last || ''}`);
+    if (!key || pins[contactRef('ta', row.id)]?.alone === true) continue;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(row);
+  }
+  for (const rows of buckets.values()) {
+    for (let i = 0; i < rows.length; i++) for (let j = i + 1; j < rows.length; j++) {
+      // Two different profiles are two people for QUEUE purposes, even at a
+      // matching company: hiding a live contact is the costlier mistake here.
+      const ki = linkedinKey(rows[i].linkedin), kj = linkedinKey(rows[j].linkedin);
+      if (ki && kj && ki !== kj) continue;
+      if (sameContact(rows[i], rows[j])) link(rows[i], rows[j]);
+    }
+  }
+  return out;
+}
+
+// Does another row of the same person already carry the history, so this row
+// must not be worked as a new contact? True when a sibling has been contacted,
+// replied, connected, or has an invite pending, or when an older live row
+// already represents them. An older ARCHIVED row never shadows: re-adding an
+// archived contact for a new application is an intentional revival.
+function _shadowedBySibling(row, siblings, liMap) {
+  // A row with its own recorded contact carries its own thread; only a fresh,
+  // untouched twin can be shadowed.
+  if (CONTACTED_STATUSES.has(row.status) || row.status === 'Connected') return false;
+  for (const other of siblings || []) {
+    if (CONTACTED_STATUSES.has(other.status) || other.status === 'Connected') return true;
+    const state = liMap?.[String(other.id)]?.state;
+    if (state === 'Invite Pending' || state === 'Connected') return true;
+    if (other.status !== 'Archived' && other.id < row.id) return true;
+  }
+  return false;
 }
 
 // Companies with a CURRENTLY-LIVE application, the only ones worth spending an
@@ -707,8 +780,10 @@ function computeConnectQueue({ taRows, referralRows, influencers, apps } = {}) {
   const today = _localToday();
   const out = [];
   const liMap = readLinkedInMap() ?? {};
+  const siblings = _personSiblings({ ta, referrals, influencers: influencerRows });
   const consider = (row, source) => {
     if (!_hasLinkedIn(row)) return;              // no LinkedIn handle → not reachable here
+    if (_shadowedBySibling(row, siblings.get(row.id), liMap)) return;
     // LinkedIn-ONLY bucket. A contact who ALSO has a sendable email is high-value
     // (reachable both ways) and belongs in the Both queue, where both channels are
     // worked in parallel — not here. This keeps the three buckets mutually exclusive.
@@ -739,8 +814,11 @@ function computeEmailQueue({ taRows, referralRows, influencers, apps } = {}) {
   const touchIdx = buildCompanyTouchIndex({ ta, referrals, influencers: influencerRows });
   const today = _localToday();
   const out = [];
+  const liMap = readLinkedInMap() ?? {};
+  const siblings = _personSiblings({ ta, referrals, influencers: influencerRows });
   const consider = (row, source) => {
     if (!isSendable(row)) return;                // MUST have a sendable email
+    if (_shadowedBySibling(row, siblings.get(row.id), liMap)) return;
     // Email-ONLY bucket. A contact who ALSO has a LinkedIn handle is high-value
     // (reachable both ways) and belongs in the Both queue, not here.
     if (_hasLinkedIn(row)) return;
@@ -787,8 +865,10 @@ function computeBothQueue({ taRows, referralRows, influencers, apps } = {}) {
   const today = _localToday();
   const out = [];
   const liMap = readLinkedInMap() ?? {};
+  const siblings = _personSiblings({ ta, referrals, influencers: influencerRows });
   const consider = (row, source) => {
     if (!(_hasLinkedIn(row) && isSendable(row))) return;   // must have BOTH channels
+    if (_shadowedBySibling(row, siblings.get(row.id), liMap)) return;
     if (BOTH_QUEUE_EXCLUDE_STATUS.has(row.status)) return; // a reply/acceptance pauses the multithread
     const company = row.company;
     if (!_passesCompanyGate(source, company, applied)) return;
@@ -1168,6 +1248,12 @@ function computeContactFollowups(opts = {}) {
   // Only rows whose ref resolves to a person are collapsed; anything unresolved
   // falls back to its own row key and behaves exactly as before.
   let personByRef = new Map();
+  // Every trigger below (outreach, stale app, due sequence) can surface a fresh
+  // twin of a contact already on file; a started cadence on the twin is enough.
+  // Shadow it here, once, so no trigger re-pitches a person who has history.
+  let siblings = new Map();
+  let taById = new Map();
+  let liMap = {};
   try {
     const books = _bothBooks(opts);
     const people = resolvePeople({
@@ -1175,10 +1261,17 @@ function computeContactFollowups(opts = {}) {
       pins: opts.pins ?? readPins(),
     });
     personByRef = new Map(people.flatMap(p => p.refs.map(ref => [ref, p.id])));
+    siblings = _personSiblings(books);
+    taById = new Map(books.ta.map(row => [row.id, row]));
+    liMap = readLinkedInMap() ?? {};
   } catch { /* resolution unavailable → fall back to row keys, never throw here */ }
 
   const put = (item) => {
     if (!item || item.channel === 'none') return;   // no reachable channel → nothing to action
+    if (item.source === 'ta') {
+      const taRow = taById.get(Number(item.id));
+      if (taRow && _shadowedBySibling(taRow, siblings.get(taRow.id), liMap)) return;
+    }
     const rowKey = `${item.source}:${item.id}`;
     const key = personByRef.get(rowKey) || rowKey;
     const prev = byKey.get(key);

@@ -12,6 +12,7 @@ import { findAndVerify, hunterSearchesLeft, millionVerifierCreditsLeft, planFind
 import { hunterDomainSearch, planDomainBudget } from '../../../lib/hunter-domain.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { mergeStakeholderAdditions, validateStakeholder, knownDomainKey } from '../../../lib/stakeholder-additions.mjs';
+import { findExistingContact } from '../../../lib/contact-match.mjs';
 import { readReconcileDismissed, addReconcileDismissed } from '../lib/sidecars.mjs';
 import { readAttempts, recordAttempt, writeAttempts } from '../lib/contact-search-attempts.mjs';
 import { currentBatch } from '../lib/pricing.mjs';
@@ -75,6 +76,7 @@ function dismissKey({ company, first, last }) {
 
 async function runDiscoverJob(job, tasks, generate) {
   const dismissed = readReconcileDismissed();
+  const heldRows = (() => { try { return parseTargetTalentMd(); } catch { return []; } })();
   const attempts = readAttempts();
   const apps = parseApplicationsMd();
   // Pre-compute each company's newest app date for the attempt-reset check.
@@ -112,7 +114,9 @@ async function runDiscoverJob(job, tasks, generate) {
         job.results.push({
           company: task.company,
           search: task.search,
-          suggestions: (result.suggestions || []).filter(suggestion => !dismissed.has(dismissKey({ company: task.company, ...suggestion }))),
+          // Never offer someone already on file, even under another company label.
+          suggestions: (result.suggestions || []).filter(suggestion => !dismissed.has(dismissKey({ company: task.company, ...suggestion }))
+            && !findExistingContact({ company: task.company, ...suggestion }, heldRows)),
           rejected: [],
           duplicates: 0,
         });
@@ -599,12 +603,20 @@ router.post('/api/tt-reconcile/bulk-add', async (req, res) => {
         candidates.push(validation.person);
       }
     }
-    // Dedup by (normalized company + last + first) against existing rows
-    const existingKeys = new Set(existing.map(r => `${normCompany(r.company)}|${(r.last || '').toLowerCase()}|${(r.first || '').toLowerCase()}`));
-    const toWrite = candidates.filter(c => {
-      const k = `${normCompany(c.company)}|${(c.last || '').toLowerCase()}|${(c.first || '').toLowerCase()}`;
-      return !existingKeys.has(k);
-    });
+    // A person already on file is reused, never re-added: same LinkedIn profile, or
+    // the same name at a compatible company label (lib/contact-match.mjs). The old
+    // exact-company key let "Acme" and "Acme Commerce" file one person
+    // twice, and the twin then re-queued a contact whose invite was already pending.
+    const matched = [];
+    const toWrite = [];
+    for (const c of candidates) {
+      const hit = findExistingContact(c, [...existing, ...toWrite]);
+      if (hit) {
+        matched.push({ name: `${c.first || ''} ${c.last || ''}`.trim(), company: String(c.company || ''), existingId: hit.id, existingStatus: hit.status || '' });
+        continue;
+      }
+      toWrite.push(c);
+    }
     // Snapshot the "NEW since last reconcile" watermark HERE, just before writing,
     // so the rows we are about to add (higher ids) read as NEW and the previous
     // batch stops being new. Guarded on toWrite.length so an all-duplicate add
@@ -626,6 +638,9 @@ router.post('/api/tt-reconcile/bulk-add', async (req, res) => {
     res.json({
       ok: true, requested: contacts.length, written: written.length,
       skipped: contacts.length - written.length, rejected, gated,
+      // Only present when something matched, so the response shape stays the same
+      // for callers that never hit a twin.
+      ...(matched.length ? { matched } : {}),
       verifierKeys: !!(hkey && mkey),
       emailVerification: (hkey && mkey) ? 'running' : 'skipped',
     });
@@ -650,8 +665,8 @@ router.post('/api/tt-reconcile/bulk-import', (req, res) => {
     if (!rows.length) return res.status(400).json({ error: 'No valid rows found (need a header row plus rows with company, first, last, title).' });
     if (!fs.existsSync(TARGET_TALENT_MD)) fs.writeFileSync(TARGET_TALENT_MD, TT_HEADER, 'utf8');
     const existing = parseTargetTalentMd();
-    const existingKeys = new Set(existing.map(r => `${normCompany(r.company)}|${(r.last || '').toLowerCase()}|${(r.first || '').toLowerCase()}`));
-    const toWrite = rows.filter(c => !existingKeys.has(`${normCompany(c.company)}|${(c.last || '').toLowerCase()}|${(c.first || '').toLowerCase()}`));
+    const toWrite = [];
+    for (const c of rows) if (!findExistingContact(c, [...existing, ...toWrite])) toWrite.push(c);
     const written = appendTTRows(toWrite);
     if (written.length) {
       try {
