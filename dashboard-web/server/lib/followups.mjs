@@ -11,7 +11,8 @@ import { isLinkedInEntry } from './channels.mjs';
 import { readLinkedInMap } from './tt-linkedin.mjs';
 import { outreachCapState, isChannelCapped } from './correspondence-context.mjs';
 import { parseReferralsMd, readReferralCorrespondence } from './referrals.mjs';
-import { resolvePeople } from './contact-identity.mjs';
+import { resolvePeople, cleanName, contactRef, linkedinKey } from './contact-identity.mjs';
+import { sameContact } from '../../../lib/contact-match.mjs';
 import { readPins } from './contact-links.mjs';
 import { buildTimeline } from './contact-timeline.mjs';
 import { parseConnectedOn } from './linkedin-acceptance.mjs';
@@ -454,6 +455,70 @@ function _hasLinkedIn(row) {
   return !!(row && (row.linkedin || '').trim());
 }
 
+// One human can be filed under two TA rows (the company label changed between
+// applications, so the add path missed the match). Each row is excluded from the
+// queues by its OWN status, so the older row (Sent, invite pending) dropped out
+// while its fresh twin (Not Contacted, no history) surfaced as a stranger and
+// offered a second invite. Grouping uses the shared person engine, so a manual
+// pin or "keep separate" is honored. Map: TA row id -> the OTHER rows of that person.
+function _personSiblings({ ta, referrals, influencers }) {
+  const out = new Map();
+  const link = (a, b) => {
+    for (const [x, y] of [[a, b], [b, a]]) {
+      const list = out.get(x.id) || [];
+      if (!list.includes(y)) list.push(y);
+      out.set(x.id, list);
+    }
+  };
+  let pins = {};
+  try { pins = readPins() || {}; } catch { /* no pins file */ }
+  // 1) Same LinkedIn profile, plus any user pin, via the shared person engine.
+  try {
+    const byId = new Map(ta.map(row => [row.id, row]));
+    for (const person of resolvePeople({ ta, referrals, influencers, pins })) {
+      const rows = person.refs
+        .filter(ref => ref.startsWith('ta:'))
+        .map(ref => byId.get(Number(ref.slice(3))))
+        .filter(Boolean);
+      for (let i = 0; i < rows.length; i++) for (let j = i + 1; j < rows.length; j++) link(rows[i], rows[j]);
+    }
+  } catch { /* fall through to the name pass */ }
+  // 2) Same name at a compatible company label, for rows with no shared profile.
+  //    Bucketed by cleaned name so 1,000+ rows stay near-linear.
+  const buckets = new Map();
+  for (const row of ta) {
+    const key = cleanName(`${row.first || ''} ${row.last || ''}`);
+    if (!key || pins[contactRef('ta', row.id)]?.alone === true) continue;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(row);
+  }
+  for (const rows of buckets.values()) {
+    for (let i = 0; i < rows.length; i++) for (let j = i + 1; j < rows.length; j++) {
+      // Two different profiles are two people for QUEUE purposes, even at a
+      // matching company: hiding a live contact is the costlier mistake here.
+      const ki = linkedinKey(rows[i].linkedin), kj = linkedinKey(rows[j].linkedin);
+      if (ki && kj && ki !== kj) continue;
+      if (sameContact(rows[i], rows[j])) link(rows[i], rows[j]);
+    }
+  }
+  return out;
+}
+
+// Does another row of the same person already carry the history, so this row
+// must not be worked as a new contact? True when a sibling has been contacted,
+// replied, connected, or has an invite pending, or when an older live row
+// already represents them. An older ARCHIVED row never shadows: re-adding an
+// archived contact for a new application is a deliberate revival.
+function _shadowedBySibling(row, siblings, liMap) {
+  for (const other of siblings || []) {
+    if (CONTACTED_STATUSES.has(other.status) || other.status === 'Connected') return true;
+    const state = liMap?.[String(other.id)]?.state;
+    if (state === 'Invite Pending' || state === 'Connected') return true;
+    if (other.status !== 'Archived' && other.id < row.id) return true;
+  }
+  return false;
+}
+
 // Companies with a CURRENTLY-LIVE application, the only ones worth spending an
 // outreach contact on. Uses the shared OUTREACH_ELIGIBLE_STATUSES (live funnel
 // Applied..Offer only) from statuses.mjs, matched on CURRENT status —
@@ -707,8 +772,10 @@ function computeConnectQueue({ taRows, referralRows, influencers, apps } = {}) {
   const today = _localToday();
   const out = [];
   const liMap = readLinkedInMap() ?? {};
+  const siblings = _personSiblings({ ta, referrals, influencers: influencerRows });
   const consider = (row, source) => {
     if (!_hasLinkedIn(row)) return;              // no LinkedIn handle → not reachable here
+    if (_shadowedBySibling(row, siblings.get(row.id), liMap)) return;
     // LinkedIn-ONLY bucket. A contact who ALSO has a sendable email is high-value
     // (reachable both ways) and belongs in the Both queue, where both channels are
     // worked in parallel — not here. This keeps the three buckets mutually exclusive.
@@ -739,8 +806,11 @@ function computeEmailQueue({ taRows, referralRows, influencers, apps } = {}) {
   const touchIdx = buildCompanyTouchIndex({ ta, referrals, influencers: influencerRows });
   const today = _localToday();
   const out = [];
+  const liMap = readLinkedInMap() ?? {};
+  const siblings = _personSiblings({ ta, referrals, influencers: influencerRows });
   const consider = (row, source) => {
     if (!isSendable(row)) return;                // MUST have a sendable email
+    if (_shadowedBySibling(row, siblings.get(row.id), liMap)) return;
     // Email-ONLY bucket. A contact who ALSO has a LinkedIn handle is high-value
     // (reachable both ways) and belongs in the Both queue, not here.
     if (_hasLinkedIn(row)) return;
@@ -787,8 +857,10 @@ function computeBothQueue({ taRows, referralRows, influencers, apps } = {}) {
   const today = _localToday();
   const out = [];
   const liMap = readLinkedInMap() ?? {};
+  const siblings = _personSiblings({ ta, referrals, influencers: influencerRows });
   const consider = (row, source) => {
     if (!(_hasLinkedIn(row) && isSendable(row))) return;   // must have BOTH channels
+    if (_shadowedBySibling(row, siblings.get(row.id), liMap)) return;
     if (BOTH_QUEUE_EXCLUDE_STATUS.has(row.status)) return; // a reply/acceptance pauses the multithread
     const company = row.company;
     if (!_passesCompanyGate(source, company, applied)) return;
