@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.10.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.9.1...v5.10.0) (2026-10-08)
+
+
+### Features
+
+* link repeat postings and skip evaluating duplicate job descriptions ([#455](https://github.com/michaelinghilterra-creator/trajecktory/issues/455)) ([0177b90](https://github.com/michaelinghilterra-creator/trajecktory/commit/0177b9065249f008135d0f40961992f973c45cb0))
+
 ## [5.9.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.9.0...v5.9.1) (2026-10-07)
 
 
