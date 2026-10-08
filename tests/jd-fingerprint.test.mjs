@@ -44,6 +44,12 @@ console.log('\n1. fingerprintBody');
   check(a && b && a.hash === b.hash, 'header lines, whitespace, and HTML tags normalize to the same hash');
   check(a && c && a.hash !== c.hash, 'changed body text changes the hash');
   check(fingerprintBody('short body') === null, 'short body returns null');
+  const once = fingerprintBody(snapshot(`${body('alpha')} Tom &amp; Jerry`));
+  const plain = fingerprintBody(snapshot(`${body('alpha')} Tom & Jerry`));
+  const escaped = fingerprintBody(snapshot(`${body('alpha')} Use &amp;lt;b&amp;gt; for bold`));
+  const decodedTwice = fingerprintBody(snapshot(`${body('alpha')} Use <b> for bold`));
+  check(once && plain && once.hash === plain.hash, 'an ampersand entity decodes to the same text as a plain ampersand');
+  check(escaped && decodedTwice && escaped.hash !== decodedTwice.hash, 'an escaped entity is decoded once, not twice');
 }
 
 console.log('\n2. snapshotFingerprint');
