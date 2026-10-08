@@ -50,6 +50,8 @@ const APPS_FILE = existsSync(DATA_APPS)
 // Report-only unless the caller explicitly opts into writing. --dry-run is kept
 // as a no-op alias so existing muscle memory still lands somewhere safe.
 const APPLY = process.argv.includes('--apply');
+const onlyArg = process.argv.find((a) => a.startsWith('--only='));
+const ONLY = onlyArg ? new Set(onlyArg.slice('--only='.length).split(',').map((s) => s.trim())) : null;
 
 if (logWritesEnabled(DATA_DIR) && APPS_FILE !== DATA_APPS) {
   console.error('Event-log writes require an existing data/applications.md; nothing was saved.');
@@ -152,6 +154,7 @@ let conflicted = 0;
 for (const [, cluster] of groups) {
   {
     if (cluster.length < 2) continue;
+    if (ONLY && !cluster.some((e) => ONLY.has(String(e.num)))) continue;
 
     // A shared URL normally means one posting evaluated twice. When the ROLES in
     // a cluster clearly disagree, that reading is wrong: one of the reports
