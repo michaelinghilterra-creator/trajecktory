@@ -1051,6 +1051,18 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   const legitSignals = (cs && Array.isArray(cs.legitimacySignals)) ? cs.legitimacySignals : [];
   const legitConclusion = cs && cs.legitimacyConclusion;
   const sectorRaw = (cs && cs.domain) || app.sectorRaw;
+  const relatedRoles = Array.isArray(app.relatedRoles) ? app.relatedRoles : [];
+  const scoreText = (n) => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : null;
+  const relatedText = (rel) => {
+    const label = rel.direction === 'earlier' ? 'Seen before' : 'Seen again';
+    let text = `${label}: #${rel.num} ${rel.status || ''}`.trim();
+    if (rel.scoreDelta == null) return text;
+    const first = rel.direction === 'earlier' ? scoreText(rel.score) : scoreText(app.score);
+    const second = rel.direction === 'earlier' ? scoreText(app.score) : scoreText(rel.score);
+    const delta = Number(rel.scoreDelta);
+    const signed = `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}`;
+    return first && second ? `${text}, ${first} to ${second} (${signed})` : text;
+  };
 
   return (
     <div className="pl-drawer-overlay">
@@ -1071,6 +1083,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               {(cs && cs.remote) && <span className="meta-chip">{cs.remote}</span>}
               {sectorRaw && <span className="meta-chip">{sectorRaw}</span>}
               {(cs && cs.seniority) && <span className="meta-chip">{cs.seniority.split('(')[0].trim()}</span>}
+              {relatedRoles.map(rel => <span key={`${rel.num}:${rel.direction}`} className="meta-chip">{relatedText(rel)}</span>)}
               {window.jdHref(app) && <a className="meta-chip link" href={window.jdHref(app)} target="_blank" rel="noreferrer">JD ↗</a>}
             </div>
           </div>

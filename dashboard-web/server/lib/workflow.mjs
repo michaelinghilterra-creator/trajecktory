@@ -6,7 +6,7 @@ const WORKFLOW_STEPS = {
   // (Ashby/Workday/SmartRecruiters/embedded-Greenhouse) to jds/ and repoint the
   // pipeline entry to local:jds/…. Without this, evaluation can skip unreadable
   // roles on those platforms. See resolve-jds.mjs.
-  'api-scan':   { cmd: 'node scan.mjs && node resolve-jds.mjs', label: 'API Scan',       summarize: scanSummary },
+  'api-scan':   { cmd: 'node scan.mjs && node resolve-jds.mjs && node gate-pipeline.mjs --suppress-only', label: 'API Scan',       summarize: scanSummary },
   'gate':       { cmd: 'node gate-pipeline.mjs && node reconcile-triage.mjs --apply', label: 'Liveness Gate', summarize: gateSummary },
   'derive':     { cmd: 'node compute-scores.mjs --all --apply', label: 'Derive Scores',   summarize: tailLines },
   'merge':      { cmd: 'node merge-tracker.mjs',              label: 'Merge Tracker',    summarize: tailLines },

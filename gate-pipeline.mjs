@@ -49,6 +49,7 @@ function flushDropLog(rows) {
 
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
+const suppressOnly = args.includes('--suppress-only');
 // Escape hatch: a genuine repost the user wants re-scored despite an existing
 // tracker row for the same posting.
 const allowReeval = args.includes('--allow-reeval');
@@ -178,6 +179,18 @@ if (!allowReeval) {
     process.exit(0);
   }
   if (!dryRun) flushDropLog(dropLog);
+}
+
+if (suppressOnly) {
+  if (!dryRun && (decidedCount || repostCount)) {
+    writeFileSync(PIPELINE, lines.join('\n'), 'utf8');
+    appendGateHistory(GATE_HISTORY, gateHistoryRows);
+  }
+  if (decidedCount) console.log(`Already evaluated: ${decidedCount} (skipped, not browser-checked)`);
+  const suppressed = decidedCount + repostCount;
+  console.log(`Suppressed: ${suppressed} (${decidedCount} already evaluated, ${repostCount} active-role reposts; not browser-checked)`);
+  console.log(`Left pending: ${pending.length}`);
+  process.exit(0);
 }
 
 console.log(`Gating ${pending.length} pending URLs (concurrency ${concurrency})...`);

@@ -6,6 +6,8 @@ import { parseTrackerLine, formatTrackerLine, hasStrayPipe } from '../../../lib/
 import { passedReasonOf } from '../../../lib/passed.mjs';
 import { appendEventsWithEffects, findTrackerRow } from '../../../lib/legacy-files.mjs';
 import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
+import { normalizeCompany } from '../../../lib/identity.mjs';
+import { findRelatedRoles } from '../../../lib/prior-roles.mjs';
 import { hasV1Frontmatter, parseV1, v1Header } from '../v1-loader.mjs';
 import {
   formatStatusEventRow,
@@ -334,6 +336,16 @@ function parseApplicationsMd() {
     // The other half of warm: the user reached a person first. Kept separate from
     // inbound because only this half is scalable to a weekly floor.
     r.outbound = isOutbound(r.notes);
+  }
+
+  const byCompany = new Map();
+  for (const r of rows) {
+    const key = normalizeCompany(r.company);
+    if (!byCompany.has(key)) byCompany.set(key, []);
+    byCompany.get(key).push(r);
+  }
+  for (const r of rows) {
+    r.relatedRoles = findRelatedRoles(byCompany.get(normalizeCompany(r.company)) || [], r);
   }
 
   _appsCache = { mtimeMs, evMtimeMs, rows };
