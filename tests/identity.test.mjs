@@ -129,6 +129,14 @@ check(canonicalUrl('https://jobs.exampleco.com/listing/5550001?gh_jid=5550001')
     !== canonicalUrl('https://job-boards.greenhouse.io/exampleco/jobs/9999999'),
   'different greenhouse ids do not collapse');
 
+// Ashby slug casing: one posting UUID reached as /Slug/ and /slug/ is one job.
+check(canonicalUrl('https://jobs.ashbyhq.com/Exampleco/11111111-2222-3333-4444-555555555555')
+    === canonicalUrl('https://jobs.ashbyhq.com/exampleco/11111111-2222-3333-4444-555555555555?source=x'),
+  'ashby slug casing and tracking params do not split one posting');
+check(canonicalUrl('https://jobs.ashbyhq.com/exampleco/11111111-2222-3333-4444-555555555555')
+    !== canonicalUrl('https://jobs.ashbyhq.com/exampleco/11111111-2222-3333-4444-666666666666'),
+  'different ashby ids stay distinct');
+
 // ── normalizeCompany / sameRole ───────────────────────────────────────────────
 console.log('\n2. company and role identity');
 

@@ -23,9 +23,10 @@ import { chromium } from 'playwright';
 import yaml from 'js-yaml';
 import { classifyLiveness, parseWorkdayUrl, checkWorkdayLiveness, workdaySiteFromCareersUrl } from './liveness-core.mjs';
 import { isSafeLivenessUrl } from './lib/safe-url.mjs';
-import { buildDecidedIndex, findDecided, buildActiveRoleIndex, findActiveRepost, sourceUrlFromSnapshot } from './lib/identity.mjs';
+import { buildDecidedIndex, findDecided, buildActiveRoleIndex, findActiveRepost, sourceUrlFromSnapshot, normalizeCompany } from './lib/identity.mjs';
 import { appendGateHistory } from './lib/gate-history.mjs';
 import { localToday } from './lib/local-date.mjs';
+import { buildFingerprintIndex, findDuplicateJd, snapshotFingerprint } from './lib/jd-fingerprint.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PIPELINE = join(__dirname, 'data/pipeline.md');
@@ -49,6 +50,7 @@ function flushDropLog(rows) {
 
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
+const suppressOnly = args.includes('--suppress-only');
 // Escape hatch: a genuine repost the user wants re-scored despite an existing
 // tracker row for the same posting.
 const allowReeval = args.includes('--allow-reeval');
@@ -94,6 +96,7 @@ for (let i = 0; i < lines.length; i++) {
     // for the repost guard's company+role hint (empty when a bare URL).
     const meta = (m[3] || '').split('|').map(s => s.trim()).filter(Boolean);
     let url = m[2];
+    const local = m[2].startsWith('local:') ? m[2] : null;
     if (url.startsWith('local:')) {
       const recovered = sourceUrlFromSnapshot(url, __dirname);
       if (!recovered) {
@@ -105,7 +108,7 @@ for (let i = 0; i < lines.length; i++) {
       }
       url = recovered;
     }
-    pending.push({ idx: i, prefix: m[1], url, suffix: m[3] || '', company: meta[0] || '', role: meta[1] || '' });
+    pending.push({ idx: i, prefix: m[1], url, suffix: m[3] || '', company: meta[0] || '', role: meta[1] || '', local });
   }
 }
 
@@ -132,6 +135,7 @@ if (pending.length === 0) {
 // check. --allow-reeval bypasses this for a genuine repost worth re-scoring.
 let decidedCount = 0;
 let repostCount = 0;
+let dupJdCount = 0;
 const dropLog = [];   // rows appended to data/merge-drops.tsv for audit
 // Every disposition this run reaches — decided/repost suppressions AND (further
 // below) the browser-checked live/dead/uncertain verdicts — is also mirrored
@@ -143,6 +147,9 @@ const gateHistoryRows = [];
 if (!allowReeval) {
   const index = buildDecidedIndex({ appsPath: APPS, rootDir: __dirname });
   const activeIndex = buildActiveRoleIndex({ appsPath: APPS, rootDir: __dirname });
+  const companies = new Set(pending.filter(p => p.local && p.company).map(p => normalizeCompany(p.company)).filter(Boolean));
+  const fpIndex = buildFingerprintIndex({ appsPath: APPS, rootDir: __dirname, companies });
+  const seenInBatch = new Map();
   const stillPending = [];
   for (const p of pending) {
     const prior = findDecided(index, p.url);
@@ -164,6 +171,32 @@ if (!allowReeval) {
       console.log(`  ⏭ repost    of #${repost.num} (${repost.status}) — ${p.company} / ${p.role}`);
       continue;
     }
+    const normCompany = normalizeCompany(p.company);
+    if (p.local && normCompany) {
+      const fp = snapshotFingerprint(p.local, __dirname);
+      if (fp) {
+        const prior = findDuplicateJd(fpIndex, normCompany, fp.hash);
+        if (prior) {
+          lines[p.idx] = `- [!] ${p.url}${p.suffix} — duplicate JD of #${prior.num} (${prior.status}); identical text, skipped`;
+          dupJdCount++;
+          dropLog.push(`${todayISO()}\tduplicate-jd\t${prior.num}\t${prior.status}\t${p.company}\t${p.role}\t${p.url}`);
+          gateHistoryRows.push({ url: p.url, company: p.company, role: p.role, result: 'duplicate', reason: `duplicate JD of #${prior.num} (${prior.status}); identical text` });
+          console.log(`  ⏭ duplicate  of #${prior.num} (${prior.status}) — ${p.company} / ${p.role}`);
+          continue;
+        }
+        const key = `${normCompany}::${fp.hash}`;
+        const first = seenInBatch.get(key);
+        if (first) {
+          lines[p.idx] = `- [!] ${p.url}${p.suffix} — duplicate JD of an earlier pending posting in this batch (${first.url})`;
+          dupJdCount++;
+          dropLog.push(`${todayISO()}\tduplicate-jd\tbatch\tpending\t${p.company}\t${p.role}\t${p.url}`);
+          gateHistoryRows.push({ url: p.url, company: p.company, role: p.role, result: 'duplicate', reason: `duplicate JD of an earlier pending posting in this batch (${first.url})` });
+          console.log(`  ⏭ duplicate  of earlier pending posting — ${p.company} / ${p.role}`);
+          continue;
+        }
+        seenInBatch.set(key, p);
+      }
+    }
     stillPending.push(p);
   }
   pending.length = 0;
@@ -171,13 +204,27 @@ if (!allowReeval) {
 
   if (repostCount) console.log(`\nReposts suppressed: ${repostCount} (already applied/interviewing — logged to data/merge-drops.tsv)`);
 
-  if ((decidedCount || repostCount) && pending.length === 0) {
+  if (dupJdCount) console.log(`Duplicate JDs suppressed: ${dupJdCount} (identical text; logged to data/merge-drops.tsv)`);
+
+  if ((decidedCount || repostCount || dupJdCount) && pending.length === 0) {
     if (!dryRun) { writeFileSync(PIPELINE, lines.join('\n'), 'utf8'); flushDropLog(dropLog); appendGateHistory(GATE_HISTORY, gateHistoryRows); }
     if (decidedCount) console.log(`Already evaluated: ${decidedCount} (skipped, not browser-checked)`);
     console.log('Nothing left to liveness-check.');
     process.exit(0);
   }
   if (!dryRun) flushDropLog(dropLog);
+}
+
+if (suppressOnly) {
+  if (!dryRun && (decidedCount || repostCount || dupJdCount)) {
+    writeFileSync(PIPELINE, lines.join('\n'), 'utf8');
+    appendGateHistory(GATE_HISTORY, gateHistoryRows);
+  }
+  if (decidedCount) console.log(`Already evaluated: ${decidedCount} (skipped, not browser-checked)`);
+  const suppressed = decidedCount + repostCount + dupJdCount;
+  console.log(`Suppressed: ${suppressed} (${decidedCount} already evaluated, ${repostCount} active-role reposts, ${dupJdCount} duplicate JDs; not browser-checked)`);
+  console.log(`Left pending: ${pending.length}`);
+  process.exit(0);
 }
 
 console.log(`Gating ${pending.length} pending URLs (concurrency ${concurrency})...`);
@@ -314,8 +361,8 @@ const dead      = results.filter(r => r.result === 'expired');
 const uncertain = results.filter(r => r.result === 'uncertain');
 
 console.log('');
-const suppressed = decidedCount + repostCount;
-if (suppressed) console.log(`Suppressed: ${suppressed} (${decidedCount} already evaluated, ${repostCount} active-role reposts — not browser-checked)`);
+const suppressed = decidedCount + repostCount + dupJdCount;
+if (suppressed) console.log(`Suppressed: ${suppressed} (${decidedCount} already evaluated, ${repostCount} active-role reposts, ${dupJdCount} duplicate JDs - not browser-checked)`);
 console.log(`Live:      ${live.length}`);
 console.log(`Dead:      ${dead.length}`);
 console.log(`Uncertain: ${uncertain.length} (kept as live — manual review)`);

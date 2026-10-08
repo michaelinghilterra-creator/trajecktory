@@ -6,7 +6,15 @@ if (false) { const d = new Date(); const k = d.toISOString().slice(0,10); void k
 const { useState } = React;
 void window.FUNNEL_ORDER;
 
-const rateText = (k, n, mature) => mature && n >= 10 ? window.honestRate(k, n) : `${k} of ${n}`;
+// Always a percentage so the column reads one way. A rate from under 10 applications, or from a cohort that is
+// still maturing, is shown dimmed with an asterisk and the raw count on hover instead of being swapped for "k of n".
+const RateCell = ({ k, n, mature }) => {
+  if (!n) return <span className="dim">-</span>;
+  const solid = mature && n >= 10;
+  const pct = window.honestRate(k, n);
+  if (solid) return <span title={`${k} of ${n}`}>{pct}</span>;
+  return <span className="rate-soft" title={`${k} of ${n}: ${n < 10 ? "too few to rate" : "still maturing"}`}>{pct}*</span>;
+};
 const localDate = ymd => { const [y, m, d] = String(ymd || '').split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); };
 const shortDate = ymd => localDate(ymd).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
@@ -35,7 +43,7 @@ window.WeeklyTrend = function WeeklyTrend({ weeks = [], height = 210 }) {
     </svg>
     <div className="row mono" style={{ gap: 14, fontSize: 10.5, color: 'var(--text-mute)', marginBottom: 8, flexWrap: 'wrap' }}><Swatch style={{ background: 'var(--accent)' }}>heard back</Swatch><Swatch style={{ background: 'var(--accent)', opacity: .35 }}>no reply yet</Swatch><Swatch style={{ borderTop: '2px solid var(--text)', height: 2 }}>screens</Swatch><Swatch style={{ border: '1px dashed var(--text-dim)', background: 'transparent' }}>maturing</Swatch></div>
     {focus && (() => { const w = weeks[focus.i], c = w.cohort || {}; return <window.FixedTip anchor={focus.anchor}><div className="tip-head"><b>{shortDate(w.from)} to {shortDate(w.to)}</b></div><div className="tip-row"><span className="l">Applications</span><span className="v">{w.applications}</span></div><div className="tip-row"><span className="l">Follow-ups</span><span className="v">{w.followups}</span></div><div className="tip-row"><span className="l">LinkedIn touches</span><span className="v">{w.linkedin}</span></div><div className="tip-row"><span className="l">Screens held</span><span className="v">{w.screensHeld}</span></div><div className="tip-co">Of this week's applications: {c.responded || 0} heard back, {c.screened || 0} screened</div>{c.mature === false && <div className="tip-co">Still maturing</div>}</window.FixedTip>; })()}
-    <div style={{ overflowX: 'auto' }}><table className="atbl mono"><thead><tr><th>Week</th><th>Applications</th><th>Heard back</th><th>Screened</th></tr></thead><tbody>{weeks.map(w => <tr key={w.from}><td>{w.from.slice(5)} to {w.to.slice(5)}</td><td>{w.applications}</td><td>{rateText(w.cohort?.responded || 0, w.cohort?.n || 0, w.cohort?.mature)}</td><td>{rateText(w.cohort?.screened || 0, w.cohort?.n || 0, w.cohort?.mature)}</td></tr>)}</tbody></table></div>
+    <div style={{ overflowX: 'auto' }}><table className="atbl mono"><thead><tr><th>Week</th><th>Applications</th><th>Heard back</th><th>Screened</th></tr></thead><tbody>{weeks.map(w => <tr key={w.from}><td>{w.from.slice(5)} to {w.to.slice(5)}</td><td>{w.applications}</td><td><RateCell k={w.cohort?.responded || 0} n={w.cohort?.n || 0} mature={w.cohort?.mature} /></td><td><RateCell k={w.cohort?.screened || 0} n={w.cohort?.n || 0} mature={w.cohort?.mature} /></td></tr>)}</tbody></table></div>{weeks.some(w => !(w.cohort?.mature && (w.cohort?.n || 0) >= 10)) && <div className="mono dim" style={{ fontSize: 10.5, marginTop: 6 }}>* Dimmed: under 10 applications or still maturing, so not a reliable rate. Hover for the count.</div>}
   </div>;
 };
 
