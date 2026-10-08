@@ -671,6 +671,7 @@ for (const suite of [
   'tests/obsidian-nightly.test.mjs',
   'tests/obsidian-postfix.test.mjs',
   'tests/prune-gated.test.mjs',
+  'tests/generate-prep-docx.test.mjs',
   'tests/system-paths.test.mjs',
   'tests/metrics-core.test.mjs',
   'tests/metrics-reconcile.test.mjs',

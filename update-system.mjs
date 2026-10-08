@@ -107,6 +107,7 @@ export const SYSTEM_PATHS = [
   // module-resolution time, not just the Interview tab. Guarded by test-all.mjs §7b.
   'render-runsheet.mjs',
   'verify-runsheets.mjs',
+  'generate-prep-docx.mjs',
   // Same hazard, pre-existing: dashboard-web/server/lib/obsidian.mjs statically
   // imports scripts/render-obsidian-companion.mjs. scripts/ was never listed, so it
   // was frozen at install time and no fix to it ever reached an updated install.
