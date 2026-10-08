@@ -86,6 +86,30 @@ function formatCompMidpoint(a) {
   return '$' + (a.salary * 1000).toLocaleString('en-US');
 }
 
+// One line describing a related (repeat) posting, shared by the table tooltip
+// and the drawer banner: "Seen before: #900001 Evaluated, 3.2 to 4.1 (+0.9)".
+function relatedLabel(app, rel) {
+  const scoreText = (n) => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : null;
+  const label = rel.direction === 'earlier' ? 'Seen before' : 'Seen again';
+  const text = `${label}: #${rel.num} ${rel.status || ''}`.trim();
+  if (rel.scoreDelta == null) return text;
+  const first = rel.direction === 'earlier' ? scoreText(rel.score) : scoreText(app.score);
+  const second = rel.direction === 'earlier' ? scoreText(app.score) : scoreText(rel.score);
+  const delta = Number(rel.scoreDelta);
+  const signed = `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}`;
+  return first && second ? `${text}, ${first} to ${second} (${signed})` : text;
+}
+
+// Repeat marker for table rows. Sits beside the company name because the role
+// cell truncates; the tooltip carries the full detail.
+function RepeatMark({ app }) {
+  const rel = Array.isArray(app.relatedRoles) ? app.relatedRoles : [];
+  if (rel.length === 0) return null;
+  const near = [...rel].sort((a, b) => Math.abs(a.num - app.id) - Math.abs(b.num - app.id));
+  const tip = near.slice(0, 5).map(r => relatedLabel(app, r)).join('\n') + (near.length > 5 ? `\n+${near.length - 5} more` : '');
+  return <span className="repeat-mark" title={tip} aria-label={tip}>↻{rel.length > 1 ? <sup>{rel.length}</sup> : null}</span>;
+}
+
 function relAge(days) {
   if (days <= 0) return 'today';
   if (days === 1) return '1d';
@@ -259,6 +283,9 @@ function applyFilters(apps, filters, search) {
     if (filters.scoreMin && (a.score == null || a.score < filters.scoreMin)) return false;
     if (filters.dateFrom && (!a.date || a.date < filters.dateFrom)) return false;
     if (filters.dateTo && (!a.date || a.date > filters.dateTo)) return false;
+    const isRepeat = Array.isArray(a.relatedRoles) && a.relatedRoles.length > 0;
+    if (filters.repeat === 'only' && !isRepeat) return false;
+    if (filters.repeat === 'none' && isRepeat) return false;
     if (search && search.trim()) {
       const q = search.toLowerCase();
       const hay = `${a.company} ${a.role} ${a.status} ${a.archetype} ${a.sector || ''} ${a.source || ''}`.toLowerCase();
@@ -270,7 +297,7 @@ function applyFilters(apps, filters, search) {
 
 function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, right }) {
   const toggleStatus = (s) => setFilters(f => ({ ...f, statuses: f.statuses.includes(s) ? f.statuses.filter(x => x !== s) : [...f.statuses, s] }));
-  const active = filters.statuses.length || filters.archetype || filters.scoreMin || filters.dateFrom || filters.dateTo || (search && search.trim());
+  const active = filters.statuses.length || filters.archetype || filters.scoreMin || filters.dateFrom || filters.dateTo || filters.repeat || (search && search.trim());
   const scoreSteps = [0, 3.0, 3.5, 4.0, 4.5];
   // One pass over apps instead of one filter per status on every render/keystroke.
   const statusCounts = useMemoP(() => {
@@ -303,6 +330,11 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
           <option value="">All archetypes</option>
           {window.ARCHETYPES.map(a => <option key={a} value={a}>{a}</option>)}
         </select>
+        <select className="sel" value={filters.repeat || ''} title="Repeat postings: the same job seen again under a new URL or reworded title" onChange={(e) => setFilters(f => ({ ...f, repeat: e.target.value }))}>
+          <option value="">↻ Repeats: any</option>
+          <option value="only">↻ Repeats only</option>
+          <option value="none">↻ Hide repeats</option>
+        </select>
         <div className="score-seg" title="Minimum score">
           {scoreSteps.map(s => (
             <button key={s} className={filters.scoreMin === s ? 'on' : ''} onClick={() => setFilters(f => ({ ...f, scoreMin: s }))}>
@@ -319,7 +351,7 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
           <input className="sel" type="date" value={filters.dateTo || ''} onChange={(e) => setFilters(f => ({ ...f, dateTo: e.target.value }))} />
         </label>
         {active ? (
-          <button className="btn ghost sm" onClick={() => setFilters({ statuses: [], archetype: '', archetypes: [], scoreMin: 0, dateFrom: '', dateTo: '' })}>
+          <button className="btn ghost sm" onClick={() => setFilters({ statuses: [], archetype: '', archetypes: [], scoreMin: 0, dateFrom: '', dateTo: '', repeat: '' })}>
             <PIcon d={PI.x} size={12} /> Clear
           </button>
         ) : null}
@@ -338,7 +370,7 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
   const [sortDir, setSortDir] = useStateP('desc');
   const setSort = (k) => {
     if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortKey(k); setSortDir(k === 'score' || k === 'date' ? 'desc' : 'asc'); }
+    else { setSortKey(k); setSortDir(k === 'score' || k === 'date' || k === 'repeat' ? 'desc' : 'asc'); }
   };
   const sorted = useMemoP(() => {
     const arr = [...filtered];
@@ -347,6 +379,7 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
       if (sortKey === 'score') { av = av == null ? -1 : av; bv = bv == null ? -1 : bv; }
       if (sortKey === 'status') { av = STATUS_MAP[a.status]?.stage ?? 99; bv = STATUS_MAP[b.status]?.stage ?? 99; }
       if (sortKey === 'salary')  { av = a.salary || 0; bv = b.salary || 0; }
+      if (sortKey === 'repeat')  { av = a.relatedRoles ? a.relatedRoles.length : 0; bv = b.relatedRoles ? b.relatedRoles.length : 0; }
       if (av < bv) return sortDir === 'asc' ? -1 : 1;
       if (av > bv) return sortDir === 'asc' ? 1 : -1;
       return (b.score || 0) - (a.score || 0);
@@ -358,6 +391,7 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
     { k: 'id',        label: '#',         w: 42,  cls: 'id' },
     { k: 'date',      label: 'Date',      w: 90,  cls: 't-date' },
     { k: 'company',   label: 'Company',   w: 190 },
+    { k: 'repeat',    label: '↻',         w: 56,  cls: 't-repeat' },
     { k: 'role',      label: 'Role',      w: 146, cls: 't-role' },
     { k: 'salary',    label: 'Comp',      w: 112, cls: 't-comp' },
     { k: 'status',    label: 'Status',    w: 180 },
@@ -406,6 +440,7 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
                       {/* overdue pill removed: pipeline staleness is manually pruned */}
                     </div>
                   </td>
+                  <td className="t-repeat"><RepeatMark app={a} /></td>
                   <td className="t-role">{a.role}</td>
                   <td className="t-comp" title={a.compStated || 'Not Stated'}>
                     {formatCompMidpoint(a)}
@@ -1054,17 +1089,6 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   const relatedRoles = Array.isArray(app.relatedRoles) ? app.relatedRoles : [];
   // Nearest ids first, capped: an employer that posts many identical titles would otherwise fill the header.
   const shownRelated = [...relatedRoles].sort((a, b) => Math.abs(a.num - app.id) - Math.abs(b.num - app.id)).slice(0, 3);
-  const scoreText = (n) => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : null;
-  const relatedText = (rel) => {
-    const label = rel.direction === 'earlier' ? 'Seen before' : 'Seen again';
-    let text = `${label}: #${rel.num} ${rel.status || ''}`.trim();
-    if (rel.scoreDelta == null) return text;
-    const first = rel.direction === 'earlier' ? scoreText(rel.score) : scoreText(app.score);
-    const second = rel.direction === 'earlier' ? scoreText(app.score) : scoreText(rel.score);
-    const delta = Number(rel.scoreDelta);
-    const signed = `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}`;
-    return first && second ? `${text}, ${first} to ${second} (${signed})` : text;
-  };
 
   return (
     <div className="pl-drawer-overlay">
@@ -1081,12 +1105,21 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
             </div>
             <h3>{app.company}</h3>
             <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>{app.role}</div>
+            {relatedRoles.length > 0 && (
+              <div className="repeat-banner" role="note">
+                <span className="repeat-banner-icon" aria-hidden="true">↻</span>
+                <div>
+                  {shownRelated.map(rel => <div key={`${rel.num}:${rel.direction}`}>{relatedLabel(app, rel)}</div>)}
+                  {relatedRoles.length > shownRelated.length && (
+                    <div className="dim" title={relatedRoles.map(rel => `#${rel.num} ${rel.status || ''}`.trim()).join(', ')}>+{relatedRoles.length - shownRelated.length} more</div>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
               {(cs && cs.remote) && <span className="meta-chip">{cs.remote}</span>}
               {sectorRaw && <span className="meta-chip">{sectorRaw}</span>}
               {(cs && cs.seniority) && <span className="meta-chip">{cs.seniority.split('(')[0].trim()}</span>}
-              {shownRelated.map(rel => <span key={`${rel.num}:${rel.direction}`} className="meta-chip">{relatedText(rel)}</span>)}
-              {relatedRoles.length > shownRelated.length && <span className="meta-chip" title={relatedRoles.map(rel => `#${rel.num} ${rel.status || ""}`.trim()).join(", ")}>+{relatedRoles.length - shownRelated.length} more</span>}
               {window.jdHref(app) && <a className="meta-chip link" href={window.jdHref(app)} target="_blank" rel="noreferrer">JD ↗</a>}
             </div>
           </div>
@@ -2161,6 +2194,7 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
               <td className="company t-co-cell">
                 <div className="co-cell">
                   <span className="co-name">{a.company}</span>
+                  <RepeatMark app={a} />
                   {/* overdue pill removed: pipeline staleness is manually pruned */}
                 </div>
               </td>

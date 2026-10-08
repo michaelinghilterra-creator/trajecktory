@@ -3268,3 +3268,23 @@ mark.dx-mark { background: rgba(167,139,250,0.22); color: var(--accent-2); paddi
    injected through a <style> tag. Same rules, same order.
    ========================================================================== */
 .ib-cmd{min-height:0;height:auto;resize:none;width:100%;white-space:pre;overflow-x:auto;}
+
+/* Repeat posting marker (table rows) and banner (drawer). Accent colored so a
+   repeat is visible while scanning, not buried in the meta chips. */
+.repeat-mark {
+  display: inline-flex; align-items: baseline; gap: 1px; flex: none;
+  font-size: 14px; font-weight: 700; line-height: 1; color: var(--accent);
+  padding: 2px 5px; border-radius: 5px; cursor: help;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.repeat-mark sup { font-size: 9px; font-weight: 700; }
+.repeat-banner {
+  display: flex; gap: 10px; align-items: flex-start; margin-top: 10px;
+  padding: 8px 12px; border-radius: 8px; font-size: 13px; line-height: 1.45;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.repeat-banner-icon { font-size: 18px; font-weight: 700; line-height: 1.2; color: var(--accent); }
+.pl-tbl td.t-repeat { text-align: center; padding-left: 4px; padding-right: 4px; }
