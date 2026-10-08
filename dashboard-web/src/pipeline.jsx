@@ -1052,6 +1052,8 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   const legitConclusion = cs && cs.legitimacyConclusion;
   const sectorRaw = (cs && cs.domain) || app.sectorRaw;
   const relatedRoles = Array.isArray(app.relatedRoles) ? app.relatedRoles : [];
+  // Nearest ids first, capped: an employer that posts many identical titles would otherwise fill the header.
+  const shownRelated = [...relatedRoles].sort((a, b) => Math.abs(a.num - app.id) - Math.abs(b.num - app.id)).slice(0, 3);
   const scoreText = (n) => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : null;
   const relatedText = (rel) => {
     const label = rel.direction === 'earlier' ? 'Seen before' : 'Seen again';
@@ -1083,7 +1085,8 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               {(cs && cs.remote) && <span className="meta-chip">{cs.remote}</span>}
               {sectorRaw && <span className="meta-chip">{sectorRaw}</span>}
               {(cs && cs.seniority) && <span className="meta-chip">{cs.seniority.split('(')[0].trim()}</span>}
-              {relatedRoles.map(rel => <span key={`${rel.num}:${rel.direction}`} className="meta-chip">{relatedText(rel)}</span>)}
+              {shownRelated.map(rel => <span key={`${rel.num}:${rel.direction}`} className="meta-chip">{relatedText(rel)}</span>)}
+              {relatedRoles.length > shownRelated.length && <span className="meta-chip" title={relatedRoles.map(rel => `#${rel.num} ${rel.status || ""}`.trim()).join(", ")}>+{relatedRoles.length - shownRelated.length} more</span>}
               {window.jdHref(app) && <a className="meta-chip link" href={window.jdHref(app)} target="_blank" rel="noreferrer">JD ↗</a>}
             </div>
           </div>

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { looseRoleKey, findRelatedRoles } from '../lib/prior-roles.mjs';
+import { looseRoleKey, findRelatedRoles, qualifierKey } from '../lib/prior-roles.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -92,6 +92,17 @@ console.log('prior-roles.test.mjs');
   ];
   const related = findRelatedRoles(rows, rows[0]);
   check(related[0].scoreDelta === 1.1, 'score delta rounds to one decimal');
+}
+
+{
+  const rows = [
+    row(900701, 'Zorblax Widgetry', 'Widget Strategy Manager (Alpha Team)', 3.0, 'Evaluated', 'https://jobs.example.test/globex/q1'),
+    row(900702, 'Zorblax Widgetry', 'Manager, Widget Strategy - Beta Monetization', 3.2, 'Evaluated', 'https://jobs.example.test/globex/q2'),
+    row(900703, 'Zorblax Widgetry', 'Widget Strategy Manager', 3.4, 'Evaluated', 'https://jobs.example.test/globex/q3'),
+  ];
+  check(findRelatedRoles(rows, rows[0]).every(r => r.num !== 900702), 'two different qualifiers are different jobs');
+  check(findRelatedRoles(rows, rows[0]).some(r => r.num === 900703), 'a qualifier on only one side still relates');
+  check(qualifierKey('Widget Analyst - Mobile') === 'mobile' && qualifierKey('Widget Analyst') === '', 'qualifierKey reads dash and absent qualifiers');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
