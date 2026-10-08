@@ -3288,3 +3288,4 @@ mark.dx-mark { background: rgba(167,139,250,0.22); color: var(--accent-2); paddi
 }
 .repeat-banner-icon { font-size: 18px; font-weight: 700; line-height: 1.2; color: var(--accent); }
 .pl-tbl td.t-repeat { text-align: center; padding-left: 4px; padding-right: 4px; }
+.rate-soft { opacity: 0.6; font-style: italic; cursor: help; }
