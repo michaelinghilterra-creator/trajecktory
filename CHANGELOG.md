@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.12.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.11.0...v5.12.0) (2026-10-09)
+
+
+### Features
+
+* show the skipped count in the API Scan summary ([#459](https://github.com/michaelinghilterra-creator/trajecktory/issues/459)) ([bd60521](https://github.com/michaelinghilterra-creator/trajecktory/commit/bd60521a058bdc5b84bff3a968c922d3f8ef261f))
+
 ## [5.11.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.10.0...v5.11.0) (2026-10-09)
 
 
