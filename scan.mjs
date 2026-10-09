@@ -100,7 +100,7 @@ function detectApi(company) {
     return {
       type: 'workday',
       url: `${baseUrl}/wday/cxs/${tenant}/${sitePath}/jobs`,
-      meta: { baseUrl },
+      meta: { baseUrl, site: sitePath },
     };
   }
 
@@ -192,13 +192,19 @@ function parseLever(json, companyName) {
   }));
 }
 
-function parseWorkday(json, companyName, baseUrl) {
+function parseWorkday(json, companyName, baseUrl, site) {
   const jobs = json.jobPostings || [];
+  // Workday's externalPath starts at /job/... and carries no careers-site segment,
+  // so a link built from the host alone is not a page (a browser, and the
+  // evaluation agent, get "invalid URL" and read it as a closed posting). The site
+  // is known when the board is detected; without it keep the legacy shape.
+  const siteSeg = typeof site === 'string' ? site.replace(/^\/+|\/+$/g, '') : '';
+  const prefix = siteSeg ? `${baseUrl}/${siteSeg}` : baseUrl;
   return jobs.map(j => {
     const bullets = Array.isArray(j.bulletFields) ? j.bulletFields : [];
     return {
       title: j.title || '',
-      url: j.externalPath ? `${baseUrl}${j.externalPath}` : '',
+      url: j.externalPath ? `${prefix}${j.externalPath}` : '',
       company: companyName,
       // locationsText is a flat string; bulletFields[0] sometimes carries location
       location: j.locationsText || bullets[0] || '',
@@ -274,7 +280,7 @@ async function fetchJson(url) {
 }
 
 // Workday requires POST + pagination (returns max 20 per page by default)
-async function fetchWorkdayJobs(apiUrl, baseUrl, companyName) {
+async function fetchWorkdayJobs(apiUrl, baseUrl, companyName, site) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS * 3);
   const limit = 20;  // Workday rejects limit > 20 on most tenants
@@ -296,7 +302,7 @@ async function fetchWorkdayJobs(apiUrl, baseUrl, companyName) {
       if (page.length < limit || allPostings.length >= (json.total || 0)) break;
       offset += limit;
     }
-    return parseWorkday({ jobPostings: allPostings }, companyName, baseUrl);
+    return parseWorkday({ jobPostings: allPostings }, companyName, baseUrl, site);
   } finally {
     clearTimeout(timer);
   }
@@ -588,7 +594,7 @@ async function main() {
     try {
       let jobs;
       if (type === 'workday') {
-        jobs = await fetchWorkdayJobs(url, meta.baseUrl, company.name);
+        jobs = await fetchWorkdayJobs(url, meta.baseUrl, company.name, meta.site);
       } else if (type === 'smartrecruiters') {
         jobs = await fetchSmartRecruitersJobs(url, meta.companyId, company.name);
       } else {
