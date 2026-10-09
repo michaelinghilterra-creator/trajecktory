@@ -163,6 +163,23 @@ section('BACKWARD COMPATIBILITY: no ceilingBasis means the authored number stand
   check(s === 1.5, `legacy report with no reason at all keeps its ceiling (got ${s})`);
 }
 
+section('an OTE-only band below the floor keeps its comp cap through derivation');
+{
+  // Before 2026-10-09 the recomputation could not read an OTE-only band, found no
+  // ceiling and discarded a correct authored cap, scoring the role a clean 5.
+  const capped = score({
+    scoreCeiling: 2.0, ceilingBasis: 'comp', ceilingReason: 'OTE tops out below the floor.',
+    summary: { seniority: 'Director', compStated: 'OTE $98,000-$115,000 USD + RSUs' },
+  });
+  check(capped === 2, `an OTE band under the floor stays capped at 2 (got ${capped})`);
+  // Above the floor the base is unknown, so a wrongly authored cap is still removed.
+  const uncapped = score({
+    scoreCeiling: 2.0, ceilingBasis: 'comp', ceilingReason: 'Said to be below the floor.',
+    summary: { seniority: 'Director', compStated: 'OTE $133,300-$171,700 USD' },
+  });
+  check(uncapped === 5, `an OTE band above the floor adds no cap (got ${uncapped})`);
+}
+
 section('an unknown basis does not trigger recomputation');
 for (const b of ['visa', 'other', 'requirement', '']) {
   const s = score({ scoreCeiling: 2.0, ceilingBasis: b, ceilingReason: 'pay below floor' });
