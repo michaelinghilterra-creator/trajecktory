@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.14.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.13.1...v5.14.0) (2026-10-09)
+
+
+### Features
+
+* add a tool that repairs stored Workday links, and register unrun test suites ([#465](https://github.com/michaelinghilterra-creator/trajecktory/issues/465)) ([6dd964b](https://github.com/michaelinghilterra-creator/trajecktory/commit/6dd964ba08d8a4fef0cd25687529d7867cd41a73))
+
 ## [5.13.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.13.0...v5.13.1) (2026-10-09)
 
 
