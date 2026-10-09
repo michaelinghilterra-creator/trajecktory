@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.13.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.12.0...v5.13.0) (2026-10-09)
+
+
+### Features
+
+* record why an agent run wrote nothing ([#461](https://github.com/michaelinghilterra-creator/trajecktory/issues/461)) ([d1c28c7](https://github.com/michaelinghilterra-creator/trajecktory/commit/d1c28c7436fdf14869017b0bd862a0b66c6c5f7c))
+
 ## [5.12.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.11.0...v5.12.0) (2026-10-09)
 
 
