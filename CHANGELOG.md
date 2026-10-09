@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.11.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.10.0...v5.11.0) (2026-10-09)
+
+
+### Features
+
+* export an interview run sheet to a Word doc ([#457](https://github.com/michaelinghilterra-creator/trajecktory/issues/457)) ([4f61ea2](https://github.com/michaelinghilterra-creator/trajecktory/commit/4f61ea273a0fe413d2f8b82d55af609e07005c2d))
+
 ## [5.10.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.9.1...v5.10.0) (2026-10-08)
 
 
