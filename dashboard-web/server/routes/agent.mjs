@@ -7,9 +7,9 @@ import { ROOT_DIR, DATA_DIR, APPS_MD } from '../config.mjs';
 import { reconcileHandled } from '../../../lib/pipeline.mjs';
 import { reconcileTriageResults } from '../../../lib/reconcile-triage.mjs';
 import { clearClosedFromNeedsManual } from '../../../lib/needs-manual.mjs';
-import { parsePortalAdditions, mergePortalAdditions, START_MARKER as PORTAL_START, END_MARKER as PORTAL_END } from '../../../lib/portal-additions.mjs';
+import { parsePortalAdditions, mergePortalAdditions, writeTrackedCompanyList, START_MARKER as PORTAL_START, END_MARKER as PORTAL_END } from '../../../lib/portal-additions.mjs';
 import { scanDiscoveryStalled } from '../../../lib/scan-stall.mjs';
-import { buildScanDiscoverySummary, logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
+import { buildScanDiscoverySummary, diagnoseEmptyEval, diagnoseEmptyScan, logAgentRun, parseScanStats, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
 import { apiKeyActive } from '../lib/anthropic.mjs';
 import { resolveModelId, currentBatch } from '../lib/pricing.mjs';
 import { checkWorkspaceTrust } from '../lib/workspace-trust.mjs';
@@ -441,7 +441,7 @@ function dashboardConstraints(mode, opts) {
   if (mode === 'scan') {
     const cap = limit > 0 ? ` TEST MODE (TJK_TEST_LIMIT=${limit}): list at most ${limit} new companies in the block, then stop.` : '';
     return ' ' + common + ' Your FIRST and mandatory step is to run `node scan.mjs` from the repo root ONCE. That script IS the entire ATS API tier: it hits every tracked_companies Greenhouse/Ashby/Lever board, applies the portals.yml title_filter, dedups against data/scan-history.tsv + data/pipeline.md + data/applications.md, and writes every new live posting into data/pipeline.md itself — all zero-token. Do NOT WebFetch ATS boards by hand, do NOT re-implement the title filter, and do NOT write any test/helper script (buildTitleFilter and the whole API tier already live in scan.mjs); doing so wastes the turn budget for no gain.' +
-      ' After scan.mjs finishes, spend the REST of this run on the one thing it cannot do: use WebSearch to discover companies NOT yet in portals.yml tracked_companies that run their careers on a Greenhouse, Ashby, or Lever job board. Pace the searches a few at a time. Read portals.yml first so you do not re-list a company that is already tracked.' +
+      ' After scan.mjs finishes, spend the REST of this run on the one thing it cannot do: use WebSearch to discover companies NOT yet in portals.yml tracked_companies that run their careers on a Greenhouse, Ashby, or Lever job board. Pace the searches a few at a time. BEFORE you search, Read data/tracked-companies.txt IN FULL with the Read tool: it lists every company already tracked, several per line, and its last line begins "# END OF LIST" with the total. Do NOT grep, head, or tail that file or portals.yml: a partial view of the list is exactly how already-tracked companies get proposed again and the searches are wasted. If you do not see the "# END OF LIST" line, you have not read it all, so read the rest. Never propose a company that is on that list.' +
       ' You MUST actually CALL the WebSearch tool to run these searches — issue at least 6 WebSearch queries this run. Do NOT print, echo, or describe a search in prose (e.g. a Bash echo "performing discovery searches…") as a stand-in for calling the tool: narration is not a search, and a run that announces searching without issuing a real WebSearch call is a FAILED run, not a completed one. Call WebSearch directly.' +
       ' Do NOT edit portals.yml, and do NOT add anything to data/pipeline.md yourself — you cannot write portals.yml here (it is intentionally read-only to this run), and a role you found only through WebSearch has not actually been read, so adding it would file a guessed posting. Instead, hand the companies to the dashboard as structured data and let it do the writing: for each genuinely new company, output ONE JSON object with exactly three keys — "name" (the company display name), "ats" (one of "greenhouse", "ashby", or "lever"), and "slug" (the board identifier, i.e. the path segment right after the ATS host: jobs.ashbyhq.com/<slug>, jobs.lever.co/<slug>, or job-boards.greenhouse.io/<slug>). Do NOT include a URL, careers_url, or api field — the dashboard builds those from ats+slug itself, verifies the board is live, adds the new companies to portals.yml, and then scans their real boards for live matching roles. Only list a company whose board slug you actually saw in a real ATS URL; never guess a slug.' +
       ` Emit the companies as a single valid JSON array between these two exact marker lines, each marker alone on its own line, standard double-quote JSON, no markdown code fence:` +
@@ -489,6 +489,22 @@ function fileSize(rel) {
 function tsvCount(rel) {
   try { return fs.readdirSync(path.join(ROOT_DIR, rel)).filter(f => f.endsWith('.tsv')).length; }
   catch { return 0; }
+}
+
+// Facts about an Evaluate batch, read before and after it so an empty batch can say
+// why. Counts only; a failed read is 0, never a throw.
+function countLines(file, re) {
+  try { return fs.readFileSync(file, 'utf8').split(/\r?\n/).filter(l => re.test(l)).length; } catch { return 0; }
+}
+function snapshotEvalState() {
+  let reports = 0;
+  try { reports = fs.readdirSync(path.join(ROOT_DIR, 'reports')).filter(f => f.endsWith('.md')).length; } catch { /* no reports dir yet */ }
+  return {
+    tsv: tsvCount('batch/tracker-additions') + tsvCount('batch/tracker-additions/merged'),
+    reports,
+    deferred: countLines(path.join(DATA_DIR, 'needs-manual-jd.tsv'), /^(https?:|local:)/),
+    pending: countLines(path.join(DATA_DIR, 'pipeline.md'), /^- \[ \]/),
+  };
 }
 
 function probeArtifacts(mode) {
@@ -634,7 +650,15 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
     // 'deep' is the pipeline/oferta full eval scoped to a single posting, so it
     // runs the `pipeline` mode file with deep, single-URL constraints.
     const slash = mode === 'deep' ? 'pipeline' : mode;
-    const prompt = `/trajecktory ${slash}.${dashboardConstraints(mode, target)}`;
+    // Scan reads the full tracked-company list before it searches. Written fresh
+    // every run (portals.yml changes between runs); a failure is logged on the job
+    // and the run proceeds, since the merge step dedups every proposal regardless.
+    if (mode === 'scan') {
+      const listed = writeTrackedCompanyList(path.join(ROOT_DIR, 'portals.yml'), path.join(DATA_DIR, 'tracked-companies.txt'));
+      const j = agentJobs.get(jobId) || {};
+      agentJobs.set(jobId, { ...j, trackedListCount: listed.count, trackedListError: listed.ok ? undefined : listed.error });
+    }
+    const prompt =`/trajecktory ${slash}.${dashboardConstraints(mode, target)}`;
     // Per-section model, chosen in the Models & Cost settings (persisted as TJK_*
     // env keys, see server/lib/pricing.mjs). Defaults: Agent Scan=Haiku
     // (synthesis over web results — the cheap default on an unbounded step),
@@ -771,6 +795,21 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
     // carries only a diff, so it cannot be checked in flight the way a Write can).
     const reportIssues = new Map();   // repo-relative path → message
     const touchedReports = new Set();
+    // Diagnostics for the run log: which Bash call a tool_result answers (so the
+    // scan.mjs summary can be read back deterministically), tool calls that
+    // returned an error, and the result event's subtype (success vs error_max_turns).
+    const bashCommands = new Map();   // tool_use id → command
+    const toolErrors = [];            // first few { tool, message }
+    let toolErrorCount = 0;
+    let resultSubtype = null;
+    let scanStats = null;
+    // Evaluate diagnostics: how each fetch-jd call ended, WebFetch fallbacks, and
+    // whether the scan agent read the whole tracked-company list.
+    const readTargets = new Map();    // tool_use id → file the agent Read
+    const fetchJd = { ok: 0, closed: 0, failed: 0 };
+    let webFetchCount = 0;
+    let trackedListComplete = null;   // null = never read, false = read but cut short
+    const evalBefore = (mode === 'pipeline' || mode === 'deep') ? snapshotEvalState() : null;
 
     child.on('error', (e) => { if (!settled) { settled = true; agentChildren.delete(jobId); fail(claudeErrorMessage(e)); } });
 
@@ -824,6 +863,13 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
             toolCalls.push(s);
             toolCount += 1;
             if (block.name === 'WebSearch') webSearchCount += 1;
+            if (block.name === 'WebFetch') webFetchCount += 1;
+            if (block.name === 'Read' && block.id && block.input && block.input.file_path) {
+              readTargets.set(block.id, String(block.input.file_path));
+            }
+            if (block.name === 'Bash' && block.id && block.input && block.input.command) {
+              bashCommands.set(block.id, String(block.input.command));
+            }
             activity = s;
             // Progress signal: a completed evaluation writes a report AND a
             // tracker-additions TSV that share a leading number. The agent
@@ -851,7 +897,35 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
         update({ toolCalls: toolCalls.slice(-50), toolCount, webSearchCount, evaluationsDone, activity });
         return;
       }
+      if (ev.type === 'user' && ev.message && Array.isArray(ev.message.content)) {
+        for (const block of ev.message.content) {
+          if (block.type !== 'tool_result') continue;
+          const text = Array.isArray(block.content)
+            ? block.content.map(c => (c && c.text) || '').join('\n')
+            : String(block.content ?? '');
+          const cmd = bashCommands.get(block.tool_use_id);
+          const readFile = readTargets.get(block.tool_use_id);
+          if (readFile && /tracked-companies\.txt$/.test(readFile)) {
+            trackedListComplete = trackedListComplete === true || text.includes('# END OF LIST');
+          }
+          if (cmd && /fetch-jd.mjs/.test(cmd)) {
+            if (!block.is_error) fetchJd.ok += 1;
+            else if (/Exit code 3/.test(text)) fetchJd.closed += 1;
+            else fetchJd.failed += 1;
+          }
+          if (cmd && /\bscan\.mjs\b/.test(cmd)) {
+            const st = parseScanStats(text);
+            if (st) { scanStats = st; update({ scanStats: st }); }
+          }
+          if (block.is_error) {
+            toolErrorCount += 1;
+            if (toolErrors.length < 5) toolErrors.push({ tool: cmd ? `Bash: ${cmd.slice(0, 60)}` : 'tool', message: text.slice(0, 200) });
+          }
+        }
+        return;
+      }
       if (ev.type === 'result') {
+        resultSubtype = ev.subtype || null;
         resultText = (ev.result != null ? ev.result : (ev.subtype || '')).toString();
         isError = !!ev.is_error || ev.subtype === 'error_max_turns' || ev.subtype === 'error_during_execution';
         // The CLI's result event carries the run's real wall-clock time
@@ -952,7 +1026,36 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
         tools: (job.toolCalls || []).slice(-50),
         error: ok ? null : (err ? String(err).slice(0, 300) : null),
         outputTail: (resultText || job.output || '').slice(-2000),
+        resultSubtype,
+        toolErrorCount,
+        toolErrors: toolErrors.length ? toolErrors : null,
+        stderrTail: resultText && job.output ? job.output.slice(-500) : null,
+        scanStats,
+        webSearchCount: job.webSearchCount || 0,
+        trackedListCount: job.trackedListCount ?? null,
+        trackedListComplete,
       };
+      // Evaluate / Deep: when a clean batch produced no tracker TSV, record why. The
+      // job keeps the message so the post-run block can show it instead of guessing.
+      if (evalBefore && ok) {
+        const after = snapshotEvalState();
+        const diagnosis = diagnoseEmptyEval({
+          mode,
+          pendingBefore: evalBefore.pending,
+          reportsDelta: Math.max(0, after.reports - evalBefore.reports),
+          tsvDelta: Math.max(0, after.tsv - evalBefore.tsv),
+          deferredDelta: Math.max(0, after.deferred - evalBefore.deferred),
+          fetch: fetchJd,
+          webFetchCount,
+          toolCount: job.toolCount || 0,
+          resultText,
+          resultSubtype,
+        });
+        logRecord.diagnosis = diagnosis;
+        logRecord.evalFacts = { before: evalBefore, after, fetchJd, webFetchCount };
+        const cur = agentJobs.get(jobId) || {};
+        agentJobs.set(jobId, { ...cur, emptyDiagnosis: diagnosis || undefined });
+      }
       if (opts.deferLog) {
         resolve({ ok, result: resultText, error: err, logRecord });
       } else {
@@ -1047,6 +1150,7 @@ async function runAgent(jobId, mode, target) {
   let portalMerge = null;
   let scanRetried = false;
   let scanStalled = false;
+  let scanDiagnosis = null;
   if (mode === 'scan') {
     try {
       if (res.ok) {
@@ -1108,6 +1212,19 @@ async function runAgent(jobId, mode, target) {
       const lastRecord = scanLogRecords[scanLogRecords.length - 1];
       if (lastRecord) {
         lastRecord.discovery = buildScanDiscoverySummary(portalMerge, { retried: scanRetried, stalled: scanStalled });
+        if (res.ok) {
+          scanDiagnosis = diagnoseEmptyScan({
+            merge: portalMerge,
+            webSearchCount: (agentJobs.get(jobId) || {}).webSearchCount || 0,
+            scanStats: lastRecord.scanStats || null,
+            stalled: scanStalled,
+            trackedListComplete: lastRecord.trackedListComplete ?? null,
+          });
+          lastRecord.diagnosis = scanDiagnosis;
+          lastRecord.discovery.skippedDuplicateNames = (portalMerge && portalMerge.skippedDuplicateNames) || [];
+          lastRecord.discovery.skippedDeadNames = (portalMerge && portalMerge.skippedDeadNames) || [];
+          lastRecord.discovery.proposed = (portalMerge && portalMerge.proposed) || 0;
+        }
       }
       for (const record of scanLogRecords) logAgentRun(record);
     }
@@ -1171,7 +1288,7 @@ async function runAgent(jobId, mode, target) {
     agentJobs.set(jobId, {
       ...job,
       summary: `No ${AGENT_ARTIFACTS[mode].noun} were written this run.`,
-      warning: job.warning || WROTE_NOTHING_WHY,
+      warning: job.warning || (scanDiagnosis && scanDiagnosis.message) || (job.emptyDiagnosis && job.emptyDiagnosis.message) || WROTE_NOTHING_WHY,
     });
   }
 
