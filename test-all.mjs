@@ -530,6 +530,8 @@ for (const suite of [
   'tests/stop-kill.test.mjs',
   'tests/scan-stall.test.mjs',
   'tests/agent-cost-rollup.test.mjs',
+  'tests/agent-run-diagnosis.test.mjs',
+  'tests/agent-stream-facts.test.mjs',
   'tests/portals.test.mjs',
   'tests/liveness-workday.test.mjs',
   'tests/sidecars.test.mjs',

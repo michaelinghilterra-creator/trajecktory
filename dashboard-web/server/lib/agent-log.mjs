@@ -78,6 +78,123 @@ export function buildScanDiscoverySummary(portalMerge, { retried = false, stalle
   };
 }
 
+// PURE: read the summary block scan.mjs prints (Companies scanned, Total jobs
+// found, Filtered by title, ...) out of the Bash output the agent saw. Returns
+// null when the text is not a scan summary, so a caller never records zeros as if
+// they were a measurement.
+export function parseScanStats(text) {
+  const s = String(text || '');
+  const num = (re) => { const m = s.match(re); return m ? Number(m[1]) : null; };
+  const companies = num(/Companies scanned:\s*(\d+)/);
+  const totalJobs = num(/Total jobs found:\s*(\d+)/);
+  if (companies === null || totalJobs === null) return null;
+  return {
+    companies,
+    totalJobs,
+    filteredByTitle: num(/Filtered by title:\s*(\d+)/),
+    geoBlocked: num(/Geo-blocked:\s*(\d+)/),
+    duplicates: num(/Duplicates:\s*(\d+)/),
+    newOffers: num(/New offers added:\s*(\d+)/),
+    boardErrors: num(/Errors \((\d+)\):/) ?? 0,
+    coverageAlerts: num(/Coverage alerts \((\d+)\)/) ?? 0,
+  };
+}
+
+function scanStatsLine(st) {
+  if (!st) return '';
+  const part = (n, label) => (n == null ? null : `${n} ${label}`);
+  const dropped = [part(st.filteredByTitle, 'filtered by title'), part(st.geoBlocked, 'geo-blocked'), part(st.duplicates, 'duplicates')].filter(Boolean).join(', ');
+  const health = [];
+  if (st.boardErrors) health.push(`${st.boardErrors} boards errored`);
+  if (st.coverageAlerts) health.push(`${st.coverageAlerts} flagged quiet or dead`);
+  return ` scan.mjs: ${st.totalJobs} jobs across ${st.companies} boards, ${st.newOffers ?? 0} new${dropped ? ` (${dropped})` : ''}${health.length ? `; ${health.join(', ')}` : ''}.`;
+}
+
+const nameList = (names) => {
+  const list = Array.isArray(names) ? names.filter(Boolean) : [];
+  if (!list.length) return '';
+  return ` (${list.slice(0, 8).join(', ')}${list.length > 8 ? `, +${list.length - 8} more` : ''})`;
+};
+
+// PURE: say WHY an Agent Scan produced nothing, from facts the server measured
+// rather than a list of guesses. `code` is stable for filtering the log; `message`
+// is what the dashboard shows. Returns null when the run did produce something
+// (or the cause is not one of the known shapes), so the caller keeps its fallback.
+export function diagnoseEmptyScan({ merge, webSearchCount = 0, scanStats = null, stalled = false, trackedListComplete = null } = {}) {
+  const m = merge && typeof merge === 'object' ? merge : null;
+  const tail = scanStatsLine(scanStats);
+  const searches = `${webSearchCount} web search${webSearchCount === 1 ? '' : 'es'}`;
+  const result = (code, message) => ({ code, message: message + tail });
+  // Proposals that were already tracked mean the agent did not see the whole list.
+  const listNote = trackedListComplete === true ? '' : ' The agent did not read the full tracked-company list before searching.';
+  if (!m) return result('merge-not-run', 'The discovery merge never ran, so no companies were added.');
+  if (m.error || (Array.isArray(m.errors) && m.errors.length)) {
+    const why = String(m.error ?? m.errors[0]).split('\n')[0].slice(0, 200);
+    return result('merge-error', `Adding discovered companies failed: ${why}.`);
+  }
+  if (m.added > 0 || m.rolesAdded > 0) return null;
+  if (scanStats && scanStats.newOffers > 0) return null;   // scan.mjs itself found postings, so the run was productive
+  if (stalled || webSearchCount === 0) return result('no-searches', 'The agent issued no web search, so discovery did not run.');
+  const proposed = Number.isFinite(m.proposed) ? m.proposed : 0;
+  const parseErrors = Array.isArray(m.parseErrors) ? m.parseErrors : [];
+  if (proposed === 0) {
+    const why = parseErrors[0] ? ` Parse problem: ${String(parseErrors[0]).slice(0, 160)}.` : '';
+    return result('no-proposals', `The agent ran ${searches} but named no company to add.${why}`);
+  }
+  const dup = m.skippedDuplicate || 0;
+  const dead = m.skippedDead || 0;
+  const collisions = Array.isArray(m.collisions) ? m.collisions.length : 0;
+  if (dup === proposed) {
+    return result('all-tracked', `The agent ran ${searches} and proposed ${proposed} ${proposed === 1 ? 'company' : 'companies'}, all already in your scan list${nameList(m.skippedDuplicateNames)}. Nothing new to add.${listNote}`);
+  }
+  if (dead === proposed) {
+    return result('all-dead', `The agent proposed ${proposed} ${proposed === 1 ? 'company' : 'companies'} but every board was unreachable${nameList(m.skippedDeadNames)}; the slugs are probably invented.`);
+  }
+  return result('all-skipped', `The agent proposed ${proposed} ${proposed === 1 ? 'company' : 'companies'}: ${dup} already tracked${nameList(m.skippedDuplicateNames)}, ${dead} unreachable${nameList(m.skippedDeadNames)}, ${collisions} name collision${collisions === 1 ? '' : 's'} left for you to check.${dup ? listNote : ''}`);
+}
+
+// PURE: say WHY an Evaluate (pipeline) or Deep batch wrote nothing. `facts` are
+// measured by the server around the run: the pending queue before it, how many
+// reports and tracker TSVs appeared, how many postings were deferred to
+// data/needs-manual-jd.tsv, and how every `node fetch-jd.mjs` call ended. Returns
+// null when the batch produced a tracker TSV. `code` is stable for filtering.
+export function diagnoseEmptyEval({
+  mode = 'pipeline', pendingBefore = null, reportsDelta = 0, tsvDelta = 0, deferredDelta = 0,
+  fetch = {}, webFetchCount = 0, toolCount = 0, resultText = '', resultSubtype = null,
+} = {}) {
+  if (tsvDelta > 0) return null;
+  const f = { ok: fetch.ok || 0, closed: fetch.closed || 0, failed: fetch.failed || 0 };
+  const fetchLine = (f.ok + f.closed + f.failed)
+    ? ` fetch-jd results: ${f.ok} read, ${f.closed} closed, ${f.failed} failed${webFetchCount ? `; ${webFetchCount} WebFetch fallback${webFetchCount === 1 ? '' : 's'}` : ''}.`
+    : '';
+  const said = String(resultText || '').replace(/\s+/g, ' ').trim();
+  const tailSaid = said ? ` Agent's last words: "${said.slice(-200)}"` : '';
+  const out = (code, message) => ({ code, message: message + fetchLine });
+  if (mode === 'pipeline' && pendingBefore === 0) {
+    return out('queue-empty', 'No pending unchecked URLs were in data/pipeline.md when the batch started, so there was nothing to evaluate.');
+  }
+  if (reportsDelta > 0) {
+    return out('report-without-tsv', `${reportsDelta} report${reportsDelta === 1 ? ' was' : 's were'} written but no tracker TSV, so Merge Tracker has nothing to add to your pipeline.`);
+  }
+  if (deferredDelta > 0) {
+    return out('all-deferred', `${deferredDelta} posting${deferredDelta === 1 ? '' : 's'} could not be read and ${deferredDelta === 1 ? 'was' : 'were'} deferred to data/needs-manual-jd.tsv. Paste the job text for ${deferredDelta === 1 ? 'it' : 'them'} to evaluate.`);
+  }
+  if (f.closed > 0 && f.ok === 0) {
+    return out('all-closed', 'Every posting the agent tried to read had been taken down (fetch-jd exit code 3), so none could be evaluated.');
+  }
+  if (f.failed > 0 && f.ok === 0) {
+    return out('fetch-failed', 'The agent could not read any posting (fetch-jd failed and no fallback produced a job description).' + tailSaid);
+  }
+  if (toolCount === 0) {
+    return out('no-work-attempted', 'The agent made no tool calls, so it did no work at all.' + tailSaid);
+  }
+  if (said.endsWith('?')) {
+    return out('asked-question', 'The agent stopped to ask a question, and nobody can answer one in a headless run.' + tailSaid);
+  }
+  const queue = pendingBefore > 0 ? ` ${pendingBefore} URLs were pending; rows already evaluated or dismissed are checked off only after the run, so the agent may have skipped them all.` : '';
+  return out('unknown', `The batch finished (${resultSubtype || 'no result subtype'}, ${toolCount} tool calls) but no report, TSV or deferral appeared.${queue}${tailSaid}`);
+}
+
 // ── Reading the logs back ─────────────────────────────────────────────────────
 
 // Every run record across the rotating log files, newest `ts` first. Torn lines
