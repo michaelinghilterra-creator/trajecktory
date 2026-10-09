@@ -59,5 +59,89 @@ check(WORKFLOW_STEPS.health.cmd === 'node health-check.mjs', 'health step uses t
 check(verifySummary('Flipped 2 entries') === 'Passed 2 dead links', 'verify summary uses the Passed state');
 check(!/⚠/.test(s3), 'healthy case: no warning marker');
 
+const mark = ` ${String.fromCharCode(183)} `;
+const funnelWithGate = [
+  'Companies scanned:     40',
+  'Total jobs found:      1204',
+  'Filtered by title:     900 removed',
+  'Duplicates:            40 skipped',
+  'New offers added:      12',
+  `3 resolved${mark}0 already local`,
+  'Already evaluated: 2 (skipped, not browser-checked)',
+  'Reposts suppressed: 1 (active-role reposts)',
+  'Duplicate JDs suppressed: 2 (identical text; logged to data/merge-drops.tsv)',
+].join('\n');
+check(
+  scanSummary(funnelWithGate).endsWith(`${mark}5 skipped (2 already evaluated, 1 repost, 2 duplicate JDs)`),
+  'suppression counts: appends all parts in order'
+);
+
+const duplicateOnly = [
+  'Companies scanned:     2',
+  'Total jobs found:      7',
+  'New offers added:      3',
+  'Already evaluated: 0 (skipped, not browser-checked)',
+  'Reposts suppressed: 0 (active-role reposts)',
+  'Duplicate JDs suppressed: 1 (identical text; logged to data/merge-drops.tsv)',
+].join('\n');
+check(
+  scanSummary(duplicateOnly).endsWith(`${mark}1 skipped (1 duplicate JD)`),
+  'suppression counts: keeps only nonzero parts with singular wording'
+);
+
+const plainOutput = [
+  'Companies scanned:     2',
+  'Total jobs found:      7',
+  'New offers added:      3',
+].join('\n');
+const zeroGateOutput = [
+  plainOutput,
+  'Already evaluated: 0 (skipped, not browser-checked)',
+  'Reposts suppressed: 0 (active-role reposts)',
+  'Duplicate JDs suppressed: 0 (identical text; logged to data/merge-drops.tsv)',
+].join('\n');
+check(
+  scanSummary(zeroGateOutput) === scanSummary(plainOutput),
+  'suppression counts: zero counts do not change summary'
+);
+check(
+  scanSummary(plainOutput) === '3 new (of 7 found)',
+  'suppression counts: absent lines do not add a skipped clause'
+);
+
+const earlyGateOutput = [
+  plainOutput,
+  'Already evaluated: 4 (skipped, not browser-checked)',
+  '',
+  'Reposts suppressed: 1 (active-role reposts)',
+  'Duplicate JDs suppressed: 1 (identical text; logged to data/merge-drops.tsv)',
+  'Nothing left to liveness-check.',
+].join('\n');
+check(
+  scanSummary(earlyGateOutput).endsWith(`${mark}6 skipped (4 already evaluated, 1 repost, 1 duplicate JD)`),
+  'suppression counts: early exit gate output still parses'
+);
+
+const midLineOnly = [
+  plainOutput,
+  'note: already evaluated text appears here but not at line start',
+].join('\n');
+check(
+  scanSummary(midLineOnly) === scanSummary(plainOutput),
+  'suppression counts: mid line wording does not count'
+);
+
+const noApiWithGate = [
+  noApi,
+  'Already evaluated: 2 (skipped, not browser-checked)',
+].join('\n');
+check(scanSummary(noApiWithGate) === s1, 'suppression counts: zero companies return is unchanged');
+
+const deadBoardsWithGate = [
+  deadBoards,
+  'Duplicate JDs suppressed: 1 (identical text; logged to data/merge-drops.tsv)',
+].join('\n');
+check(scanSummary(deadBoardsWithGate) === s2, 'suppression counts: zero jobs return is unchanged');
+
 console.log(`\n${failed === 0 ? '✅' : '❌'} ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

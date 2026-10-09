@@ -77,7 +77,17 @@ function scanSummary(output) {
   // SPA-hosted JDs it snapshotted so the reader sees that work happened too.
   const snap = grab(/(\d+) resolved · \d+ already local/);
   const jdNote = snap ? ` · ${n(snap)} JD${snap === 1 ? '' : 's'} snapshotted` : '';
-  return `${n(added)} new${funnel}${jdNote}`;
+  const alreadyEvaluated = grab(/^Already evaluated:\s*(\d+)/im);
+  const reposts = grab(/^Reposts suppressed:\s*(\d+)/im);
+  const duplicateJds = grab(/^Duplicate JDs suppressed:\s*(\d+)/im);
+  const skippedParts = [];
+  if (alreadyEvaluated) skippedParts.push(`${n(alreadyEvaluated)} already evaluated`);
+  if (reposts) skippedParts.push(`${n(reposts)} ${reposts === 1 ? 'repost' : 'reposts'}`);
+  if (duplicateJds) skippedParts.push(`${n(duplicateJds)} ${duplicateJds === 1 ? 'duplicate JD' : 'duplicate JDs'}`);
+  const skippedTotal = (alreadyEvaluated || 0) + (reposts || 0) + (duplicateJds || 0);
+  const sep = ` ${String.fromCharCode(183)} `;
+  const skippedNote = skippedTotal > 0 ? `${sep}${n(skippedTotal)} skipped (${skippedParts.join(', ')})` : '';
+  return `${n(added)} new${funnel}${jdNote}${skippedNote}`;
 }
 
 function gateSummary(output) {
