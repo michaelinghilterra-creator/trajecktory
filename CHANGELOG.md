@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.13.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.13.0...v5.13.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* build Workday posting links with the careers-site segment ([#463](https://github.com/michaelinghilterra-creator/trajecktory/issues/463)) ([ee070f0](https://github.com/michaelinghilterra-creator/trajecktory/commit/ee070f0df34590756abad6df7f0a72be9233dc59))
+
 ## [5.13.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.12.0...v5.13.0) (2026-10-09)
 
 
