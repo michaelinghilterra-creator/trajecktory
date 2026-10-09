@@ -9,7 +9,8 @@ import { reconcileTriageResults } from '../../../lib/reconcile-triage.mjs';
 import { clearClosedFromNeedsManual } from '../../../lib/needs-manual.mjs';
 import { parsePortalAdditions, mergePortalAdditions, writeTrackedCompanyList, START_MARKER as PORTAL_START, END_MARKER as PORTAL_END } from '../../../lib/portal-additions.mjs';
 import { scanDiscoveryStalled } from '../../../lib/scan-stall.mjs';
-import { buildScanDiscoverySummary, diagnoseEmptyEval, diagnoseEmptyScan, logAgentRun, parseScanStats, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
+import { createStreamFacts } from '../lib/agent-stream-facts.mjs';
+import { buildScanDiscoverySummary, diagnoseEmptyEval, diagnoseEmptyScan, logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
 import { apiKeyActive } from '../lib/anthropic.mjs';
 import { resolveModelId, currentBatch } from '../lib/pricing.mjs';
 import { checkWorkspaceTrust } from '../lib/workspace-trust.mjs';
@@ -795,20 +796,11 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
     // carries only a diff, so it cannot be checked in flight the way a Write can).
     const reportIssues = new Map();   // repo-relative path → message
     const touchedReports = new Set();
-    // Diagnostics for the run log: which Bash call a tool_result answers (so the
-    // scan.mjs summary can be read back deterministically), tool calls that
-    // returned an error, and the result event's subtype (success vs error_max_turns).
-    const bashCommands = new Map();   // tool_use id → command
-    const toolErrors = [];            // first few { tool, message }
-    let toolErrorCount = 0;
+    // Facts the event stream reveals about this run (scan.mjs stats, fetch-jd outcomes,
+    // tool errors, whether the tracked-company list was read), plus the result subtype.
+    const streamFacts = createStreamFacts();
+    const sf = streamFacts.facts;
     let resultSubtype = null;
-    let scanStats = null;
-    // Evaluate diagnostics: how each fetch-jd call ended, WebFetch fallbacks, and
-    // whether the scan agent read the whole tracked-company list.
-    const readTargets = new Map();    // tool_use id → file the agent Read
-    const fetchJd = { ok: 0, closed: 0, failed: 0 };
-    let webFetchCount = 0;
-    let trackedListComplete = null;   // null = never read, false = read but cut short
     const evalBefore = (mode === 'pipeline' || mode === 'deep') ? snapshotEvalState() : null;
 
     child.on('error', (e) => { if (!settled) { settled = true; agentChildren.delete(jobId); fail(claudeErrorMessage(e)); } });
@@ -863,13 +855,7 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
             toolCalls.push(s);
             toolCount += 1;
             if (block.name === 'WebSearch') webSearchCount += 1;
-            if (block.name === 'WebFetch') webFetchCount += 1;
-            if (block.name === 'Read' && block.id && block.input && block.input.file_path) {
-              readTargets.set(block.id, String(block.input.file_path));
-            }
-            if (block.name === 'Bash' && block.id && block.input && block.input.command) {
-              bashCommands.set(block.id, String(block.input.command));
-            }
+            streamFacts.noteToolUse(block);
             activity = s;
             // Progress signal: a completed evaluation writes a report AND a
             // tracker-additions TSV that share a leading number. The agent
@@ -900,27 +886,7 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
       if (ev.type === 'user' && ev.message && Array.isArray(ev.message.content)) {
         for (const block of ev.message.content) {
           if (block.type !== 'tool_result') continue;
-          const text = Array.isArray(block.content)
-            ? block.content.map(c => (c && c.text) || '').join('\n')
-            : String(block.content ?? '');
-          const cmd = bashCommands.get(block.tool_use_id);
-          const readFile = readTargets.get(block.tool_use_id);
-          if (readFile && /tracked-companies\.txt$/.test(readFile)) {
-            trackedListComplete = trackedListComplete === true || text.includes('# END OF LIST');
-          }
-          if (cmd && /fetch-jd.mjs/.test(cmd)) {
-            if (!block.is_error) fetchJd.ok += 1;
-            else if (/Exit code 3/.test(text)) fetchJd.closed += 1;
-            else fetchJd.failed += 1;
-          }
-          if (cmd && /\bscan\.mjs\b/.test(cmd)) {
-            const st = parseScanStats(text);
-            if (st) { scanStats = st; update({ scanStats: st }); }
-          }
-          if (block.is_error) {
-            toolErrorCount += 1;
-            if (toolErrors.length < 5) toolErrors.push({ tool: cmd ? `Bash: ${cmd.slice(0, 60)}` : 'tool', message: text.slice(0, 200) });
-          }
+          if (streamFacts.noteToolResult(block)) update({ scanStats: sf.scanStats });
         }
         return;
       }
@@ -1027,13 +993,14 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
         error: ok ? null : (err ? String(err).slice(0, 300) : null),
         outputTail: (resultText || job.output || '').slice(-2000),
         resultSubtype,
-        toolErrorCount,
-        toolErrors: toolErrors.length ? toolErrors : null,
+        toolErrorCount: sf.toolErrorCount,
+        toolErrors: sf.toolErrors.length ? sf.toolErrors : null,
         stderrTail: resultText && job.output ? job.output.slice(-500) : null,
-        scanStats,
+        scanStats: sf.scanStats,
         webSearchCount: job.webSearchCount || 0,
         trackedListCount: job.trackedListCount ?? null,
-        trackedListComplete,
+        trackedListError: job.trackedListError ?? null,
+        trackedListComplete: sf.trackedListComplete,
       };
       // Evaluate / Deep: when a clean batch produced no tracker TSV, record why. The
       // job keeps the message so the post-run block can show it instead of guessing.
@@ -1045,16 +1012,19 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
           reportsDelta: Math.max(0, after.reports - evalBefore.reports),
           tsvDelta: Math.max(0, after.tsv - evalBefore.tsv),
           deferredDelta: Math.max(0, after.deferred - evalBefore.deferred),
-          fetch: fetchJd,
-          webFetchCount,
+          fetch: sf.fetchJd,
+          webFetchCount: sf.webFetchCount,
           toolCount: job.toolCount || 0,
           resultText,
           resultSubtype,
         });
         logRecord.diagnosis = diagnosis;
-        logRecord.evalFacts = { before: evalBefore, after, fetchJd, webFetchCount };
+        logRecord.evalFacts = { before: evalBefore, after, fetchJd: sf.fetchJd, webFetchCount: sf.webFetchCount };
         const cur = agentJobs.get(jobId) || {};
-        agentJobs.set(jobId, { ...cur, emptyDiagnosis: diagnosis || undefined });
+        // Across a rolling chain keep the most specific cause: a later vague
+        // 'unknown' must not overwrite an earlier batch's named reason.
+        const keep = diagnosis && diagnosis.code === 'unknown' && cur.emptyDiagnosis && cur.emptyDiagnosis.code !== 'unknown';
+        agentJobs.set(jobId, { ...cur, emptyDiagnosis: keep ? cur.emptyDiagnosis : (diagnosis || undefined) });
       }
       if (opts.deferLog) {
         resolve({ ok, result: resultText, error: err, logRecord });

@@ -118,5 +118,14 @@ check(/set the tracker note to include \[self-sourced\]/.test(deep),
 const gate = readFileSync(join(ROOT, 'gate-pipeline.mjs'), 'utf8');
 check(/identity\.mjs/.test(gate), 'gate-pipeline imports the shared identity module');
 
+// The scan agent once re-proposed already-tracked companies because it read only a
+// slice of portals.yml. The fix is a complete list the agent is told to Read whole;
+// both halves must stay: the instruction, and the server that writes the file.
+check(/data\/tracked-companies\.txt/.test(scan) && /END OF LIST/.test(scan),
+  'scan prompt points the agent at the full tracked-company list and its end marker');
+check(/Do NOT grep, head, or tail/i.test(scan), 'scan prompt forbids reading the tracked list through grep, head or tail');
+check(/writeTrackedCompanyList\(/.test(src) && /tracked-companies\.txt/.test(src),
+  'scan route writes the tracked-company list before the agent runs');
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

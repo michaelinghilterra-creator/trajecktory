@@ -129,10 +129,11 @@ export function diagnoseEmptyScan({ merge, webSearchCount = 0, scanStats = null,
   const listNote = trackedListComplete === true ? '' : ' The agent did not read the full tracked-company list before searching.';
   if (!m) return result('merge-not-run', 'The discovery merge never ran, so no companies were added.');
   if (m.error || (Array.isArray(m.errors) && m.errors.length)) {
-    const why = String(m.error ?? m.errors[0]).slice(0, 200);
+    const why = String(m.error ?? m.errors[0]).split('\n')[0].slice(0, 200);
     return result('merge-error', `Adding discovered companies failed: ${why}.`);
   }
   if (m.added > 0 || m.rolesAdded > 0) return null;
+  if (scanStats && scanStats.newOffers > 0) return null;   // scan.mjs itself found postings, so the run was productive
   if (stalled || webSearchCount === 0) return result('no-searches', 'The agent issued no web search, so discovery did not run.');
   const proposed = Number.isFinite(m.proposed) ? m.proposed : 0;
   const parseErrors = Array.isArray(m.parseErrors) ? m.parseErrors : [];
@@ -144,12 +145,12 @@ export function diagnoseEmptyScan({ merge, webSearchCount = 0, scanStats = null,
   const dead = m.skippedDead || 0;
   const collisions = Array.isArray(m.collisions) ? m.collisions.length : 0;
   if (dup === proposed) {
-    return result('all-tracked', `The agent ran ${searches} and proposed ${proposed} companies, all already in your scan list${nameList(m.skippedDuplicateNames)}. Nothing new to add.${listNote}`);
+    return result('all-tracked', `The agent ran ${searches} and proposed ${proposed} ${proposed === 1 ? 'company' : 'companies'}, all already in your scan list${nameList(m.skippedDuplicateNames)}. Nothing new to add.${listNote}`);
   }
   if (dead === proposed) {
-    return result('all-dead', `The agent proposed ${proposed} companies but every board was unreachable${nameList(m.skippedDeadNames)}; the slugs are probably invented.`);
+    return result('all-dead', `The agent proposed ${proposed} ${proposed === 1 ? 'company' : 'companies'} but every board was unreachable${nameList(m.skippedDeadNames)}; the slugs are probably invented.`);
   }
-  return result('all-skipped', `The agent proposed ${proposed} companies: ${dup} already tracked${nameList(m.skippedDuplicateNames)}, ${dead} unreachable${nameList(m.skippedDeadNames)}, ${collisions} name collision${collisions === 1 ? '' : 's'} left for you to check.${dup ? listNote : ''}`);
+  return result('all-skipped', `The agent proposed ${proposed} ${proposed === 1 ? 'company' : 'companies'}: ${dup} already tracked${nameList(m.skippedDuplicateNames)}, ${dead} unreachable${nameList(m.skippedDeadNames)}, ${collisions} name collision${collisions === 1 ? '' : 's'} left for you to check.${dup ? listNote : ''}`);
 }
 
 // PURE: say WHY an Evaluate (pipeline) or Deep batch wrote nothing. `facts` are
@@ -190,7 +191,8 @@ export function diagnoseEmptyEval({
   if (said.endsWith('?')) {
     return out('asked-question', 'The agent stopped to ask a question, and nobody can answer one in a headless run.' + tailSaid);
   }
-  return out('unknown', `The batch finished (${resultSubtype || 'no result subtype'}, ${toolCount} tool calls) but no report, TSV or deferral appeared.${tailSaid}`);
+  const queue = pendingBefore > 0 ? ` ${pendingBefore} URLs were pending; rows already evaluated or dismissed are checked off only after the run, so the agent may have skipped them all.` : '';
+  return out('unknown', `The batch finished (${resultSubtype || 'no result subtype'}, ${toolCount} tool calls) but no report, TSV or deferral appeared.${queue}${tailSaid}`);
 }
 
 // ── Reading the logs back ─────────────────────────────────────────────────────

@@ -69,6 +69,11 @@ check(noSearch.code === 'no-searches', 'zero web searches gives no-searches');
 const mergeErr = diagnoseEmptyScan({ merge: { added: 0, error: 'portals.yml is not valid YAML' }, webSearchCount: 3 });
 check(mergeErr.code === 'merge-error' && mergeErr.message.includes('not valid YAML'), 'a merge error is reported with its text');
 
+const yamlErr = diagnoseEmptyScan({ merge: { added: 0, error: 'portals.yml is not valid YAML: bad\n\n 1 | code frame\n 2 | more' }, webSearchCount: 3 });
+check(!yamlErr.message.includes('code frame') && !yamlErr.message.includes('\n'), 'a multi-line merge error is shown as its first line only');
+check(diagnoseEmptyScan({ merge: { added: 0, rolesAdded: 0, proposed: 1, skippedDuplicate: 1, skippedDuplicateNames: ['A'] }, webSearchCount: 3, scanStats: { totalJobs: 5, companies: 1, newOffers: 2 } }) === null,
+  'a scan.mjs run that found new offers needs no empty-run diagnosis');
+check(diagnoseEmptyScan({ merge: { added: 0, rolesAdded: 0, proposed: 1, skippedDuplicate: 1, skippedDuplicateNames: ['A'] }, webSearchCount: 1 }).message.includes('proposed 1 company,'), 'a single proposal is worded in the singular');
 check(diagnoseEmptyScan({ merge: null, webSearchCount: 3 }).code === 'merge-not-run', 'a merge that never ran is reported');
 check(diagnoseEmptyScan({ merge: { added: 2, rolesAdded: 0, proposed: 2 }, webSearchCount: 3 }) === null, 'a run that added companies returns null');
 check(diagnoseEmptyScan({ merge: { added: 0, rolesAdded: 4, proposed: 2 }, webSearchCount: 3 }) === null, 'a run that surfaced roles returns null');
