@@ -125,6 +125,34 @@ section('INVARIANT: a base top at or above the floor NEVER produces a ceiling');
   check(violations === 0, `no ceiling for any band topping out at or above the floor (${violations} violations)`);
 }
 
+section('OTE-only band: base never exceeds OTE, so a below-floor OTE top still caps');
+{
+  // Added 2026-10-09. An evaluation capped an OTE-only band whose top was under the
+  // floor ("base is lower still"), and the code then recomputed the ceiling away
+  // because it cannot tell which figure is base. The safe inference is that base is
+  // at most the largest figure, so a below-floor maximum guarantees the cap.
+  const r = ceil('$98,000-$115,000 OTE');
+  check(r.ceiling === COMP_FLOOR_CEILING, `OTE band topping out below the floor caps (got ${r.ceiling})`);
+  check(r.reason === 'ote-top-below-floor', `reason is ote-top-below-floor, got ${r.reason}`);
+  check(ceil('OTE $90K').ceiling === COMP_FLOOR_CEILING, 'a single OTE figure below the floor caps');
+  check(ceil('$100,000 - $119,999 OTE + RSUs').ceiling === COMP_FLOOR_CEILING, 'just under the floor, with trailing equity words, caps');
+  check(ceil('$100,000-$120,000 OTE').ceiling === null, 'an OTE top exactly at the floor does NOT cap');
+  check(ceil('$264,000 OTE').ceiling === null, 'an OTE top above the floor does NOT cap (base unknown)');
+  // An equity or bonus figure raises the maximum, which fails toward no cap.
+  check(ceil('OTE $80K-$110K + $300K equity').ceiling === null, 'a large equity figure keeps the maximum high and fails open');
+  // A labelled base still wins over the OTE rule and keeps its own reason.
+  check(ceil('$95K base, $110K OTE').reason === 'base-top-below-floor', 'a labelled base takes precedence');
+  check(ceil('CAN OTE $100K-$110K').ceiling === null, 'foreign currency OTE still fails open');
+  // The invariant for OTE strings: a top at or above the floor never caps.
+  let violations = 0;
+  for (let top = FLOOR; top <= 400000; top += 2500) {
+    for (const s of [`$${top} OTE`, `$${top - 30000}-$${top} OTE`, `OTE $${top - 30000} to $${top} + equity`]) {
+      if (ceil(s).ceiling !== null) violations++;
+    }
+  }
+  check(violations === 0, `no OTE-only band topping out at or above the floor ever caps (${violations} violations)`);
+}
+
 section('en-dash and em-dash ranges parse');
 check(parseCompBand('$160,000—$190,000').baseTop === 190000, 'em dash range');
 check(parseCompBand('$160,000–$190,000').baseTop === 190000, 'en dash range');

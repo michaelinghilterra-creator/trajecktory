@@ -8,7 +8,7 @@
  */
 import { deriveScore, DEFAULT_WEIGHTS, SCORER_VERSION, applyLevelFloor } from '../lib/score.mjs';
 
-const GOLDEN_FOR_VERSION = '2026-09-22';
+const GOLDEN_FOR_VERSION = '2026-10-09';
 
 let passed = 0;
 let failed = 0;
