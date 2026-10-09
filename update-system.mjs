@@ -174,6 +174,7 @@ export const SYSTEM_PATHS = [
   'reconcile-ta.mjs',
   'reconcile-triage.mjs',
   'repair-twc-data.mjs',
+  'repair-workday-urls.mjs',
   'report-correspondence-drift.mjs',
   'report-data-review.mjs',
   'resolve-jds.mjs',

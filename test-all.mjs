@@ -747,6 +747,15 @@ for (const suite of [
   'tests/gate-local-snapshot.test.mjs',
   'tests/ceiling-basis.test.mjs',
   'tests/buffer-sync-status.test.mjs',
+  // Registered 2026-10-09 after the guard below found them missing: a suite not named
+  // here never runs, and its absence looks exactly like a passing run.
+  'tests/contact-twin.test.mjs',
+  'tests/resync-scope.test.mjs',
+  'tests/prior-roles.test.mjs',
+  'tests/jd-fingerprint.test.mjs',
+  'tests/workday-url.test.mjs',
+  'tests/workday-repair.test.mjs',
+  'tests/test-registration.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);

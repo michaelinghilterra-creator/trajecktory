@@ -86,6 +86,7 @@ AI-powered job search, run from a local dashboard: pipeline tracking, offer scor
 | `followup-cadence.mjs` | Follow-up cadence calculator (JSON output) |
 | `data/follow-ups.md` | Follow-up history tracker |
 | `scan.mjs` | Zero-token portal scanner — hits Greenhouse/Ashby/Lever APIs directly, zero LLM cost |
+| `repair-workday-urls.mjs` | Restores the careers-site segment in stored Workday links that the scanner saved without one before v5.13.1 (`node repair-workday-urls.mjs` dry run, then `--apply`). The site is read from `portals.yml`; a tenant with several sites, or none known, is reported and left alone. Only the url cell is written, with a timestamped backup and a byte-identical check of every other cell. |
 | `check-liveness.mjs` | Job posting liveness checker |
 | `liveness-core.mjs` | Shared liveness logic (expired signals win over generic Apply text) |
 | `reports/` | Evaluation reports (format: `{###}-{company-slug}-{YYYY-MM-DD}.md`). Blocks A-F + G (Posting Legitimacy). Header includes `**Legitimacy:** {tier}`. |
