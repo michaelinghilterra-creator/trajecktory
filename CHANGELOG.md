@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.14.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.14.0...v5.14.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* keep the comp cap when an OTE-only band tops out below the floor ([#467](https://github.com/michaelinghilterra-creator/trajecktory/issues/467)) ([c8c896d](https://github.com/michaelinghilterra-creator/trajecktory/commit/c8c896d6047893c9de33f1b5e62d121c7262f78d))
+
 ## [5.14.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.13.1...v5.14.0) (2026-10-09)
 
 
