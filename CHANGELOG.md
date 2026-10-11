@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.15.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.14.1...v5.15.0) (2026-10-11)
+
+
+### Features
+
+* **dashboard:** add one-click Repeats chip to the Roles filter bar ([#469](https://github.com/michaelinghilterra-creator/trajecktory/issues/469)) ([eafa24b](https://github.com/michaelinghilterra-creator/trajecktory/commit/eafa24bce2c4aa94ae1aa6e52e8ce7100ef171bb))
+
+
+### Bug Fixes
+
+* stop automated application receipts counting as positive human replies ([#470](https://github.com/michaelinghilterra-creator/trajecktory/issues/470)) ([3cad423](https://github.com/michaelinghilterra-creator/trajecktory/commit/3cad423827b793ae7f906a9ea2e4498dba5834f6))
+
 ## [5.14.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.14.0...v5.14.1) (2026-10-09)
 
 
