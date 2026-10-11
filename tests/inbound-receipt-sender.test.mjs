@@ -59,7 +59,7 @@ check(same(classifyForEvent({ subject: RECEIPT_SUBJECT, body: BOILERPLATE, senti
 check(same(classifyForEvent({ subject: RECEIPT_SUBJECT, body: BOILERPLATE, sentiment: 'positive', sender: PERSON }), { kind: 'human', sentiment: 'positive' }), 'classifyForEvent: receipt subject, positive, PERSON');
 check(same(classifyForEvent({ subject: INTEREST_SUBJECT, body: WRAPPED_REJECTION, sentiment: 'positive', sender: AUTO }), { kind: 'human', sentiment: 'negative', sentiment_source: 'rule' }), 'classifyForEvent: interest subject, wrapped rejection, positive, AUTO');
 check(same(classifyForEvent({ subject: INTEREST_SUBJECT, body: WRAPPED_REJECTION, sentiment: 'positive', sender: PERSON }), { kind: 'human', sentiment: 'positive' }), 'classifyForEvent: interest subject, wrapped rejection, positive, PERSON');
-check(same(classifyForEvent({ subject: INTEREST_SUBJECT, body: WRAPPED_REJECTION, sentiment: 'neutral', sender: AUTO }), { kind: 'human', sentiment: 'neutral' }), 'classifyForEvent: interest subject, wrapped rejection, neutral, AUTO');
+check(same(classifyForEvent({ subject: INTEREST_SUBJECT, body: WRAPPED_REJECTION, sentiment: 'neutral', sender: AUTO }), { kind: 'human', sentiment: 'negative', sentiment_source: 'rule' }), 'classifyForEvent: interest subject, wrapped rejection, neutral, AUTO is corrected to negative');
 
 // planInboundBackfill checks
 const plan = planInboundBackfill({ notes: { '900001': [
