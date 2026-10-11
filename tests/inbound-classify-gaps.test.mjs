@@ -61,6 +61,16 @@ check(isAutomatedRejection({ subject: 'Update', body: 'We do not feel like this 
 check(isAutomatedRejection({ subject: 'Update', body: 'We have decided to move forward with candidates whose experience is closer.', sender: PERSON }) === false, 'E29: Move forward with candidates body with PERSON returns false');
 check(isAutomatedRejection({ subject: 'Update', body: 'The role is being canceled.', sender: PERSON }) === false, 'E30: Role canceled body with PERSON returns false');
 
+// E2. More rejection wording seen in real automated rejections, isAutomatedRejection
+check(isAutomatedRejection({ subject: 'Update', body: 'At this time we will be moving forward with other candidates who are better aligned.', sender: AUTO }) === true, 'E31: will be moving forward with other candidates returns true');
+check(isAutomatedRejection({ subject: 'Update', body: 'Unfortunately, we won’t be moving forward with your application for this role.', sender: AUTO }) === true, 'E32: won’t be moving forward (curly apostrophe) returns true');
+check(isAutomatedRejection({ subject: 'Update', body: 'We are unable to move forward with your candidacy at this time.', sender: AUTO }) === true, 'E33: unable to move forward returns true');
+check(isAutomatedRejection({ subject: 'Update', body: 'We found a new hire. The role is now closed.', sender: AUTO }) === true, 'E34: role is now closed returns true');
+check(isAutomatedRejection({ subject: 'Update', body: 'Our team has decided not to move forward at this time.', sender: AUTO }) === true, 'E35: decided not to move forward returns true');
+check(isAutomatedRejection({ subject: 'Update', body: 'We have filled the role with another applicant.', sender: AUTO }) === true, 'E36: filled the role returns true');
+check(isAutomatedRejection({ subject: 'Update', body: 'We will be moving forward with other candidates.', sender: PERSON }) === false, 'E37: a person sender is not an automated rejection');
+check(isAutomatedRejection({ subject: 'Update', body: 'If we decide to move forward with your application, we will contact you.', sender: AUTO }) === false, 'E38: a conditional about moving forward is not a rejection');
+
 // F. Neutral tag corrected, classifyForEvent
 check(same(classifyForEvent({ subject: 'Update regarding your application to Zorblax Widgetry', body: FILLED, sentiment: 'neutral', sender: AUTO }), { kind: 'human', sentiment: 'negative', sentiment_source: 'rule' }), 'F31: classifyForEvent with Filled body and AUTO returns negative');
 check(same(classifyForEvent({ subject: 'Update regarding your application to Zorblax Widgetry', body: FILLED, sentiment: 'neutral', sender: PERSON }), { kind: 'human', sentiment: 'neutral' }), 'F32: classifyForEvent with Filled body and PERSON returns neutral');
