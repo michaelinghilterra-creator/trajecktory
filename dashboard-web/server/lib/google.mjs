@@ -30,6 +30,7 @@ import { logWritesEnabled, openDataStore } from '../../../lib/log-writes.mjs';
 import { activeLegacyFileEvents, renderLegacyFile } from '../../../lib/legacy-files.mjs';
 import { REPLY_STATE_FILE, REPLY_STATE_KEYS, normalizeReplyState } from '../../../lib/reply-state.mjs';
 import { classifyBounce } from '../../../lib/bounce-parse.mjs';
+import { isApplicationReceipt } from '../../../lib/inbound-classify.mjs';
 import { normalizeCompany, sameRole } from '../../../lib/identity.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from './target-talent.mjs';
 import { parseReferralsMd, readReferralCorrespondence, writeReferralCorrespondence, updateReferralLine, resolveReferralLink } from './referrals.mjs';
@@ -567,6 +568,14 @@ function classifyReply({ subject = '', text = '' } = {}) {
   return 'neutral';
 }
 
+// The suggestion shown for a fetched message. An automated application receipt carries "next steps" and "interview"
+// boilerplate that the keyword guess reads as positive, so a positive guess on a receipt is neutral instead.
+function suggestSentiment({ subject = '', text = '', sender = '' } = {}) {
+  const guess = classifyReply({ subject, text });
+  if (guess === 'positive' && isApplicationReceipt({ subject, body: text, sender, sentiment: 'positive' })) return 'neutral';
+  return guess;
+}
+
 // Match an address to a known target-talent contact by exact email. Rows are
 // passed in, so this is pure and test-covered. Returns null when the sender is
 // nobody we track (surfaced as "other", never acted on silently).
@@ -804,7 +813,7 @@ function scanDecisions({ messages = [], taRows = [], apps = [], applyDates = {} 
     }
     const entry = {
       msgId: msg.id, threadId: msg.threadId, from: fromAddr, subject: msg.subject, date: msg.date,
-      sentiment: classifyReply({ subject: msg.subject, text: msg.text }),
+      sentiment: suggestSentiment({ subject: msg.subject, text: msg.text, sender: fromAddr }),
       contact, companyGuess, snippet: msg.snippet, body: msg.text,
     };
     (contact ? replies : other).push(entry);

@@ -576,9 +576,9 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
             sentiment: sentiment || 'neutral', status_flip: statusFlip, occurred_on: today, with_state_effects: viaEvents,
           });
           // The classified inbound email is written right after the attach, so undoing the attach takes it out too.
-          const cls = classifyForEvent({ subject: message.subject || subject, body: fullBody, sentiment: sentiment || 'neutral' });
+          const cls = classifyForEvent({ subject: message.subject || subject, body: fullBody, sentiment: sentiment || 'neutral', sender });
           const received = buildEmailReceivedEvent({
-            application_id: id, msg_id: msgId, note_timestamp: attached.payload.note_timestamp, sent_on: today, ...cls, sentiment_source: 'owner',
+            application_id: id, msg_id: msgId, note_timestamp: attached.payload.note_timestamp, sent_on: today, ...cls, sentiment_source: cls.sentiment_source || 'owner',
           });
           appendEventsWithEffects(store, [attached, received]);
         }

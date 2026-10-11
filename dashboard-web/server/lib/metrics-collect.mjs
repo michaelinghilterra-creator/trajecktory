@@ -1,8 +1,8 @@
 import fs from 'fs';
 import { computeCoreMetrics } from '../../../lib/metrics/core.mjs';
 import { parseReplyNote } from '../../../lib/data-review.mjs';
-import { classifyInbound, isApplicationReceipt } from '../../../lib/inbound-classify.mjs';
-import { INBOUND_EVENT_TYPE, inboundRepliesFromEvents, replyKey, respondedKey } from '../../../lib/inbound-events.mjs';
+import { classifyInbound } from '../../../lib/inbound-classify.mjs';
+import { INBOUND_EVENT_TYPE, classifyForEvent, inboundRepliesFromEvents, replyKey, respondedKey } from '../../../lib/inbound-events.mjs';
 import { readEvents } from '../../../lib/event-store.mjs';
 import { logWritesEnabled, withLogRead } from '../../../lib/log-writes.mjs';
 import { normalizeCompany, sameRole } from '../../../lib/identity.mjs';
@@ -55,10 +55,11 @@ function collectReplies() {
   for (const [appId, entries] of Object.entries(notes)) {
     for (const entry of (Array.isArray(entries) ? entries : [])) {
       const parsed = parseReplyNote(entry);
-      if (!parsed || isApplicationReceipt(parsed)
-        || classifyInbound({ subject: parsed.subject, body: parsed.body }) !== 'human') continue;
+      if (!parsed) continue;
+      const cls = classifyForEvent({ subject: parsed.subject, body: parsed.body, sentiment: parsed.sentiment, sender: parsed.sender });
+      if (cls.kind !== 'human') continue;
       if (recordedKeys.has(replyKey({ msg_id: entry.msgId, application_id: appId, note_timestamp: entry.timestamp }))) continue;
-      add(appId, { sent_on: parsed.sent_on, sentiment: parsed.sentiment });
+      add(appId, { sent_on: parsed.sent_on, sentiment: cls.sentiment });
     }
   }
 
