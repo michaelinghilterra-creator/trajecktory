@@ -129,7 +129,7 @@ check(
 let salesdevPrompt;
 await discoverPrincipalAtCompany({
   company: 'SalesDev Track Example',
-  exampleRole: 'Sales Development Representative',
+  exampleRole: 'Sales Development Trainee',
   generate: async (prompt) => { salesdevPrompt = prompt; return '[]'; },
 });
 check(

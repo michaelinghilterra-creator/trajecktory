@@ -60,7 +60,7 @@ const cases = [
   ['Revenue Ops Analyst', 'revops', null],
   ['Sales Operations Associate', 'revops', null],
   ['Business Intelligence Specialist', 'revops', null],
-  ['Sales Development Representative', 'revops', null],
+  ['Sales Development Trainee', 'revops', null],
   ['Marketing Coordinator', 'revops', null],
 
   ['VP Manufacturing', 'revops', null],
