@@ -675,6 +675,7 @@ for (const suite of [
   'tests/obsidian-postfix.test.mjs',
   'tests/prune-gated.test.mjs',
   'tests/inbound-classify-gaps.test.mjs',
+  'tests/inbound-reclassify-build.test.mjs',
   'tests/inbound-reclassify.test.mjs',
   'tests/inbound-receipt-sender.test.mjs',
   'tests/generate-prep-docx.test.mjs',
