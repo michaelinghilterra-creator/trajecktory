@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Runs reclassify-email-received.mjs against invented data folders. It must report, refuse the write flag and the
-// bad inputs, print no message text, and leave every file in the data folder byte for byte as it was.
+// Runs reclassify-email-received.mjs against invented data folders. The dry run must report, refuse bad inputs, print no
+// message text and leave every file as it was. The real write must refuse without its guards, then void and replace the
+// moved events, change nothing else, and find nothing to do the second time.
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -59,6 +60,23 @@ function writeFixture(sandbox, { eventStore = { writes: 'on', flipped_at: '2030-
   fs.writeFileSync(path.join(sandbox, 'google-sync.json'), '{}\n', 'utf8');
   fs.writeFileSync(path.join(sandbox, 'event-store.json'), JSON.stringify(eventStore) + '\n', 'utf8');
 }
+function makeBackup(sandbox) {
+  const backupRoot = makeRepoSandbox(repoRoot, 'reclassify-email-received-backup');
+  const data = path.join(backupRoot, 'data');
+  fs.mkdirSync(data);
+  for (const name of names) {
+    const src = path.join(sandbox, name);
+    if (fs.existsSync(src)) fs.copyFileSync(src, path.join(data, name));
+  }
+  return backupRoot;
+}
+async function readStoreEvents(sandbox) {
+  const { openEventStore, readEvents } = await import('../lib/event-store.mjs');
+  const store = openEventStore(path.join(sandbox, 'trajecktory.db'));
+  const events = readEvents(store);
+  store.close();
+  return events;
+}
 async function makeDataDir(options = {}) {
   const sandbox = makeRepoSandbox(repoRoot, 'reclassify-email-received-script');
   writeFixture(sandbox, options);
@@ -92,7 +110,15 @@ check(result.status === 2 && result.stderr.includes('not switched on'), 'event s
 let sandbox = await makeDataDir();
 let before = hashes(sandbox);
 result = runScript(sandbox, [`${D}apply`]);
-check(result.status === 2 && result.stderr.includes('not built') && sameHashes(before, hashes(sandbox)), 'the write flag is refused and changes nothing');
+check(result.status === 2 && result.stderr.includes('no-other-writers') && sameHashes(before, hashes(sandbox)), 'the write flag without no-other-writers is refused and changes nothing');
+
+result = runScript(sandbox, [`${D}apply`, `${D}no-other-writers`]);
+check(result.status === 2 && result.stderr.includes(`${D}backup`) && sameHashes(before, hashes(sandbox)), 'the write flag without a backup is refused and changes nothing');
+
+let staleBackup = makeBackup(sandbox);
+fs.appendFileSync(path.join(staleBackup, 'data', 'trajecktory.db'), 'stale');
+result = runScript(sandbox, [`${D}apply`, `${D}no-other-writers`, `${D}backup`, staleBackup]);
+check(result.status === 2 && result.stderr.includes('not identical') && sameHashes(before, hashes(sandbox)), 'a stale backup is refused and changes nothing');
 
 result = runScript(sandbox, [`${D}bogus`]);
 check(result.status === 2 && result.stderr.includes('unknown option'), 'an unknown option is refused');
@@ -122,6 +148,40 @@ check(result.status === 0
 check(!output.includes('Secret') && !output.includes('no-reply@') && !output.includes('secret.person') && !output.includes('example.test'),
   'no sender, subject or body is printed');
 check(fs.readdirSync(scriptTmp).every((name) => !name.startsWith('tjk-reclassify-email-received-')), 'the scratch copy is removed afterwards');
+
+// The real write on a fresh folder.
+const writeSandbox = await makeDataDir();
+let backup = makeBackup(writeSandbox);
+const keep = ['applications.md', 'app-notes.json', 'event-store.json'];
+const beforeWrite = hashes(writeSandbox);
+const eventsBefore = await readStoreEvents(writeSandbox);
+result = runScript(writeSandbox, [`${D}apply`, `${D}no-other-writers`, `${D}backup`, backup]);
+const writeOutput = `${result.stdout}
+${result.stderr}`;
+const eventsAfter = await readStoreEvents(writeSandbox);
+const inbound = eventsAfter.filter((event) => event.type === 'email_received');
+const voids = eventsAfter.filter((event) => event.type === 'event_undone');
+check(result.status === 0
+  && result.stdout.includes('rehearsal on a scratch copy')
+  && result.stdout.includes('wrote 2 events (1 voided, 1 replaced)')
+  && result.stdout.includes('DONE.')
+  && eventsAfter.length === eventsBefore.length + 2
+  && inbound.length === 3 && voids.length === 1
+  && fs.existsSync(path.join(backup, 'WHAT-CHANGED.md')), 'the real write voids the moved event, adds its replacement and writes the note in the backup');
+const replacement = inbound.find((event) => event.dedupe_key && event.dedupe_key.startsWith('reclassify:'));
+const voidedId = voids[0] && voids[0].corrects_event_id;
+check(replacement && replacement.payload.kind === 'receipt' && replacement.payload.sentiment === null
+  && replacement.payload.key === 'msg:m900101' && replacement.payload.sent_on === '2030-03-04'
+  && inbound.some((event) => event.id === voidedId && event.payload.kind === 'human'), 'the replacement has the new kind and the old key and date, and the voided event is the old human one');
+check(keep.every((name) => beforeWrite[name] === hashes(writeSandbox)[name]), 'the notes, the tracker and the switch file are untouched');
+check(!writeOutput.includes('Secret') && !writeOutput.includes('no-reply@'), 'the write prints no message text');
+
+result = runScript(writeSandbox);
+check(result.status === 0 && result.stdout.includes('would change: 0'), 'the dry run after the write finds nothing left to move');
+backup = makeBackup(writeSandbox);
+const beforeSecond = hashes(writeSandbox);
+result = runScript(writeSandbox, [`${D}apply`, `${D}no-other-writers`, `${D}backup`, backup]);
+check(result.status === 0 && result.stdout.includes('Nothing to do.') && sameHashes(beforeSecond, hashes(writeSandbox)), 'a second write has nothing to do and changes nothing');
 
 console.log(`reclassify-email-received-script.test.mjs: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
