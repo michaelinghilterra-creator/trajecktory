@@ -20,7 +20,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { makeSandbox } from './helpers/sandbox.mjs';
 import {
-  canonicalUrl, normalizeCompany, sameRole, roleSignature,
+  canonicalUrl, normalizeCompany, sameEmployer, sameRole, roleSignature,
   urlFromReport, buildDecidedIndex, findDecided,
   buildActiveRoleIndex, findActiveRepost,
 } from '../lib/identity.mjs';
@@ -304,6 +304,12 @@ check(findActiveRepost(actIdx, 'https://boards.greenhouse.io/contoso/jobs/2', { 
   'a repost of a merely-EVALUATED (not active) role is NOT suppressed');
 check(findActiveRepost(actIdx, 'https://job-boards.greenhouse.io/globex/jobs/6107003004', { company: 'Globex', role: 'Widget Operations Manager' }) === null,
   'the SAME url is left to findDecided, not double-suppressed here');
+
+// ── sameEmployer ──────────────────────────────────────────────────────────────
+check(sameEmployer('zorblaxwidgetry', 'zorblaxwidgetry'), 'equal company keys are the same employer');
+check(sameEmployer('zorblaxwidgetry', 'zorblaxwidgetrycorporation'), 'a longer spelling of the same name is the same employer');
+check(!sameEmployer('abc', 'abcd'), 'a prefix shorter than four characters is rejected');
+check(!sameEmployer('zorblaxwidgetry', 'quennoxratchetworks'), 'unrelated employers do not match');
 
 rmSync(sb, { recursive: true, force: true });
 

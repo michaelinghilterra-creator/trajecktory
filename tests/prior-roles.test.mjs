@@ -55,7 +55,8 @@ console.log('prior-roles.test.mjs');
     row(900201, 'Zorblax Widgetry', 'Lead Widget Analyst', 3.2, 'Evaluated', 'https://jobs.example.test/contoso/one?utm_source=x'),
     row(900202, 'Zorblax Widgetry', 'Lead Widget Analyst', 3.8, 'Applied', 'https://jobs.example.test/contoso/one'),
   ];
-  check(findRelatedRoles(rows, rows[0]).length === 0, 'same canonical URL is not a repeat posting');
+  const same = findRelatedRoles(rows, rows[0]);
+  check(same.length === 1 && same[0].kind === 'same-posting', 'same canonical URL is flagged as the same posting');
 }
 
 {
@@ -103,6 +104,40 @@ console.log('prior-roles.test.mjs');
   check(findRelatedRoles(rows, rows[0]).every(r => r.num !== 900702), 'two different qualifiers are different jobs');
   check(findRelatedRoles(rows, rows[0]).some(r => r.num === 900703), 'a qualifier on only one side still relates');
   check(qualifierKey('Widget Analyst - Mobile') === 'mobile' && qualifierKey('Widget Analyst') === '', 'qualifierKey reads dash and absent qualifiers');
+}
+
+{
+  const rows = [
+    row(900801, 'Zorblax Widgetry', 'Lead Widget Analyst', 3.0, 'Evaluated', 'https://jobs.example.test/globex/x'),
+    row(900802, 'Zorblax Widgetry Corporation', 'Lead Widget Analyst', 3.5, 'Evaluated', 'https://jobs.example.test/globex/x'),
+  ];
+  const rel = findRelatedRoles(rows, rows[0]);
+  check(rel.length === 1 && rel[0].kind === 'same-posting', 'company spelling variants with the same posting are flagged');
+}
+
+{
+  const rows = [
+    row(900811, 'Zorblax Widgetry', 'Lead Widget Analyst', 3.0, 'Evaluated', ''),
+    row(900812, 'Zorblax Widgetry', 'Lead Widget Analyst', 3.5, 'Evaluated', 'https://jobs.example.test/globex/y'),
+  ];
+  const rel = findRelatedRoles(rows, rows[1]);
+  check(rel.length === 1 && rel[0].kind === 'repost', 'a row with no URL still relates by company and title');
+}
+
+{
+  const rows = [
+    row(900821, 'Ab', 'Lead Widget Analyst', 3.0, 'Evaluated', 'https://jobs.example.test/a/1'),
+    row(900822, 'Abc', 'Lead Widget Analyst', 3.5, 'Evaluated', 'https://jobs.example.test/a/2'),
+  ];
+  check(findRelatedRoles(rows, rows[0]).length === 0, 'very short company names do not prefix match');
+}
+
+{
+  const rows = [
+    row(900831, 'Zorblax Widgetry', 'Lead Widget Analyst', 3.0, 'Evaluated', 'https://jobs.example.test/globex/z'),
+    row(900832, 'Zorblax Widgetry', 'Director of Facilities', 3.5, 'Evaluated', 'https://jobs.example.test/globex/z'),
+  ];
+  check(findRelatedRoles(rows, rows[0]).length === 0, 'same URL with different titles is a wrong link, not a repeat');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -6,7 +6,7 @@ import { parseTrackerLine, formatTrackerLine, hasStrayPipe } from '../../../lib/
 import { passedReasonOf } from '../../../lib/passed.mjs';
 import { appendEventsWithEffects, findTrackerRow } from '../../../lib/legacy-files.mjs';
 import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
-import { normalizeCompany } from '../../../lib/identity.mjs';
+import { normalizeCompany, sameEmployer } from '../../../lib/identity.mjs';
 import { findRelatedRoles } from '../../../lib/prior-roles.mjs';
 import { hasV1Frontmatter, parseV1, v1Header } from '../v1-loader.mjs';
 import {
@@ -344,8 +344,25 @@ function parseApplicationsMd() {
     if (!byCompany.has(key)) byCompany.set(key, []);
     byCompany.get(key).push(r);
   }
+  // Spelling variants of one employer ("Example" vs "Example Corporation") must
+  // meet, so bucket the keys by their first four characters and pool every
+  // compatible key. Keys under four characters only ever match exactly.
+  const keysByPrefix = new Map();
+  for (const key of byCompany.keys()) {
+    const p = key.slice(0, 4);
+    if (!keysByPrefix.has(p)) keysByPrefix.set(p, []);
+    keysByPrefix.get(p).push(key);
+  }
+  const poolFor = (key) => {
+    if (key.length < 4) return byCompany.get(key) || [];
+    const pool = [];
+    for (const k of keysByPrefix.get(key.slice(0, 4)) || []) {
+      if (sameEmployer(k, key)) pool.push(...byCompany.get(k));
+    }
+    return pool;
+  };
   for (const r of rows) {
-    r.relatedRoles = findRelatedRoles(byCompany.get(normalizeCompany(r.company)) || [], r);
+    r.relatedRoles = findRelatedRoles(poolFor(normalizeCompany(r.company)), r);
   }
 
   _appsCache = { mtimeMs, evMtimeMs, rows };

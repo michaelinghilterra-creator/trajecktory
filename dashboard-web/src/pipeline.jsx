@@ -88,9 +88,10 @@ function formatCompMidpoint(a) {
 
 // One line describing a related (repeat) posting, shared by the table tooltip
 // and the drawer banner: "Seen before: #900001 Evaluated, 3.2 to 4.1 (+0.9)".
+// The identical posting recorded twice reads "Same posting" in either direction.
 function relatedLabel(app, rel) {
   const scoreText = (n) => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : null;
-  const label = rel.direction === 'earlier' ? 'Seen before' : 'Seen again';
+  const label = rel.kind === 'same-posting' ? 'Same posting' : rel.direction === 'earlier' ? 'Seen before' : 'Seen again';
   const text = `${label}: #${rel.num} ${rel.status || ''}`.trim();
   if (rel.scoreDelta == null) return text;
   const first = rel.direction === 'earlier' ? scoreText(rel.score) : scoreText(app.score);
@@ -307,6 +308,8 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
     }
     return m;
   }, [apps]);
+  const repeatCount = useMemoP(() => apps.reduce((n, a) => n + (Array.isArray(a.relatedRoles) && a.relatedRoles.length > 0 ? 1 : 0), 0), [apps]);
+  const repeatsOn = filters.repeat === 'only';
   return (
     <div className="pl-toolbar">
       <div className="tb-row">
@@ -323,6 +326,12 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
               </button>
             );
           })}
+          <button className={'stat-chip' + (repeatsOn ? ' on' : '') + (repeatCount === 0 ? ' zero' : '')} aria-pressed={repeatsOn}
+            title="Show only repeat postings: the same job seen again, including the identical posting recorded twice"
+            onClick={() => setFilters(f => ({ ...f, repeat: f.repeat === 'only' ? '' : 'only' }))}>
+            <span className="repeat-mark" aria-hidden="true">↻</span>
+            Repeats<span className="sc-n">{repeatCount}</span>
+          </button>
         </div>
       </div>
       <div className="tb-row">
@@ -330,7 +339,7 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
           <option value="">All archetypes</option>
           {window.ARCHETYPES.map(a => <option key={a} value={a}>{a}</option>)}
         </select>
-        <select className="sel" value={filters.repeat || ''} title="Repeat postings: the same job seen again under a new URL or reworded title" onChange={(e) => setFilters(f => ({ ...f, repeat: e.target.value }))}>
+        <select className="sel" value={filters.repeat || ''} title="Repeat postings: the same job seen again, including the identical posting recorded twice" onChange={(e) => setFilters(f => ({ ...f, repeat: e.target.value }))}>
           <option value="">↻ Repeats: any</option>
           <option value="only">↻ Repeats only</option>
           <option value="none">↻ Hide repeats</option>
