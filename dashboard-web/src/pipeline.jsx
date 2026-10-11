@@ -307,6 +307,8 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
     }
     return m;
   }, [apps]);
+  const repeatCount = useMemoP(() => apps.reduce((n, a) => n + (Array.isArray(a.relatedRoles) && a.relatedRoles.length > 0 ? 1 : 0), 0), [apps]);
+  const repeatsOn = filters.repeat === 'only';
   return (
     <div className="pl-toolbar">
       <div className="tb-row">
@@ -323,6 +325,12 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
               </button>
             );
           })}
+          <button className={'stat-chip' + (repeatsOn ? ' on' : '') + (repeatCount === 0 ? ' zero' : '')} aria-pressed={repeatsOn}
+            title="Show only repeat postings: the same job seen again under a new URL or reworded title"
+            onClick={() => setFilters(f => ({ ...f, repeat: f.repeat === 'only' ? '' : 'only' }))}>
+            <span className="repeat-mark" aria-hidden="true">↻</span>
+            Repeats<span className="sc-n">{repeatCount}</span>
+          </button>
         </div>
       </div>
       <div className="tb-row">
