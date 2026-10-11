@@ -43,7 +43,7 @@ const fixtures = [
 for (const [input, expected] of fixtures) {
   check(same(classifyForEvent(input), expected), `classifies ${input.subject}`);
 }
-check(INBOUND_CLASSIFIER_VERSION === '2026-10-05', 'classifier change must bump the version together with these fixtures');
+check(INBOUND_CLASSIFIER_VERSION === '2026-10-11', 'classifier change must bump the version together with these fixtures');
 
 check(replyKey({ msg_id: 'm900001', application_id: 900001, note_timestamp: 'later' }) === 'msg:m900001', 'replyKey uses the message id when present');
 check(replyKey({ application_id: 900001, note_timestamp: '2030-03-04T15:00:00.000Z' }) === 'note:900001:2030-03-04T15:00:00.000Z', 'replyKey falls back to the note identity');
@@ -71,7 +71,7 @@ check(built.type === 'email_received'
     kind: 'human',
     sentiment: 'positive',
     sentiment_source: 'owner',
-    classifier_version: '2026-10-05',
+    classifier_version: '2026-10-11',
     attach_event_id: null,
   }), 'buildEmailReceivedEvent writes the dashboard shape');
 check(buildEmailReceivedEvent({ application_id: 900001, sent_on: '2030-03-04', kind: 'receipt', dedupe_key: 'backfill:one' }).dedupe_key === 'backfill:one', 'dedupe_key is optional and preserved');
