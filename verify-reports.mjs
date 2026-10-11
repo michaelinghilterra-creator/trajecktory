@@ -120,7 +120,13 @@ for (const file of files) {
       hasParsed: !!cs.companyBrief },
     { letter: 'A', name: 'Keywords',      hasMd: hasKeywordsSource,
       hasParsed: (cs.keywords?.length || 0) > 0 },
-    { letter: 'D', name: 'Comp',          hasMd: hasListContent(extractSection(md, 'D')) || /\$[\d,]+K?/.test(extractSection(md, 'D') || ''),
+    // Block D is Comp only in the legacy prose layout. In a v1 report D is
+    // "Cultural Signals" and comp lives in the frontmatter `comp` object, so a
+    // dollar figure in the culture text ("$350M raised") is not comp content. Real
+    // v1 drift is the frontmatter CARRYING comp while the conversion drops it.
+    { letter: 'D', name: 'Comp',          hasMd: v1
+        ? !!(v1.comp?.stated || v1.comp?.market || v1.comp?.sources?.length > 0)
+        : hasListContent(extractSection(md, 'D')) || /\$[\d,]+K?/.test(extractSection(md, 'D') || ''),
       hasParsed: (cs.comp?.stated || cs.comp?.market || (cs.comp?.sources?.length > 0)) },
     { letter: 'E', name: 'Customize',     hasMd: hasListContent(extractSection(md, 'E')),
       hasParsed: (cs.customizationCV?.length > 0 || cs.customizationLI?.length > 0) },
