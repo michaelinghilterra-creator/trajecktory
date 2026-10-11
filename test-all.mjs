@@ -452,6 +452,7 @@ for (const suite of [
   'tests/discover-env.test.mjs',
   'tests/discover-queries.test.mjs',
   'tests/health-check.test.mjs',
+  'tests/verify-reports-comp.test.mjs',
   'tests/verify-actionable.test.mjs',
   'tests/no-live-dir-writes.test.mjs',
   'tests/discard.test.mjs',
