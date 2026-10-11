@@ -172,6 +172,7 @@ export const SYSTEM_PATHS = [
   'rebuild-tracker-tsv.mjs',
   'reconcile-pipeline.mjs',
   'reconcile-ta.mjs',
+  'reclassify-email-received.mjs',
   'reconcile-triage.mjs',
   'repair-twc-data.mjs',
   'repair-workday-urls.mjs',
