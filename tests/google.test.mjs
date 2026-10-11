@@ -260,6 +260,22 @@ const guessed = dec2.other.find(o => o.msgId === 'm-first');
 check(guessed && guessed.companyGuess?.appId === 900101, 'unknown sender at a known company carries a companyGuess to the right app');
 check(guessed && guessed.sentiment === 'positive', 'the company-guessed first-contact email is still sentiment-classified');
 
+// The keyword guess reads receipt boilerplate ("next steps", "interview") as positive. For an automated application
+// receipt the suggestion is neutral, so confirming it does not log a positive reply. A person asking to schedule stays positive.
+const automatedReceipt = {
+  id: 'm-receipt',
+  payload: { headers: [{ name: 'From', value: 'Zorblax Talent <no-reply@example.test>' }, { name: 'Subject', value: 'Thank you for applying to Zorblax Widgetry' }],
+    parts: [{ mimeType: 'text/plain', body: { data: b64('We are excited to receive your application. Next steps: if selected for an interview we will schedule a call.') } }] },
+};
+const personAsk = {
+  id: 'm-person',
+  payload: { headers: [{ name: 'From', value: 'Ada Vance <ada.vance@example.test>' }, { name: 'Subject', value: 'Re: role' }],
+    parts: [{ mimeType: 'text/plain', body: { data: b64('Can we schedule a call to discuss next steps?') } }] },
+};
+const dec3 = scanDecisions({ messages: [automatedReceipt, personAsk], taRows });
+check(dec3.other.find(o => o.msgId === 'm-receipt')?.sentiment === 'neutral', 'an automated application receipt is suggested as neutral, not positive');
+check(dec3.other.find(o => o.msgId === 'm-person')?.sentiment === 'positive', 'a person asking to schedule is still suggested as positive');
+
 // ── candidateAppsFor: reply → which application(s) ───────────────────────────
 // Invented applications shaped like parseApplicationsMd output.
 const appRows = [

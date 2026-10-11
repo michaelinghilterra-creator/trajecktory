@@ -108,6 +108,18 @@ try {
   result = collectCoreMetrics({ today: '2030-03-10' });
   check(result.results.response.all.k === 4 && result.results.response.all.n === 5, 'responses are 900001, 900002 (event only), 900004 (note fallback) and 900005 (undone event, note fallback); the receipt event keeps 900003 out');
   check(result.results.positive.all.k === 2, 'positive is 900002 (event only) and 900005; 900001 follows its negative event, not its positive note');
+
+  // Notes still read as the fallback must decide like the events do: an automated application receipt tagged
+  // positive is not a reply, and an automated rejection tagged positive is a negative reply.
+  const automatedNote = (sentOn, subject, body) => `### Reply logged (${sentOn})\nno-reply@example.test: ${subject} [positive]\n\n${body}`;
+  writeJson('app-notes.json', {
+    900003: [{ timestamp: '2030-03-11T15:00:00.000Z', msgId: 'm900203', text: automatedNote('2030-03-11', 'Thank you for your interest in Zorblax Widgetry', 'We have decided to move forward\r\n      with another candidate for this role.') }],
+    900004: [{ timestamp: '2030-03-11T16:00:00.000Z', msgId: 'm900204', text: automatedNote('2030-03-11', 'Thank you for applying to Quennox Ratchet Works', 'We are excited to receive your application. Next steps: if selected for an interview we will schedule a call.') }],
+  });
+  resetLogWritesCache();
+  result = collectCoreMetrics({ today: '2030-03-12' });
+  check(result.results.response.all.k === 3, 'the automated rejection note counts as a reply and the automated receipt note does not');
+  check(result.results.positive.all.k === 1, 'neither automated note counts as positive; only 900002 (event only) does');
 } finally {
   resetLogWritesCache();
   fs.rmSync(sandbox, { recursive: true, force: true });
