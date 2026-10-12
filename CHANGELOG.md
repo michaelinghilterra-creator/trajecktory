@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.15.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.15.0...v5.15.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* count LinkedIn messages toward the weekly LinkedIn floor ([#472](https://github.com/michaelinghilterra-creator/trajecktory/issues/472)) ([854d24d](https://github.com/michaelinghilterra-creator/trajecktory/commit/854d24d8d23e464177dd716b83a5bdc6ff9b0e77))
+
 ## [5.15.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.14.1...v5.15.0) (2026-10-11)
 
 
