@@ -85,6 +85,16 @@ check(m.linkedinConnects.value === 2, 'only in-week connects count');
 check(m.cadencePct.value === 80 && m.cadencePct.available, 'cadence passed through');
 check(m.unservicedApplications.value === 12, 'unserviced applications passed through');
 
+// LinkedIn floor counts requests plus messages when the TWC outreach list is supplied
+const touches = weeklyMetrics({
+  weekStart: start, weekEnd: end,
+  connects: [{ date: '2026-07-21' }, { date: '2026-07-22' }],
+  linkedinOutreach: [{ date: '2026-07-21' }, { date: '2026-07-22' }, { date: '2026-07-22' }, { date: '2026-07-23' }, { date: '2030-01-01' }],
+});
+check(touches.linkedinConnects.value === 4 && touches.linkedinConnects.available, 'LinkedIn floor counts in-week requests plus messages from the outreach list');
+const touchesEmpty = weeklyMetrics({ weekStart: start, weekEnd: end, connects: [{ date: '2026-07-21' }], linkedinOutreach: [] });
+check(touchesEmpty.linkedinConnects.available === true && touchesEmpty.linkedinConnects.value === 0, 'an empty outreach list reads a real zero, not the connects fallback');
+
 // not-logged vs zero
 const blank = weeklyMetrics({ weekStart: start, weekEnd: end });
 check(blank.verifiedTouches.available === false, 'no correspondence → touches not-logged');
