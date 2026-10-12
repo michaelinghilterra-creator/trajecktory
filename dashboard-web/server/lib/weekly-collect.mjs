@@ -13,6 +13,7 @@ import { parseFollowupsMd } from './followups.mjs';
 import { readAppNotes } from './notes.mjs';
 import { DEBRIEF_HEADER_RE } from './debrief.mjs';
 import { readConnects } from './connects.mjs';
+import { buildActivities } from './twc.mjs';
 import { influencerConnects, engagementsInWeek, engagementLogExists } from './engagement-log.mjs';
 import { isLinkedInEntry } from './channels.mjs';
 import { computeStreak } from './cadence.mjs';
@@ -42,6 +43,15 @@ function allConnects() {
     seen.add(k);
     return true;
   });
+}
+
+// LinkedIn outreach for the floor: the TWC list's outreach activities (connection
+// requests plus messages, one per person per day), so the floor matches the Activity
+// Tracker. null when the list cannot be built, so the metric falls back to connects.
+function linkedinOutreach(today) {
+  try {
+    return buildActivities({ today }).filter(a => a.kind === 'outreach').map(a => ({ date: a.date }));
+  } catch { return null; }
 }
 
 // Every dated Sent/Received across both contact books, as a flat log. `subject`
@@ -148,6 +158,7 @@ export function collectWeeklyMetrics(now = new Date()) {
     })(),
     debriefs: allDebriefs(),
     connects: allConnects(),
+    linkedinOutreach: linkedinOutreach(today),
     influencerEngagements: engagementLogExists() ? engagementsInWeek(now) : null,
     cadencePct: cadenceThisWeekPct(),
     unservicedApplications: unservicedCount(),

@@ -56,7 +56,7 @@ function ReviewRate({ label, rate }) {
 // headline. Running the review is what appends a week here.
 const WOW_FLOORS = [
   { key: 'verifiedTouches',  label: 'Verified touches',  unit: '' },
-  { key: 'linkedinConnects', label: 'LinkedIn connects', unit: '' },
+  { key: 'linkedinConnects', label: 'LinkedIn touches',  unit: '' },
   { key: 'cadencePct',       label: 'Cadence',           unit: '%' },
 ];
 const WOW_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

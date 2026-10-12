@@ -33,6 +33,7 @@ export function weeklyMetrics({
   interviews = null,              // [{ state, held_on }] | null
   debriefs = null,                // [{ date, hasObjection }] | null
   connects = null,                // [{ date }] | null (null = no connects log yet)
+  linkedinOutreach = null,        // [{ date }] | null: TWC LinkedIn outreach, requests + messages (null = fall back to connects)
   influencerEngagements = null,   // number | null (null = no engagement log yet)
   cadencePct = null,              // number 0..100 | null
   unservicedApplications = null,  // number | null
@@ -70,11 +71,20 @@ export function weeklyMetrics({
     ? M(debriefs.filter(d => d.hasObjection && inRange(d.date, start, end)).length, true, 'debrief notes')
     : M(0, false, 'debriefs not available');
 
-  // Connections are sent by hand; null (no log file yet) reads not-logged, an
-  // empty log this week reads a real zero.
-  const linkedinConnects = Array.isArray(connects)
-    ? M(connects.filter(c => inRange(c.date, start, end)).length, true, 'linkedin-connects log')
-    : M(0, false, 'not logged (no connects log)');
+  // The LinkedIn floor counts touches (Definitions v1.2): connection requests plus
+  // messages, one per person per day, read from the same TWC list as the Activity
+  // Tracker. Without it the floor falls back to the connects log alone. Connections
+  // are sent by hand; null (no log file yet) reads not-logged, an empty log this
+  // week reads a real zero. The key stays linkedinConnects so frozen review-log
+  // history keeps reading.
+  let linkedinConnects;
+  if (Array.isArray(linkedinOutreach)) {
+    linkedinConnects = M(linkedinOutreach.filter(a => inRange(a.date, start, end)).length, true, 'LinkedIn touches: connection requests + messages');
+  } else if (Array.isArray(connects)) {
+    linkedinConnects = M(connects.filter(c => inRange(c.date, start, end)).length, true, 'linkedin-connects log');
+  } else {
+    linkedinConnects = M(0, false, 'not logged (no connects log)');
+  }
 
   const weeklyInfluencerEngagements = (typeof influencerEngagements === 'number')
     ? M(influencerEngagements, true, 'influencer engagement log')
