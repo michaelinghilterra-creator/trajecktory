@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.17.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.16.0...v5.17.0) (2026-10-13)
+
+
+### Features
+
+* add a backfill mode for logging an old message on a person ([#476](https://github.com/michaelinghilterra-creator/trajecktory/issues/476)) ([a9c9436](https://github.com/michaelinghilterra-creator/trajecktory/commit/a9c94369c230ce4da91d68b041071638c896f682))
+* offer to create the missing contact from Reply Review and log the earlier emails ([#478](https://github.com/michaelinghilterra-creator/trajecktory/issues/478)) ([8bbf888](https://github.com/michaelinghilterra-creator/trajecktory/commit/8bbf8888b439b20ad2fb3ec6bf69845121e496c3))
+
 ## [5.16.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.15.1...v5.16.0) (2026-10-13)
 
 
