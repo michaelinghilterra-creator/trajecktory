@@ -95,6 +95,7 @@ fs.writeFileSync(path.join(sandbox, 'status-events.tsv'), 'app#\tdate\tstatus\tc
 fs.writeFileSync(path.join(sandbox, 'app-notes.json'), '{}\n');
 writeJson('google-sync.json', bookmarksOnlySync());
 writeJson('event-store.json', { writes: 'on', flipped_at: '2030-03-01T00:00:00.000Z' });
+fs.writeFileSync(path.join(sandbox, 'target-talent.md'), '| 900001 | Zorblax Widgetry | Personone | Example | | Talent Lead | | | | | example.personone@example.test | | Not Contacted | | | |\n', 'utf8');
 
 const { openEventStore, readEvents } = await import('../lib/event-store.mjs');
 const { renderLegacyFile } = await import('../lib/legacy-files.mjs');
@@ -211,6 +212,7 @@ try {
   r = await send('POST', '/api/google/replies/m930002/log', {
     appId: 900003,
     company: 'Quennox Ratchet Works',
+    contact: { source: 'ta', id: 900001, company: 'Zorblax Widgetry', name: 'Example Personone' },
     from: 'Other Person <other@example.test>',
     subject: 'Example follow up',
     bodyPreview: 'Invented human reply.',

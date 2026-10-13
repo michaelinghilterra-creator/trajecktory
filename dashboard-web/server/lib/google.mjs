@@ -400,6 +400,20 @@ async function getMessage({ id, accessToken, fetchImpl = fetch, format = 'full',
   return res.json();
 }
 
+export async function getThread({ id, accessToken, fetchImpl = fetch } = {}) {
+  if (!GMAIL_ID.test(String(id ?? ''))) throw new Error('Gmail thread get failed (bad thread id)');
+  const url = `${GMAIL_BASE}/threads/${encodeURIComponent(id)}?format=full`;
+  const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    const error = new Error(`Gmail thread get failed (${res.status}): ${body.slice(0, 300)}`);
+    error.status = res.status;
+    error.body = body;
+    throw error;
+  }
+  return res.json();
+}
+
 // ── Calendar read wrapper (network; injectable fetch) — READ ONLY ─────────────
 // One-way: reads events, never creates or edits them (no write wrapper exists).
 const CALENDAR_BASE = 'https://www.googleapis.com/calendar/v3';
@@ -545,6 +559,56 @@ function parseGmailMessage(raw) {
   };
 }
 
+export function stripQuotedReply(text) {
+  const original = String(text || '').trim();
+  const cappedOriginal = original.slice(0, MAX_CORR_BODY);
+  let lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
+  if (/^WARNING - External Email/i.test(lines[0] || '')) lines = lines.slice(1);
+
+  const isOriginalMessageMarker = (line) => {
+    const value = line.trim();
+    let first = 0;
+    let last = value.length - 1;
+    while (value[first] === '-') first++;
+    while (value[last] === '-') last--;
+    return first >= 2 && value.length - last - 1 >= 2
+      && value.slice(first, last + 1).trim().toLowerCase() === 'original message';
+  };
+
+  let cutAt = lines.length;
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+    const next = lines[index + 1] || '';
+    const onWrote = /^On .{5,200} wrote:$/.test(line.trimEnd())
+      || (/^On .{5,200}$/.test(line.trimEnd()) && next.trim() === 'wrote:');
+    const originalMessage = isOriginalMessageMarker(line);
+    const underscoreRule = line.length >= 10 && !line.replaceAll('_', '').length;
+    const forwardedHeaders = /^From:/i.test(line)
+      && lines.slice(index + 1, index + 4).some(candidate => /^(Sent|Date):/i.test(candidate));
+    if (onWrote || originalMessage || underscoreRule || forwardedHeaders || line.startsWith('>')) {
+      cutAt = index;
+      break;
+    }
+  }
+
+  const retained = [];
+  let blanks = 0;
+  for (const line of lines.slice(0, cutAt)) {
+    if (/reply directly to this message or click/i.test(line)) continue;
+    if (!line.trim()) {
+      blanks++;
+      if (blanks <= 2) retained.push('');
+    } else {
+      blanks = 0;
+      retained.push(line);
+    }
+  }
+  const cleaned = retained.join('\n')
+    .trim()
+    .slice(0, MAX_CORR_BODY);
+  return cleaned || cappedOriginal;
+}
+
 // Pull the bare address out of a "Name <alex@example.test>" header value.
 //
 // The quantifiers are BOUNDED, not open-ended (CodeQL js/polynomial-redos). With
@@ -557,6 +621,25 @@ function parseGmailMessage(raw) {
 function extractEmail(s) {
   const m = String(s || '').match(/[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,255}\.[a-z]{2,24}/i);
   return m ? m[0].toLowerCase() : null;
+}
+
+function parseFromHeader(value) {
+  if (typeof value !== 'string') return { name: '', address: '' };
+  const address = extractEmail(value) || '';
+  const bracket = value.indexOf('<');
+  if (bracket < 0) return { name: '', address };
+
+  let name = value.slice(0, bracket).trim();
+  if (name.length >= 2 && name.startsWith('"') && name.endsWith('"')) {
+    name = name.slice(1, -1).trim();
+  }
+  name = name.split(/\s/).filter(Boolean).join(' ');
+  name = [...name].filter(char => {
+    const code = char.codePointAt(0);
+    return code > 31 && (code < 127 || code > 159);
+  }).join('');
+  if (!name || name.toLowerCase() === address || name.includes('@')) name = '';
+  return { name: name.slice(0, 120), address };
 }
 
 // Reply intent, keyword-heuristic. Negative is checked first, because a rejection
@@ -616,6 +699,17 @@ function _normCompanyToken(s) {
 // domain (an @greenhouse-mail.io note is about SOME company, not "Greenhouse").
 const _GENERIC_DOMAINS = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'yahoo.com', 'icloud.com', 'me.com', 'aol.com', 'proton.me', 'protonmail.com']);
 const _ATS_DOMAIN_RE = /greenhouse|lever|ashbyhq|ashby|workday|myworkday|smartrecruiters|jobvite|icims|bamboohr|hire\.lever|greenhouse-mail|us-greenhouse|myworkdayjobs|paylocity|rippling|gem\.com|goodtime|calendly/i;
+
+// The ATS tokens are anchored to a whole domain label, so "cantilever.example" is not read as "lever".
+// This one rejects an address outright, so a false positive costs the user a real email.
+const _ATS_RELAY_RE = new RegExp(`(?:^|\\.)(?:${_ATS_DOMAIN_RE.source})(?=$|[.-])`, 'i');
+
+function isAtsRelayAddress(address) {
+  if (typeof address !== 'string') return false;
+  const at = address.lastIndexOf('@');
+  if (at <= 0 || at === address.length - 1) return false;
+  return _ATS_RELAY_RE.test(address.slice(at + 1));
+}
 
 function _domainRoot(addr) {
   const at = String(addr || '').split('@')[1] || '';
@@ -819,6 +913,8 @@ function scanDecisions({ messages = [], taRows = [], apps = [], applyDates = {} 
     }
     const entry = {
       msgId: msg.id, threadId: msg.threadId, from: fromAddr, subject: msg.subject, date: msg.date,
+      fromName: parseFromHeader(msg.from).name,
+      fromIsRelay: isAtsRelayAddress(fromAddr || ''),
       sentiment: suggestSentiment({ subject: msg.subject, text: msg.text, sender: fromAddr }),
       contact, companyGuess, snippet: msg.snippet, body: msg.text,
     };
@@ -950,6 +1046,6 @@ function logReplyToContact(contact, { subject, body, timestamp, advanceStatus = 
 export {
   readTokens, writeTokens, readSync, writeSync, replyDecisionsViaEvents, tokenScopes,
   clientConfigured, googleStatus, getAccessToken, checkHealth, listMessages, getMessage, fetchMessagesConcurrent,
-  parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions, heldBackBounceIds,
+  parseGmailMessage, extractEmail, parseFromHeader, isAtsRelayAddress, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions, heldBackBounceIds,
   exchangeCode, fetchProfileEmail, candidateAppsFor, rankCandidateApps, createDraft, logReplyToContact, previewEntry,
 };

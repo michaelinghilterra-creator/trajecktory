@@ -78,8 +78,8 @@ console.log('prior-roles.test.mjs');
 
 {
   const rows = [
-    row(900501, 'Zorblax Widgetry', 'Senior Widget Analytics Platform Manager', 3.0, 'Evaluated', 'https://jobs.example.test/globex/a'),
-    row(900502, 'Zorblax Widgetry', 'Senior Widget Analytics Platform Manager Data', 3.4, 'Evaluated', 'https://jobs.example.test/globex/b'),
+    row(900501, 'Zorblax Widgetry', 'Senior Widget Example Cog Lead', 3.0, 'Evaluated', 'https://jobs.example.test/globex/a'),
+    row(900502, 'Zorblax Widgetry', 'Senior Widget Example Cog Lead Data', 3.4, 'Evaluated', 'https://jobs.example.test/globex/b'),
     row(900503, 'Zorblax Widgetry', 'Senior Widget Analytics', 3.6, 'Evaluated', 'https://jobs.example.test/globex/c'),
   ];
   check(findRelatedRoles(rows.slice(0, 2), rows[0]).length === 1, 'three token subset core matches');
@@ -97,9 +97,9 @@ console.log('prior-roles.test.mjs');
 
 {
   const rows = [
-    row(900701, 'Zorblax Widgetry', 'Widget Strategy Manager (Alpha Team)', 3.0, 'Evaluated', 'https://jobs.example.test/globex/q1'),
+    row(900701, 'Zorblax Widgetry', 'Widget Example Cog Lead (Alpha Team)', 3.0, 'Evaluated', 'https://jobs.example.test/globex/q1'),
     row(900702, 'Zorblax Widgetry', 'Manager, Widget Strategy - Beta Monetization', 3.2, 'Evaluated', 'https://jobs.example.test/globex/q2'),
-    row(900703, 'Zorblax Widgetry', 'Widget Strategy Manager', 3.4, 'Evaluated', 'https://jobs.example.test/globex/q3'),
+    row(900703, 'Zorblax Widgetry', 'Widget Example Cog Lead', 3.4, 'Evaluated', 'https://jobs.example.test/globex/q3'),
   ];
   check(findRelatedRoles(rows, rows[0]).every(r => r.num !== 900702), 'two different qualifiers are different jobs');
   check(findRelatedRoles(rows, rows[0]).some(r => r.num === 900703), 'a qualifier on only one side still relates');

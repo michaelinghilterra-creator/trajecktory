@@ -871,6 +871,35 @@ Write one TSV file per evaluation to `batch/tracker-additions/{num}-{company-slu
    for existing rows. New rows still go through `batch/tracker-additions/` and
    `merge-tracker.mjs`.
 
+### Logging a message needs a person record (RULE)
+
+Every sent or received message (email, LinkedIn, call note) is logged as a correspondence
+event on a PERSON. An application note is not a substitute: it never shows on the person's
+card, and it used to be the silent fallback when a sender matched no contact, which left
+recruiters with weeks of mail and no record.
+
+When asked to log or attach a message and its counterpart has no person record (no TA or
+referral row, and no match by email or by name at that company):
+
+1. **Stop.** Do not fall back to an application note and do not create anything yet.
+2. **Say who is missing.** One short message: name, role, and the address as it appears in the
+   thread, the company and application, and how many earlier messages with them would be
+   backfilled.
+3. **Propose the contact** (name, title, company, target role, status) and wait for an
+   explicit go.
+4. **On go:** create the contact, then log the whole thread history with the real send and
+   receive times, not only the message that started the request. Check that the person
+   timeline shows every entry.
+5. **Approval covers that one person.** The next unknown person asks again.
+
+Identify an ATS relay sender (Jobvite and similar) by the name in the signature, never by the
+relay address. Automated mail (booking reminders, receipts) is not logged.
+
+Mechanics: the dashboard has no create-TA route, so a new recruiter or scheduler goes in
+through `POST /api/referrals`. The log API stamps messages with the current time; to backdate,
+call `logPersonMessage({ ..., today, stamp })` from a script. Back up `data/` first and
+rehearse with `TJK_DATA_DIR` pointed at a scratch copy.
+
 ### Never re-add a tracked company (RULE)
 
 A company that changes ATS keeps its name and gets a new board slug. Match it on

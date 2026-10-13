@@ -34,7 +34,7 @@ const tmp = makeSandbox("google");
 process.env.TJK_DATA_DIR = tmp;
 
 const {
-  getAccessToken, googleStatus, checkHealth, parseGmailMessage, extractEmail,
+  getAccessToken, googleStatus, checkHealth, parseGmailMessage, extractEmail, parseFromHeader, isAtsRelayAddress,
   classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions, tokenScopes,
   candidateAppsFor, rankCandidateApps, fetchMessagesConcurrent, logReplyToContact,
 } = await import('../dashboard-web/server/lib/google.mjs');
@@ -167,6 +167,22 @@ check(pm.subject === 'Re: Example Gadget Director', 'Subject header extracted');
 check(pm.text.includes('discuss next steps'), 'base64url text/plain body decoded');
 check(extractEmail(pm.from) === 'personone@zorblax.example', 'address pulled from a "Name <addr>" header');
 check(parseGmailMessage({ id: 'x', snippet: 'hi', payload: {} }).text === 'hi', 'falls back to snippet when no body');
+check(JSON.stringify(parseFromHeader('Example Personone <example.personone@example.test>')) === JSON.stringify({ name: 'Example Personone', address: 'example.personone@example.test' }), 'From parser returns a display name and address');
+check(parseFromHeader('"Example Personone" <example.personone@example.test>').name === 'Example Personone', 'From parser strips one pair of wrapping quotes');
+check(JSON.stringify(parseFromHeader('example.personone@example.test')) === JSON.stringify({ name: '', address: 'example.personone@example.test' }), 'a bare address has no display name');
+check(parseFromHeader('<example.personone@example.test>').name === '', 'an empty display name stays empty');
+check(parseFromHeader('example.personone@example.test <other@example.test>').name === '', 'a display name containing an at sign is rejected');
+check(JSON.stringify(parseFromHeader('')) === JSON.stringify({ name: '', address: '' }), 'an empty From header is safe');
+check(JSON.stringify(parseFromHeader(null)) === JSON.stringify({ name: '', address: '' }), 'a null From header is safe');
+check(parseFromHeader(`${'P'.repeat(140)} <example.personone@example.test>`).name.length === 120, 'a display name is capped at 120 characters');
+check(JSON.stringify(parseFromHeader('%'.repeat(10000))) === JSON.stringify({ name: '', address: '' }), 'a long percent run without an address is handled');
+check(isAtsRelayAddress('reply@jobvite.example.test') === true, 'a Jobvite domain is an ATS relay');
+check(isAtsRelayAddress('reply@greenhouse-mail.example.test') === true, 'a Greenhouse mail domain is an ATS relay');
+check(isAtsRelayAddress('person@gmail.invalid') === false, 'a Gmail-style domain is not an ATS relay');
+check(isAtsRelayAddress('') === false, 'an empty address is not an ATS relay');
+check(isAtsRelayAddress('reply@jobs.lever.example.test') === true, 'an ATS name as a whole domain label is a relay');
+check(isAtsRelayAddress('person@cantilever.example.test') === false, 'an ATS name inside another word is not a relay');
+check(isAtsRelayAddress('person@leverageco.example.test') === false, 'an ATS name that only starts a longer label is not a relay');
 
 // ── classifyReply ────────────────────────────────────────────────────────────
 check(classifyReply({ subject: 'Re: role', text: 'Can we schedule a call to discuss next steps?' }) === 'positive', 'scheduling/next-steps → positive');
@@ -222,6 +238,8 @@ check(soft && soft.kind === 'soft', 'soft DSN classified as soft');
 check(soft && soft.flip === null, 'soft bounce produces no flip (transient, never kill an address)');
 const rep = dec.replies.find(r => r.msgId === 'm-reply');
 check(rep && rep.contact?.source === 'ta' && rep.sentiment === 'positive', 'reply from a known contact routed with sentiment');
+check(rep?.fromName === 'Example Personone', 'reply scan entries carry the parsed sender name');
+check(rep?.fromIsRelay === false, 'a scanned reply from a normal sender is not marked as relay mail');
 check(dec.other.some(o => o.msgId === 'm-other'), 'reply from an unknown sender surfaced as other, not dropped');
 
 // ── matchByCompanyDomain (tier-2: unknown sender, known company) ──────────────
@@ -468,6 +486,7 @@ const atsGuess = decAts.other.find(o => o.msgId === 'm-ats');
 check(atsGuess && atsGuess.companyGuess?.appId === 900103, 'scanDecisions subject-matches an ATS-sent email the domain tier cannot');
 check(atsGuess && atsGuess.companyGuess?.confidence === 'subject', 'the subject-tier guess is labeled');
 check(atsGuess && atsGuess.sentiment === 'negative', 'the ATS rejection is still classified negative');
+check(atsGuess?.fromIsRelay === true, 'a scanned reply from a relay sender is marked as relay mail');
 check(rep && rep.threadId === 't1', 'reply decisions carry the Gmail thread id');
 
 const gmailNoteMeta = { msgId: 'msg-note-1', threadId: 'thread-note-1', sender: 'talent@northwind.example' };

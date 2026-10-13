@@ -5,10 +5,13 @@ import {
   readTokens, writeTokens, readSync, writeSync, replyDecisionsViaEvents, googleStatus, checkHealth, clientConfigured,
   getAccessToken, listMessages, fetchMessagesConcurrent, scanDecisions, heldBackBounceIds,
   buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState, rankCandidateApps, createDraft,
-  getMessage, parseGmailMessage, extractEmail, logReplyToContact, previewEntry,
-  getTodayCalendarEvents,
+  getMessage, parseGmailMessage, extractEmail, parseFromHeader, isAtsRelayAddress, logReplyToContact, previewEntry,
+  getThread, getTodayCalendarEvents,
 } from '../lib/google.mjs';
+import { buildHistoryItem, findHistory } from '../lib/gmail-history.mjs';
+import { logPersonMessage } from '../lib/person-messages.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
+import { parseReferralsMd } from '../lib/referrals.mjs';
 import { DATA_DIR, PORT, TT_CORR_DIR } from '../config.mjs';
 import { patchRowInMd, parseApplicationsMd } from '../lib/applications.mjs';
 import { addNote, findNoteByMsgId } from '../lib/notes.mjs';
@@ -60,6 +63,111 @@ function connectionProblem(tokens) {
   }
   return null;
 }
+
+function historyAfterDate(appId) {
+  const applyDate = readApplyDates()[String(appId)] || '';
+  const hasApplyDate = /^\d{4}-\d{2}-\d{2}$/.test(applyDate);
+  const date = hasApplyDate ? new Date(`${applyDate}T12:00:00`) : new Date();
+  date.setDate(date.getDate() - (hasApplyDate ? 14 : 120));
+  return localToday(date);
+}
+
+router.post('/api/google/history/preview', async (req, res) => {
+  try {
+    const tokens = readTokens();
+    const problem = connectionProblem(tokens);
+    if (problem) return res.status(400).json(problem);
+    const { msgId, name, email, appId } = req.body || {};
+    const accessToken = await getAccessToken({ tokens });
+    const current = parseGmailMessage(await getMessage({ id: msgId, accessToken }));
+    const result = await findHistory({
+      accessToken,
+      selfEmail: tokens.connectedEmail,
+      name,
+      email,
+      excludeMsgIds: [msgId],
+      afterDate: historyAfterDate(appId),
+      listImpl: listMessages,
+      getImpl: getMessage,
+      getThreadImpl: getThread,
+    });
+    const currentTime = Date.parse(current.date);
+    const earlier = Number.isNaN(currentTime)
+      ? result.items
+      : result.items.filter(item => {
+        const itemTime = Date.parse(item.date);
+        return Number.isNaN(itemTime) || itemTime < currentTime;
+      });
+    const items = earlier.map(({ msgId: id, direction, date, stamp, subject, skip }) => ({
+      msgId: id, direction, date, stamp, subject, skip,
+    }));
+    res.json({
+      ok: true,
+      count: items.filter(item => item.skip === null).length,
+      skipped: items.filter(item => item.skip !== null).length,
+      truncated: result.truncated,
+      items,
+    });
+  } catch (err) {
+    logWriteRouteError(res, err);
+  }
+});
+
+router.post('/api/google/history/backfill', async (req, res) => {
+  try {
+    const { personRef, appId, msgIds } = req.body || {};
+    const validPerson = /^(ta|referral):[1-9]\d*$/.test(String(personRef || ''));
+    const validApp = Number.isInteger(appId) && appId > 0;
+    const validMessages = Array.isArray(msgIds) && msgIds.length >= 1 && msgIds.length <= 60
+      && msgIds.every(id => typeof id === 'string');
+    if (!validPerson || !validApp || !validMessages) {
+      return res.status(400).json({ error: 'personRef, appId and 1 to 60 message ids are required.' });
+    }
+
+    const tokens = readTokens();
+    const problem = connectionProblem(tokens);
+    if (problem) return res.status(400).json(problem);
+    const accessToken = await getAccessToken({ tokens });
+    const failed = [];
+    const fetched = [];
+    let skipped = 0;
+    for (const msgId of msgIds) {
+      try {
+        const raw = await getMessage({ id: msgId, accessToken });
+        const item = buildHistoryItem({ raw, selfEmail: tokens.connectedEmail, requireParticipant: false });
+        if (!item || item.skip) skipped++;
+        else fetched.push(item);
+      } catch (error) {
+        failed.push({ msgId, reason: error.message });
+      }
+    }
+    fetched.sort((left, right) => Date.parse(left.date) - Date.parse(right.date));
+
+    let logged = 0;
+    let duplicates = 0;
+    for (const item of fetched) {
+      try {
+        const result = logPersonMessage({
+          personRef,
+          appNum: appId,
+          direction: item.direction,
+          channel: 'Email',
+          subject: item.subject,
+          body: item.body,
+          backfill: true,
+          sentAt: item.stamp,
+        });
+        if (result?.skipped === 'duplicate') duplicates++;
+        else logged++;
+      } catch (error) {
+        failed.push({ msgId: item.msgId, reason: error.message });
+      }
+    }
+    res.json({ ok: true, logged, duplicates, failed, skipped });
+  } catch (err) {
+    logWriteRouteError(res, err);
+  }
+});
 
 // GET /api/google/status — non-secret connection facts for the UI. Local read
 // only (no network): its `expired` reflects the ≈1h access token, so use it for
@@ -427,7 +535,12 @@ router.get('/api/google/replies/unmatched', (req, res) => {
     const applyDates = readApplyDates();
     const items = Object.entries(parked).map(([msgId, entry]) => {
       const ranked = rankCandidateApps(entry.company || '', apps, { emailDate: entry.date, subject: entry.subject, applyDates });
-      return { msgId, ...entry, suggestions: ranked.candidates };
+      return {
+        msgId,
+        ...entry,
+        fromIsRelay: isAtsRelayAddress(extractEmail(entry.from) || entry.from || ''),
+        suggestions: ranked.candidates,
+      };
     }).sort((a, b) => String(b.parkedOn || '').localeCompare(String(a.parkedOn || '')));
     res.json({ count: items.length, items });
   } catch (err) {
@@ -444,7 +557,7 @@ router.get('/api/google/replies/unmatched', (req, res) => {
 router.post('/api/google/replies/:msgId/:action', async (req, res) => {
   try {
     const { msgId, action } = req.params;
-    const { appId, company, contact, sentiment, from, subject, snippet, bodyPreview, date, threadId } = req.body || {};
+    const { appId, company, contact, sentiment, from, fromName, subject, snippet, bodyPreview, date, threadId } = req.body || {};
     const today = localToday();
     // Best-effort: the log/status may already be written, so a sync failure must not 500.
     const markHandled = (rec) => {
@@ -496,7 +609,8 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     // until the person attaches it (or dismisses it) from that list.
     if (action === 'unmatched') {
       const entry = {
-        from: from || '', subject: subject || '', date: date || null, threadId: threadId || null,
+        from: from || '', fromName: String(fromName || '').trim().slice(0, 120),
+        subject: subject || '', date: date || null, threadId: threadId || null,
         snippet: String(snippet || bodyPreview || '').slice(0, 400), company: company || '', parkedOn: today,
       };
       try {
@@ -531,6 +645,33 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
       const accessToken = await getAccessToken({ tokens });
       message = parseGmailMessage(await getMessage({ id: msgId, accessToken }));
     } catch { /* request fields are the fallback when Gmail is unavailable */ }
+
+    const guardedAction = action === 'log' || action === 'rejected' || INTERVIEW_STAGES.includes(action);
+    if (guardedAction) {
+      const usableContact = contact && typeof contact === 'object' && !Array.isArray(contact)
+        && (contact.source === 'ta' || contact.source === 'referral');
+      const contactId = usableContact ? parseInt(contact.id, 10) : NaN;
+      const validContact = usableContact && Number.isFinite(contactId) && contactId > 0;
+      const contactRows = validContact
+        ? (contact.source === 'ta' ? parseTargetTalentMd() : parseReferralsMd())
+        : [];
+      const contactExists = validContact && contactRows.some(row => row.id === contactId);
+      if (!contactExists) {
+        const headerName = parseFromHeader(message.from).name;
+        const fallbackName = typeof fromName === 'string'
+          ? fromName.trim().split(/\s+/).filter(Boolean).join(' ').slice(0, 120)
+          : '';
+        const senderAddress = extractEmail(message.from) || from || '';
+        return res.status(409).json({
+          error: 'No contact is on file for this sender. Create one, or pick an existing person, before logging this reply.',
+          needsContact: true,
+          reason: validContact ? 'not_found' : 'missing',
+          suggestedName: headerName || fallbackName,
+          suggestedEmail: isAtsRelayAddress(senderAddress) ? '' : senderAddress,
+          company: company || '',
+        });
+      }
+    }
 
     // E-3: ask before attaching. More than one application at this employer needs an explicit pick, and a message
     // older than the application or an automated one needs an acknowledgement (or log it as neutral / dismiss it).
