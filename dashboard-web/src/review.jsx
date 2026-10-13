@@ -132,10 +132,62 @@ function reviewContact(person) {
   return { source, id, company: person.company, name: person.name };
 }
 
-function NewPersonCard({ sender, company, role, busy, error, onCreate, onCancel }) {
+function logEarlierEmails({ personRef, appId, msgIds, name, toast }) {
+  if (!msgIds.length) return Promise.resolve(false);
+  return fetch('/api/google/history/backfill', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ personRef, appId, msgIds }),
+  }).then(async response => ({ ok: response.ok, data: await response.json() }))
+    .then(({ ok, data }) => {
+      if (!ok || data.error) throw new Error(data.error || 'Earlier emails could not be logged.');
+      const duplicates = data.duplicates || 0;
+      const failed = Array.isArray(data.failed) ? data.failed : [];
+      toast && toast(`Logged ${data.logged || 0} earlier email(s) on ${name}${duplicates > 0 ? `, ${duplicates} were already there` : ''}.`, 'success');
+      if (failed.length > 0) toast && toast(`${failed.length} earlier email(s) could not be logged.`, 'error');
+      return true;
+    })
+    .catch(error => {
+      toast && toast(error.message || 'Earlier emails could not be logged.', 'error');
+      return false;
+    });
+}
+
+function NewPersonCard({ sender, company, role, busy, error, searchHistory, onCreate, onCancel }) {
   const [name, setName] = useStateRv(sender.name || '');
   const [title, setTitle] = useStateRv('');
   const [email, setEmail] = useStateRv(sender.isRelay ? '' : (sender.address || ''));
+  const [history, setHistory] = useStateRv({ state: 'loading', count: 0, skipped: 0, truncated: false, items: [] });
+  const [includeHistory, setIncludeHistory] = useStateRv(true);
+  const historyGenerationRef = useRefRv(0);
+  const runHistorySearch = fields => {
+    const generation = ++historyGenerationRef.current;
+    setIncludeHistory(true);
+    setHistory({ state: 'loading', count: 0, skipped: 0, truncated: false, items: [] });
+    Promise.resolve(searchHistory(fields))
+      .then(data => {
+        if (historyGenerationRef.current !== generation) return;
+        setHistory({
+          state: 'ready',
+          count: data.count || 0,
+          skipped: data.skipped || 0,
+          truncated: !!data.truncated,
+          items: Array.isArray(data.items) ? data.items : [],
+        });
+      })
+      .catch(() => {
+        if (historyGenerationRef.current !== generation) return;
+        setHistory({ state: 'error', count: 0, skipped: 0, truncated: false, items: [] });
+      });
+  };
+  useEffectRv(() => {
+    runHistorySearch({ name: sender.name || '', email: sender.isRelay ? '' : (sender.address || '') });
+    return () => { historyGenerationRef.current++; };
+  }, []);
+  const eligibleHistory = history.items.filter(item => item.skip === null);
+  const historyTarget = name.trim() || email.trim() || sender.address;
+  const historyMsgIds = history.state === 'ready' && includeHistory && history.count > 0
+    ? eligibleHistory.map(item => item.msgId)
+    : [];
   const fieldStyle = {
     fontSize: 12, padding: '5px 7px', background: 'var(--panel-2)', border: '1px solid var(--border)',
     borderRadius: 5, color: 'var(--text)', minWidth: 0, flex: '1 1 150px',
@@ -153,10 +205,35 @@ function NewPersonCard({ sender, company, role, busy, error, onCreate, onCancel 
         <input value={email} onChange={event => setEmail(event.target.value)}
           placeholder={sender.isRelay ? 'Jobvite relay, no direct address' : 'Email'} style={fieldStyle} />
       </div>
+      <div className="dim" style={{ marginTop: 6, fontSize: 11.5 }}>
+        {history.state === 'loading' ? `Looking for earlier emails with ${historyTarget}...` : null}
+        {history.state === 'error' ? 'Could not check Gmail for earlier emails. You can still create the contact.' : null}
+        {history.state === 'ready' && history.count === 0
+          ? `No earlier emails found.${history.skipped > 0 ? ` ${history.skipped} automated messages left out.` : ''}`
+          : null}
+        {history.state === 'ready' && history.count > 0 ? (
+          <>
+            <label style={{ display: 'flex', gap: 6, alignItems: 'center', color: 'var(--text)' }}>
+              <input type="checkbox" checked={includeHistory} onChange={event => setIncludeHistory(event.target.checked)} />
+              <span>Log the {history.count} earlier email(s) with {name.trim() || email.trim() || sender.address} on this card too</span>
+            </label>
+            <div style={{ marginTop: 4 }}>
+              {eligibleHistory.slice(0, 6).map(item => (
+                <div key={item.msgId}>{String(item.date || '').slice(0, 10)} · {item.direction === 'Sent' ? 'Sent' : 'Received'} · {item.subject || '(no subject)'}</div>
+              ))}
+              {eligibleHistory.length > 6 ? <div>and {eligibleHistory.length - 6} more</div> : null}
+              {history.skipped > 0 ? <div>{history.skipped} automated messages left out</div> : null}
+              {history.truncated ? <div>Showing the most recent matches only</div> : null}
+            </div>
+          </>
+        ) : null}
+      </div>
       {error ? <div style={{ color: 'var(--red)', marginTop: 6 }}>{error}</div> : null}
       <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
-        <button className="btn sm" onClick={() => onCreate({ name: name.trim(), title: title.trim(), email: email.trim() })}
+        <button className="btn sm" onClick={() => onCreate({ name: name.trim(), title: title.trim(), email: email.trim(), historyMsgIds })}
           disabled={busy || !name.trim()}>Create and log</button>
+        <button className="btn ghost sm" onClick={() => runHistorySearch({ name: name.trim(), email: email.trim() })}
+          disabled={busy}>Search again</button>
         <button className="btn ghost sm" onClick={onCancel} disabled={busy}>Cancel</button>
       </div>
     </div>
@@ -246,15 +323,16 @@ function ReplyRow({ reply, toast }) {
         if (!noApp) refreshApplications(); // an attach can flip the application's status
         setDone(action === 'unmatched' ? 'unmatched' : action === 'dismiss' ? 'dismissed' : action === 'not-related' ? 'not-related' : (res.statusFlip || 'logged'));
         toast && toast(action === 'unmatched' ? 'Parked on the unmatched list' : action === 'dismiss' ? 'Dismissed' : action === 'not-related' ? 'Marked not job-related' : (res.statusFlip ? `Marked ${res.statusFlip}` : 'Reply logged'), 'success');
+        return true;
       })
-      .catch(e => toast && toast(e.message, 'error')).finally(() => setBusy(false));
+      .catch(e => { toast && toast(e.message, 'error'); return false; }).finally(() => setBusy(false));
   };
 
-  const createAndAct = ({ name, title, email }) => {
+  const createAndAct = ({ name, title, email, historyMsgIds }) => {
     setBusy(true);
     setCreateError('');
     const target = `${pickedCompany} - ${picked ? picked.role : ''}`.replace(/\s+-\s*$/, '').trim();
-    fetch('/api/people/create', {
+    return fetch('/api/people/create', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, company: pickedCompany, email, title, target }),
     }).then(async response => ({ ok: response.ok, data: await response.json() }))
@@ -271,7 +349,10 @@ function ReplyRow({ reply, toast }) {
         setCreateError('');
         setBusy(false);
         if (data.existed) toast && toast(`Already on file as ${data.name}. Logged on them.`, 'success');
-        act(nextAction, { contact: createdContact });
+        return Promise.resolve(act(nextAction, { contact: createdContact })).then(logged => {
+          if (!logged || !historyMsgIds.length) return logged;
+          return logEarlierEmails({ personRef: data.ref, appId, msgIds: historyMsgIds, name: data.name, toast });
+        });
       })
       .catch(error => { setCreateError(error.message); setBusy(false); });
   };
@@ -354,6 +435,13 @@ function ReplyRow({ reply, toast }) {
           isRelay: !!reply.fromIsRelay,
         }}
         company={pickedCompany} role={picked?.role || ''} busy={busy} error={createError}
+        searchHistory={fields => fetch('/api/google/history/preview', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ msgId: reply.msgId, name: fields.name, email: fields.email, appId }),
+        }).then(response => response.json().then(data => {
+          if (!response.ok || data.error) throw new Error(data.error || 'history search failed');
+          return data;
+        }))}
         onCreate={createAndAct}
         onCancel={() => { setNewPerson(null); setCreateError(''); }}
       /> : null}
@@ -404,29 +492,35 @@ function UnmatchedList({ toast, refreshKey }) {
   };
   const act = (item, action, extra = {}) => {
     const appId = picks[item.msgId];
-    if (action === 'log' && !appId) { toast && toast('Pick which application this belongs to.', 'error'); return; }
+    if (action === 'log' && !appId) { toast && toast('Pick which application this belongs to.', 'error'); return Promise.resolve(false); }
     const people = peopleByMessage[item.msgId] || [];
     const person = people.find(candidate => candidate.ref === personPicks[item.msgId]);
     const selected = { contact: reviewContact(person) };
     const contact = extra.contact || selected.contact;
-    if (action === 'log' && !contact) { openNewPerson(item, action); return; }
+    if (action === 'log' && !contact) { openNewPerson(item, action); return Promise.resolve(false); }
     setBusy(item.msgId);
     const body = action === 'log'
       ? { appId, company: (item.suggestions.find(x => x.id === appId) || {}).company || item.company, contact, pickConfirmed: true, from: item.from, subject: item.subject, snippet: item.snippet, bodyPreview: item.snippet, date: item.date, threadId: item.threadId }
       : {};
-    fetch(`/api/google/replies/${encodeURIComponent(item.msgId)}/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    return fetch(`/api/google/replies/${encodeURIComponent(item.msgId)}/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(r => r.json())
-      .then(res => { if (res.error) { toast && toast(res.error, 'error'); return; } toast && toast(action === 'log' ? 'Attached' : 'Dismissed', 'success'); if (action === 'log') refreshApplications(); setTick(t => t + 1); })
-      .catch(e => toast && toast(e.message, 'error')).finally(() => setBusy(null));
+      .then(res => {
+        if (res.error) { toast && toast(res.error, 'error'); return false; }
+        toast && toast(action === 'log' ? 'Attached' : 'Dismissed', 'success');
+        if (action === 'log') refreshApplications();
+        setTick(t => t + 1);
+        return action === 'log';
+      })
+      .catch(e => { toast && toast(e.message, 'error'); return false; }).finally(() => setBusy(null));
   };
-  const createAndAttach = (item, { name, title, email }) => {
+  const createAndAttach = (item, { name, title, email, historyMsgIds }) => {
     const appId = picks[item.msgId];
     const app = item.suggestions.find(candidate => candidate.id === appId);
     const company = app?.company || item.company;
     const target = `${company} - ${app ? app.role : ''}`.replace(/\s+-\s*$/, '').trim();
     setBusy(item.msgId);
     setCreateErrors(current => ({ ...current, [item.msgId]: '' }));
-    fetch('/api/people/create', {
+    return fetch('/api/people/create', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, company, email, title, target }),
     }).then(async response => ({ ok: response.ok, data: await response.json() }))
@@ -442,7 +536,10 @@ function UnmatchedList({ toast, refreshKey }) {
         setCreateErrors(current => { const next = { ...current }; delete next[item.msgId]; return next; });
         setBusy(null);
         if (data.existed) toast && toast(`Already on file as ${data.name}. Logged on them.`, 'success');
-        act(item, 'log', { contact });
+        return Promise.resolve(act(item, 'log', { contact })).then(attached => {
+          if (!attached || !historyMsgIds.length) return attached;
+          return logEarlierEmails({ personRef: data.ref, appId, msgIds: historyMsgIds, name: data.name, toast });
+        });
       })
       .catch(error => {
         setCreateErrors(current => ({ ...current, [item.msgId]: error.message }));
@@ -489,6 +586,13 @@ function UnmatchedList({ toast, refreshKey }) {
             company={(it.suggestions.find(candidate => candidate.id === picks[it.msgId]) || {}).company || it.company}
             role={(it.suggestions.find(candidate => candidate.id === picks[it.msgId]) || {}).role || ''}
             busy={busy === it.msgId} error={createErrors[it.msgId] || ''}
+            searchHistory={fields => fetch('/api/google/history/preview', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ msgId: it.msgId, name: fields.name, email: fields.email, appId: picks[it.msgId] }),
+            }).then(response => response.json().then(data => {
+              if (!response.ok || data.error) throw new Error(data.error || 'history search failed');
+              return data;
+            }))}
             onCreate={fields => createAndAttach(it, fields)}
             onCancel={() => {
               setNewPeople(current => { const next = { ...current }; delete next[it.msgId]; return next; });
