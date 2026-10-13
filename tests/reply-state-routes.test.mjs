@@ -24,7 +24,7 @@ fs.writeFileSync(path.join(sandbox, 'google-sync.json'), JSON.stringify({
   lastPreviewAt: '2030-03-02T00:00:00.000Z',
 }, null, 2) + '\n');
 fs.writeFileSync(path.join(sandbox, 'event-store.json'), JSON.stringify({ writes: 'on', flipped_at: '2030-03-01T00:00:00.000Z' }));
-fs.writeFileSync(path.join(sandbox, 'target-talent.md'), '| 900001 | Examplecorp | Rivera | Alex | | Talent Lead | | | | | alex.rivera@example.test | | Not Contacted | | | |\n', 'utf8');
+fs.writeFileSync(path.join(sandbox, 'target-talent.md'), '| 900001 | Zorblax Widgetry | Personone | Example | | Talent Lead | | | | | example.personone@example.test | | Not Contacted | | | |\n', 'utf8');
 
 const { openEventStore, readEvents } = await import('../lib/event-store.mjs');
 const { appendEventsWithEffects, renderLegacyFile } = await import('../lib/legacy-files.mjs');
@@ -99,8 +99,8 @@ try {
     && allEvents().some(e => e.type === 'sender_not_related'), 'not-related writes handled state, sender state and event');
 
   r = await send('POST', '/api/google/replies/m910003/unmatched', {
-    from: 'Sam Okafor <sam@jobvite.example.test>',
-    fromName: 'Sam Okafor',
+    from: 'Example Persontwo <example.persontwo@jobvite.example.test>',
+    fromName: 'Example Persontwo',
     subject: 'Example follow up',
     snippet: 'Invented snippet',
     company: 'Quennox Ratchet Works',
@@ -109,20 +109,20 @@ try {
   let unmatched = await send('GET', '/api/google/replies/unmatched', {});
   check(r.status === 200
     && state.unmatchedReplies?.m910003?.subject === 'Example follow up'
-    && state.unmatchedReplies.m910003.fromName === 'Sam Okafor'
+    && state.unmatchedReplies.m910003.fromName === 'Example Persontwo'
     && state.unmatchedReplies.m910003.parkedOn
     && state.handledReplies?.m910003?.action === 'unmatched'
     && unmatched.body.count === 1
     && unmatched.body.items[0]?.msgId === 'm910003'
-    && unmatched.body.items[0]?.fromName === 'Sam Okafor'
+    && unmatched.body.items[0]?.fromName === 'Example Persontwo'
     && unmatched.body.items[0]?.fromIsRelay === true
     && allEvents().some(e => e.type === 'reply_unmatched'), 'unmatched parks the message and lists it');
 
   r = await send('POST', '/api/google/replies/m910003/log', {
     appId: 900003,
     company: 'Quennox Ratchet Works',
-    contact: { source: 'ta', id: 900001, company: 'Examplecorp', name: 'Alex Rivera' },
-    from: 'Sam Okafor <sam@jobvite.example.test>',
+    contact: { source: 'ta', id: 900001, company: 'Zorblax Widgetry', name: 'Example Personone' },
+    from: 'Example Persontwo <example.persontwo@jobvite.example.test>',
     subject: 'Example follow up',
     bodyPreview: 'Invented human reply.',
     date: '2030-03-12T10:00:00Z',

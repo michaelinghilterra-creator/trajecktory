@@ -700,7 +700,7 @@ function _normCompanyToken(s) {
 const _GENERIC_DOMAINS = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'yahoo.com', 'icloud.com', 'me.com', 'aol.com', 'proton.me', 'protonmail.com']);
 const _ATS_DOMAIN_RE = /greenhouse|lever|ashbyhq|ashby|workday|myworkday|smartrecruiters|jobvite|icims|bamboohr|hire\.lever|greenhouse-mail|us-greenhouse|myworkdayjobs|paylocity|rippling|gem\.com|goodtime|calendly/i;
 
-// The ATS tokens are anchored to a whole domain label, so "cleverworks.example" is not read as "lever".
+// The ATS tokens are anchored to a whole domain label, so "cantilever.example" is not read as "lever".
 // This one rejects an address outright, so a false positive costs the user a real email.
 const _ATS_RELAY_RE = new RegExp(`(?:^|\\.)(?:${_ATS_DOMAIN_RE.source})(?=$|[.-])`, 'i');
 

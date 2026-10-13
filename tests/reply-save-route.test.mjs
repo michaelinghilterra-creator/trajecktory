@@ -12,7 +12,7 @@ const notesPath = path.join(sandbox, 'app-notes.json');
 const eventsPath = path.join(sandbox, 'status-events.tsv');
 const syncPath = path.join(sandbox, 'google-sync.json');
 const correspondencePath = path.join(sandbox, 'target-talent-correspondence', '900001.md');
-const contact = { source: 'ta', id: 900001, company: 'Examplecorp', name: 'Alex Rivera' };
+const contact = { source: 'ta', id: 900001, company: 'Zorblax Widgetry', name: 'Example Personone' };
 
 fs.writeFileSync(applicationsPath,
   '# Applications Tracker\n\n' +
@@ -22,7 +22,7 @@ fs.writeFileSync(applicationsPath,
   '| 900002 | 2030-03-05 | Zorblax Widgetry | Example Pulley Director | 0.01/5 | Applied | | | | | https://jobs.zorblax.example/900002 |\n',
   'utf8');
 fs.writeFileSync(notesPath, '{}\n', 'utf8');
-fs.writeFileSync(path.join(sandbox, 'target-talent.md'), '| 900001 | Examplecorp | Rivera | Alex | | Talent Lead | | | | | alex.rivera@example.test | | Not Contacted | | | |\n', 'utf8');
+fs.writeFileSync(path.join(sandbox, 'target-talent.md'), '| 900001 | Zorblax Widgetry | Personone | Example | | Talent Lead | | | | | example.personone@example.test | | Not Contacted | | | |\n', 'utf8');
 
 const nativeFetch = globalThis.fetch;
 let externalNetworkCalls = 0;
@@ -69,7 +69,7 @@ try {
     appId: 900001,
     company: 'Zorblax Widgetry',
     pickConfirmed: true,
-    from: 'Sam Okafor <sam@example.test>',
+    from: 'Example Persontwo <example.persontwo@example.test>',
     subject: 'Example Cog Lead update',
     bodyPreview: 'Invented reply body.',
     date: '2030-03-09T15:00:00Z',
@@ -85,7 +85,7 @@ try {
     company: 'Zorblax Widgetry',
     contact: { ...contact, id: 999999 },
     pickConfirmed: true,
-    from: 'Sam Okafor <sam@example.test>',
+    from: 'Example Persontwo <example.persontwo@example.test>',
     subject: 'Example Cog Lead update',
     bodyPreview: 'Invented reply body.',
     date: '2030-03-09T15:00:00Z',
@@ -99,7 +99,7 @@ try {
     appId: 900001,
     company: 'Zorblax Widgetry',
     pickConfirmed: true,
-    from: 'Sam Okafor <sam@example.test>',
+    from: 'Example Persontwo <example.persontwo@example.test>',
     subject: 'Example Cog Lead decision',
     bodyPreview: 'Invented rejection body.',
     date: '2030-03-09T15:00:00Z',
@@ -113,7 +113,7 @@ try {
     appId: 900001,
     company: 'Zorblax Widgetry',
     pickConfirmed: true,
-    from: 'Sam Okafor <sam@example.test>',
+    from: 'Example Persontwo <example.persontwo@example.test>',
     subject: 'Example Cog Lead interview',
     bodyPreview: 'Invented interview body.',
     date: '2030-03-09T15:00:00Z',
@@ -122,42 +122,42 @@ try {
     'an interview stage without a contact returns 409');
 
   const dismissed = await post('m-dismiss', 'dismiss', {});
-  const notRelated = await post('m-not-related', 'not-related', { from: 'sam@example.test' });
+  const notRelated = await post('m-not-related', 'not-related', { from: 'example.persontwo@example.test' });
   const unmatched = await post('m-unmatched', 'unmatched', {
-    from: 'sam@example.test',
+    from: 'example.persontwo@example.test',
     subject: 'Invented unmatched reply',
     snippet: 'Invented unmatched body.',
-    company: 'Widgetworks',
+    company: 'Quennox Ratchet Works',
   });
   check(dismissed.status === 200 && notRelated.status === 200 && unmatched.status === 200,
     'dismiss, not related and unmatched still succeed without a contact');
 
   const fallbackSuggestion = await post('m-fallback-name', 'log', {
     appId: 900001,
-    company: 'Examplecorp',
+    company: 'Zorblax Widgetry',
     pickConfirmed: true,
-    from: 'sam@example.test',
-    fromName: '  Sam   Okafor  ',
+    from: 'example.persontwo@example.test',
+    fromName: '  Example   Persontwo  ',
     subject: 'Invented reply',
     bodyPreview: 'Invented reply body.',
     date: '2030-03-09T15:00:00Z',
   });
   const relaySuggestion = await post('m-relay-name', 'log', {
     appId: 900001,
-    company: 'Widgetworks',
+    company: 'Quennox Ratchet Works',
     pickConfirmed: true,
     from: 'notification@jobvite.example.test',
-    fromName: 'Alex Rivera',
+    fromName: 'Example Personone',
     subject: 'Invented relay reply',
     bodyPreview: 'Invented relay body.',
     date: '2030-03-09T15:00:00Z',
   });
   check(fallbackSuggestion.status === 409
-    && fallbackSuggestion.body.suggestedName === 'Sam Okafor'
-    && fallbackSuggestion.body.suggestedEmail === 'sam@example.test'
-    && fallbackSuggestion.body.company === 'Examplecorp'
+    && fallbackSuggestion.body.suggestedName === 'Example Persontwo'
+    && fallbackSuggestion.body.suggestedEmail === 'example.persontwo@example.test'
+    && fallbackSuggestion.body.company === 'Zorblax Widgetry'
     && relaySuggestion.status === 409
-    && relaySuggestion.body.suggestedName === 'Alex Rivera'
+    && relaySuggestion.body.suggestedName === 'Example Personone'
     && relaySuggestion.body.suggestedEmail === '',
   'the contact guard suggests fallback identity and suppresses ATS relay addresses');
 

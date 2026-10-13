@@ -9,7 +9,7 @@ import { TRACKER_SEPARATOR } from '../lib/tracker.mjs';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sandbox = makeRepoSandbox(repoRoot, 'email-received-route');
 process.env.TJK_DATA_DIR = sandbox;
-const contact = { source: 'ta', id: 900001, company: 'Examplecorp', name: 'Alex Rivera' };
+const contact = { source: 'ta', id: 900001, company: 'Zorblax Widgetry', name: 'Example Personone' };
 
 function row(id, company, role, status) {
   return `| ${id} | 2030-03-01 | ${company} | ${role} | 4.1/5 | ${status} | | | | | https://jobs.example.test/${id} |\n`;
@@ -31,7 +31,7 @@ fs.writeFileSync(path.join(sandbox, 'status-events.tsv'), [
 fs.writeFileSync(path.join(sandbox, 'app-notes.json'), '{}\n', 'utf8');
 fs.writeFileSync(path.join(sandbox, 'google-sync.json'), JSON.stringify({ seenMessageIds: [], lastCheckedAt: null, handledReplies: {}, lastPreviewAt: null, notRelatedSenders: {} }, null, 2) + '\n', 'utf8');
 fs.writeFileSync(path.join(sandbox, 'event-store.json'), JSON.stringify({ writes: 'on', flipped_at: '2030-03-01T00:00:00.000Z' }) + '\n', 'utf8');
-fs.writeFileSync(path.join(sandbox, 'target-talent.md'), '| 900001 | Examplecorp | Rivera | Alex | | Talent Lead | | | | | alex.rivera@example.test | | Not Contacted | | | |\n', 'utf8');
+fs.writeFileSync(path.join(sandbox, 'target-talent.md'), '| 900001 | Zorblax Widgetry | Personone | Example | | Talent Lead | | | | | example.personone@example.test | | Not Contacted | | | |\n', 'utf8');
 
 const { openEventStore, readEvents } = await import('../lib/event-store.mjs');
 const { appendEventsWithEffects, renderLegacyFile } = await import('../lib/legacy-files.mjs');

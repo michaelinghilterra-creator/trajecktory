@@ -167,21 +167,21 @@ check(pm.subject === 'Re: Example Gadget Director', 'Subject header extracted');
 check(pm.text.includes('discuss next steps'), 'base64url text/plain body decoded');
 check(extractEmail(pm.from) === 'personone@zorblax.example', 'address pulled from a "Name <addr>" header');
 check(parseGmailMessage({ id: 'x', snippet: 'hi', payload: {} }).text === 'hi', 'falls back to snippet when no body');
-check(JSON.stringify(parseFromHeader('Pat Doe <pat@example.test>')) === JSON.stringify({ name: 'Pat Doe', address: 'pat@example.test' }), 'From parser returns a display name and address');
-check(parseFromHeader('"Pat Doe" <pat@example.test>').name === 'Pat Doe', 'From parser strips one pair of wrapping quotes');
-check(JSON.stringify(parseFromHeader('pat@example.test')) === JSON.stringify({ name: '', address: 'pat@example.test' }), 'a bare address has no display name');
-check(parseFromHeader('<pat@example.test>').name === '', 'an empty display name stays empty');
-check(parseFromHeader('pat@example.test <other@example.test>').name === '', 'a display name containing an at sign is rejected');
+check(JSON.stringify(parseFromHeader('Example Personone <example.personone@example.test>')) === JSON.stringify({ name: 'Example Personone', address: 'example.personone@example.test' }), 'From parser returns a display name and address');
+check(parseFromHeader('"Example Personone" <example.personone@example.test>').name === 'Example Personone', 'From parser strips one pair of wrapping quotes');
+check(JSON.stringify(parseFromHeader('example.personone@example.test')) === JSON.stringify({ name: '', address: 'example.personone@example.test' }), 'a bare address has no display name');
+check(parseFromHeader('<example.personone@example.test>').name === '', 'an empty display name stays empty');
+check(parseFromHeader('example.personone@example.test <other@example.test>').name === '', 'a display name containing an at sign is rejected');
 check(JSON.stringify(parseFromHeader('')) === JSON.stringify({ name: '', address: '' }), 'an empty From header is safe');
 check(JSON.stringify(parseFromHeader(null)) === JSON.stringify({ name: '', address: '' }), 'a null From header is safe');
-check(parseFromHeader(`${'P'.repeat(140)} <pat@example.test>`).name.length === 120, 'a display name is capped at 120 characters');
+check(parseFromHeader(`${'P'.repeat(140)} <example.personone@example.test>`).name.length === 120, 'a display name is capped at 120 characters');
 check(JSON.stringify(parseFromHeader('%'.repeat(10000))) === JSON.stringify({ name: '', address: '' }), 'a long percent run without an address is handled');
 check(isAtsRelayAddress('reply@jobvite.example.test') === true, 'a Jobvite domain is an ATS relay');
 check(isAtsRelayAddress('reply@greenhouse-mail.example.test') === true, 'a Greenhouse mail domain is an ATS relay');
 check(isAtsRelayAddress('person@gmail.invalid') === false, 'a Gmail-style domain is not an ATS relay');
 check(isAtsRelayAddress('') === false, 'an empty address is not an ATS relay');
 check(isAtsRelayAddress('reply@jobs.lever.example.test') === true, 'an ATS name as a whole domain label is a relay');
-check(isAtsRelayAddress('person@cleverworks.example.test') === false, 'an ATS name inside another word is not a relay');
+check(isAtsRelayAddress('person@cantilever.example.test') === false, 'an ATS name inside another word is not a relay');
 check(isAtsRelayAddress('person@leverageco.example.test') === false, 'an ATS name that only starts a longer label is not a relay');
 
 // ── classifyReply ────────────────────────────────────────────────────────────

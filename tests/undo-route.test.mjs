@@ -20,7 +20,7 @@ fs.writeFileSync(path.join(sandbox, 'apply-dates.json'), '{}\n');
 fs.writeFileSync(path.join(sandbox, 'status-events.tsv'), 'app#\tdate\tstatus\tcompany\tlogged\n');
 fs.writeFileSync(path.join(sandbox, 'app-notes.json'), '{}\n');
 fs.writeFileSync(path.join(sandbox, 'event-store.json'), JSON.stringify({ writes: 'on', flipped_at: '2030-03-01T00:00:00.000Z' }));
-fs.writeFileSync(path.join(sandbox, 'target-talent.md'), '| 900001 | Examplecorp | Rivera | Alex | | Talent Lead | | | | | alex.rivera@example.test | | Not Contacted | | | |\n', 'utf8');
+fs.writeFileSync(path.join(sandbox, 'target-talent.md'), '| 900001 | Zorblax Widgetry | Personone | Example | | Talent Lead | | | | | example.personone@example.test | | Not Contacted | | | |\n', 'utf8');
 
 const { openEventStore, readEvents } = await import('../lib/event-store.mjs');
 const { renderLegacyFile } = await import('../lib/legacy-files.mjs');
@@ -114,7 +114,7 @@ try {
 
   // A logged reply that flips the status: the note, the handled record and the status all go back.
   const beforeReply = snapshot();
-  r = await send('POST', '/api/google/replies/m900001/rejected', { appId: 900003, company: 'Quennox Ratchet Works', contact: { source: 'ta', id: 900001, company: 'Examplecorp', name: 'Alex Rivera' }, from: 'Alex Rivera <alex.rivera@example.test>', subject: 'Your application', bodyPreview: 'Invented rejection.', date: '2030-03-12T10:00:00Z' });
+  r = await send('POST', '/api/google/replies/m900001/rejected', { appId: 900003, company: 'Quennox Ratchet Works', contact: { source: 'ta', id: 900001, company: 'Zorblax Widgetry', name: 'Example Personone' }, from: 'Example Personone <example.personone@example.test>', subject: 'Your application', bodyPreview: 'Invented rejection.', date: '2030-03-12T10:00:00Z' });
   if (r.status !== 200) console.log(JSON.stringify(r.body).slice(0, 300));
   check(r.status === 200 && statusOf(900003) === 'Rejected' && projectedNotes()['900003']?.length === 1, 'the reply note is projected from the event and the status flipped');
   list = await recent();

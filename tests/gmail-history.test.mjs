@@ -10,7 +10,7 @@ process.env.GOOGLE_CLIENT_ID = 'invented-client';
 process.env.GOOGLE_CLIENT_SECRET = 'invented-secret';
 
 const selfEmail = 'example.owner@example.test';
-const personEmail = 'alex.rivera@example.test';
+const personEmail = 'example.personone@example.test';
 
 function raw({ id, threadId = 'thread1', from, to = selfEmail, subject = 'Hello', date, text = 'New content', snippet = 'Snippet' }) {
   return {
@@ -61,11 +61,11 @@ check(longCleaned.length === 20000 && Date.now() - longStarted < 2000,
 
 let capturedQuery = '';
 const threadMessages = [
-  raw({ id: 'received', from: `Alex Rivera <${personEmail}>`, date: 'Mon, 7 Apr 2025 09:00:00 -0500' }),
+  raw({ id: 'received', from: `Example Personone <${personEmail}>`, date: 'Mon, 7 Apr 2025 09:00:00 -0500' }),
   raw({ id: 'sent', from: `Example Owner <${selfEmail}>`, to: personEmail, date: 'Mon, 7 Apr 2025 10:00:00 -0500' }),
-  raw({ id: 'third', from: 'Sam Okafor <sam@example.test>', date: 'Mon, 7 Apr 2025 11:00:00 -0500' }),
-  raw({ id: 'excluded', from: `Alex Rivera <${personEmail}>`, date: 'Mon, 7 Apr 2025 12:00:00 -0500' }),
-  raw({ id: 'automated', from: `Alex Rivera <${personEmail}>`, subject: 'Reminder: interview', date: 'Mon, 7 Apr 2025 13:00:00 -0500' }),
+  raw({ id: 'third', from: 'Example Persontwo <example.persontwo@example.test>', date: 'Mon, 7 Apr 2025 11:00:00 -0500' }),
+  raw({ id: 'excluded', from: `Example Personone <${personEmail}>`, date: 'Mon, 7 Apr 2025 12:00:00 -0500' }),
+  raw({ id: 'automated', from: `Example Personone <${personEmail}>`, subject: 'Reminder: interview', date: 'Mon, 7 Apr 2025 13:00:00 -0500' }),
 ];
 const commonFind = {
   accessToken: 'invented-token',
@@ -75,7 +75,7 @@ const commonFind = {
   getThreadImpl: async () => ({ id: 'thread1', messages: threadMessages }),
 };
 
-let history = await findHistory({ ...commonFind, name: 'Alex Rivera', email: personEmail, excludeMsgIds: ['excluded'], afterDate: '2025-03-01' });
+let history = await findHistory({ ...commonFind, name: 'Example Personone', email: personEmail, excludeMsgIds: ['excluded'], afterDate: '2025-03-01' });
 check(capturedQuery === `(from:${personEmail} OR to:${personEmail} OR cc:${personEmail}) after:2025/03/01`,
   'email history builds one scoped Gmail query');
 check(history.items.some(item => item.msgId === 'sent') && history.items.some(item => item.msgId === 'received'),
@@ -89,25 +89,25 @@ check(history.items.find(item => item.msgId === 'automated')?.skip === 'automate
 check(!history.items.some(item => item.msgId === 'excluded'), 'excluded message ids are removed');
 check(history.items.map(item => item.msgId).join(',') === 'received,sent,automated', 'history is sorted oldest first');
 
-await findHistory({ ...commonFind, name: 'Alex Rivera<script>', email: '', afterDate: '' });
-check(capturedQuery === 'from:"Alex Riverascript"', 'name only relay search is sanitized and quoted');
+await findHistory({ ...commonFind, name: 'Example Personone<script>', email: '', afterDate: '' });
+check(capturedQuery === 'from:"Example Persononescript"', 'name only relay search is sanitized and quoted');
 history = await findHistory({ ...commonFind, name: '', email: '' });
 check(history.items.length === 0 && history.truncated === false, 'no identity returns an empty history');
-history = await findHistory({ ...commonFind, name: 'Alex Rivera', email: personEmail, max: 2 });
+history = await findHistory({ ...commonFind, name: 'Example Personone', email: personEmail, max: 2 });
 check(history.items.length === 2 && history.truncated === true, 'the result is capped and marked truncated');
 let badEmailThrew = false;
-try { await findHistory({ ...commonFind, email: 'alex@example.test OR from:sam@example.test' }); } catch { badEmailThrew = true; }
+try { await findHistory({ ...commonFind, email: 'alex@example.test OR from:example.persontwo@example.test' }); } catch { badEmailThrew = true; }
 check(badEmailThrew, 'a query bending email address is rejected');
 
 fs.writeFileSync(path.join(sandbox, 'applications.md'),
   '# Applications Tracker\n\n'
   + '| # | Date | Company | Role | Score | Status | PDF | Resume | Report | Notes | URL |\n'
   + '|---|------|---------|------|-------|--------|-----|--------|--------|-------|-----|\n'
-  + '| 900001 | 2025-04-01 | Examplecorp | Example Role | 5/5 | Applied | | | | | https://jobs.example.test/900001 |\n',
+  + '| 900001 | 2025-04-01 | Zorblax Widgetry | Example Role | 5/5 | Applied | | | | | https://jobs.example.test/900001 |\n',
   'utf8');
 fs.writeFileSync(path.join(sandbox, 'apply-dates.json'), JSON.stringify({ 900001: '2025-04-01' }) + '\n');
 fs.writeFileSync(path.join(sandbox, 'target-talent.md'),
-  `| 900001 | Examplecorp | Rivera | Alex | | Talent Lead | | | | | ${personEmail} | | Not Contacted | | | |\n`,
+  `| 900001 | Zorblax Widgetry | Personone | Example | | Talent Lead | | | | | ${personEmail} | | Not Contacted | | | |\n`,
   'utf8');
 fs.writeFileSync(path.join(sandbox, 'google-tokens.json'), JSON.stringify({
   refresh_token: 'invented-refresh',
@@ -118,10 +118,10 @@ fs.writeFileSync(path.join(sandbox, 'google-tokens.json'), JSON.stringify({
 }) + '\n');
 
 const routeMessages = {
-  current: raw({ id: 'current', from: `Alex Rivera <${personEmail}>`, date: 'Sun, 20 Apr 2025 09:00:00 -0500' }),
-  older: raw({ id: 'older', from: `Alex Rivera <${personEmail}>`, subject: 'Earlier note', date: 'Mon, 7 Apr 2025 08:00:00 -0500', text: 'Earlier received body' }),
+  current: raw({ id: 'current', from: `Example Personone <${personEmail}>`, date: 'Sun, 20 Apr 2025 09:00:00 -0500' }),
+  older: raw({ id: 'older', from: `Example Personone <${personEmail}>`, subject: 'Earlier note', date: 'Mon, 7 Apr 2025 08:00:00 -0500', text: 'Earlier received body' }),
   newer: raw({ id: 'newer', from: `Example Owner <${selfEmail}>`, to: personEmail, subject: 'Later note', date: 'Tue, 8 Apr 2025 10:30:00 -0500', text: 'Later sent body' }),
-  auto: raw({ id: 'auto', from: `Alex Rivera <${personEmail}>`, subject: 'Reminder: interview', date: 'Wed, 9 Apr 2025 10:30:00 -0500' }),
+  auto: raw({ id: 'auto', from: `Example Personone <${personEmail}>`, subject: 'Reminder: interview', date: 'Wed, 9 Apr 2025 10:30:00 -0500' }),
 };
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (url, options) => {
@@ -151,7 +151,7 @@ const post = (route, body) => nativeFetch(`${base}${route}`, {
 }).then(async response => ({ status: response.status, body: await response.json() }));
 
 try {
-  let response = await post('/api/google/history/preview', { msgId: 'current', name: 'Alex Rivera', email: personEmail, appId: 900001 });
+  let response = await post('/api/google/history/preview', { msgId: 'current', name: 'Example Personone', email: personEmail, appId: 900001 });
   check(response.status === 200 && response.body.count === 2 && response.body.skipped === 1,
     'preview returns kept and skipped counts');
   check(response.body.items.every(item => !Object.hasOwn(item, 'body')),
