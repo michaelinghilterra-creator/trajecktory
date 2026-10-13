@@ -12,7 +12,7 @@ fs.writeFileSync(path.join(sandbox, 'referrals.md'), '# Referral tracker\n\n| # 
 const express = (await import('express')).default;
 const { router } = await import('../dashboard-web/server/routes/people.mjs');
 const { parseTargetTalentMd } = await import('../dashboard-web/server/lib/target-talent.mjs');
-const { parseReferralsMd } = await import('../dashboard-web/server/lib/referrals.mjs');
+const { parseReferralsMd, REFERRAL_HEADER } = await import('../dashboard-web/server/lib/referrals.mjs');
 const { resolvePeople } = await import('../dashboard-web/server/lib/contact-identity.mjs');
 const { readPins } = await import('../dashboard-web/server/lib/contact-links.mjs');
 
@@ -49,6 +49,60 @@ const bad = await post('/api/people/merge', { a: 'bad:1', b: 'referral:1' });
 check(bad.status === 400 && JSON.stringify(readPins()) === pinsBeforeBadRef, 'malformed ref returns 400 and writes nothing');
 fs.rmSync(sidecar);
 check(groups().some(g => g.length === 2), 'deleting the sidecar restores unpinned grouping');
+
+fs.writeFileSync(path.join(sandbox, 'target-talent.md'), '# Target Talent\n\n| # | Company | Last | First | Salute | Title | City | State | Zip | Phone | Email | LinkedIn | Status | Last Touch | Notes | Website |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n| 1 | Examplecorp | Rivera | Alex |  | Recruiter |  |  |  |  | alex.rivera@example.test [v:ok:2030-01-01] |  | Responded |  |  |  |\n', 'utf8');
+fs.writeFileSync(path.join(sandbox, 'referrals.md'), REFERRAL_HEADER, 'utf8');
+
+const createdResponse = await post('/api/people/create', {
+  name: '  Sam   Okafor  ',
+  company: ' Examplecorp ',
+  email: 'sam.okafor@example.test',
+  title: 'Example Cog Lead',
+  notes: 'Met through an invented event',
+});
+const created = await createdResponse.json();
+let referralRows = parseReferralsMd();
+check(createdResponse.status === 200 && created.existed === false && created.ref.startsWith('referral:'), 'create adds a new referral person');
+check(referralRows.length === 1 && referralRows[0].status === 'Responded', 'create defaults the status to Responded');
+check(referralRows[0].notes.split(' · ')[0] === 'Example Cog Lead', 'the title is the first notes segment');
+
+const countBeforeEmailDedupe = referralRows.length;
+const emailDedupeResponse = await post('/api/people/create', {
+  name: 'Jordan Lindqvist', company: 'Widgetworks', email: 'SAM.OKAFOR@EXAMPLE.TEST',
+});
+const emailDedupe = await emailDedupeResponse.json();
+referralRows = parseReferralsMd();
+check(emailDedupe.existed === true && emailDedupe.ref === created.ref && referralRows.length === countBeforeEmailDedupe, 'email dedupe ignores case and writes no second row');
+
+const nameDedupe = await (await post('/api/people/create', {
+  name: 'Sam Okafor', company: 'Examplecorp',
+})).json();
+check(nameDedupe.existed === true && nameDedupe.ref === created.ref, 'name and company dedupe finds the referral row');
+
+const taDedupe = await (await post('/api/people/create', {
+  name: 'Jordan Lindqvist', company: 'Widgetworks', email: 'ALEX.RIVERA@EXAMPLE.TEST',
+})).json();
+check(taDedupe.existed === true && taDedupe.ref === 'ta:1' && taDedupe.name === 'Alex Rivera', 'a tagged TA email matches and returns the stored person');
+
+const secondCreateResponse = await post('/api/people/create', {
+  name: 'Sam Okafor', company: 'Widgetworks', email: 'sam.widgetworks@example.test',
+});
+const secondCreate = await secondCreateResponse.json();
+check(secondCreate.existed === false, 'the same name at a different company creates a new person');
+check(secondCreate.ref !== created.ref, 'two sequential creates receive different ids');
+
+const relay = await post('/api/people/create', {
+  name: 'Alex Rivera', company: 'Examplecorp', email: 'reply@jobvite.example.test',
+});
+check(relay.status === 400 && (await relay.json()).error.includes('relay address'), 'an ATS relay email returns 400');
+const missingName = await post('/api/people/create', { company: 'Examplecorp' });
+check(missingName.status === 400, 'a missing name returns 400');
+const missingCompany = await post('/api/people/create', { name: 'Alex Rivera' });
+check(missingCompany.status === 400, 'a missing company returns 400');
+const invalidStatus = await post('/api/people/create', {
+  name: 'Jordan Lindqvist', company: 'Widgetworks', status: 'Invented status',
+});
+check(invalidStatus.status === 400, 'an invalid status returns 400');
 
 server.closeAllConnections?.();
 await new Promise(resolve => server.close(resolve));

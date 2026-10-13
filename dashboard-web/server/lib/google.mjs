@@ -559,6 +559,25 @@ function extractEmail(s) {
   return m ? m[0].toLowerCase() : null;
 }
 
+function parseFromHeader(value) {
+  if (typeof value !== 'string') return { name: '', address: '' };
+  const address = extractEmail(value) || '';
+  const bracket = value.indexOf('<');
+  if (bracket < 0) return { name: '', address };
+
+  let name = value.slice(0, bracket).trim();
+  if (name.length >= 2 && name.startsWith('"') && name.endsWith('"')) {
+    name = name.slice(1, -1).trim();
+  }
+  name = name.split(/\s/).filter(Boolean).join(' ');
+  name = [...name].filter(char => {
+    const code = char.codePointAt(0);
+    return code > 31 && (code < 127 || code > 159);
+  }).join('');
+  if (!name || name.toLowerCase() === address || name.includes('@')) name = '';
+  return { name: name.slice(0, 120), address };
+}
+
 // Reply intent, keyword-heuristic. Negative is checked first, because a rejection
 // often contains interview-ish words ("we interviewed many strong candidates").
 // Deliberately coarse: this only picks the SUGGESTED action; a human confirms the
@@ -616,6 +635,17 @@ function _normCompanyToken(s) {
 // domain (an @greenhouse-mail.io note is about SOME company, not "Greenhouse").
 const _GENERIC_DOMAINS = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'yahoo.com', 'icloud.com', 'me.com', 'aol.com', 'proton.me', 'protonmail.com']);
 const _ATS_DOMAIN_RE = /greenhouse|lever|ashbyhq|ashby|workday|myworkday|smartrecruiters|jobvite|icims|bamboohr|hire\.lever|greenhouse-mail|us-greenhouse|myworkdayjobs|paylocity|rippling|gem\.com|goodtime|calendly/i;
+
+// The ATS tokens are anchored to a whole domain label, so "cleverworks.example" is not read as "lever".
+// This one rejects an address outright, so a false positive costs the user a real email.
+const _ATS_RELAY_RE = new RegExp(`(?:^|\\.)(?:${_ATS_DOMAIN_RE.source})(?=$|[.-])`, 'i');
+
+function isAtsRelayAddress(address) {
+  if (typeof address !== 'string') return false;
+  const at = address.lastIndexOf('@');
+  if (at <= 0 || at === address.length - 1) return false;
+  return _ATS_RELAY_RE.test(address.slice(at + 1));
+}
 
 function _domainRoot(addr) {
   const at = String(addr || '').split('@')[1] || '';
@@ -819,6 +849,7 @@ function scanDecisions({ messages = [], taRows = [], apps = [], applyDates = {} 
     }
     const entry = {
       msgId: msg.id, threadId: msg.threadId, from: fromAddr, subject: msg.subject, date: msg.date,
+      fromName: parseFromHeader(msg.from).name,
       sentiment: suggestSentiment({ subject: msg.subject, text: msg.text, sender: fromAddr }),
       contact, companyGuess, snippet: msg.snippet, body: msg.text,
     };
@@ -950,6 +981,6 @@ function logReplyToContact(contact, { subject, body, timestamp, advanceStatus = 
 export {
   readTokens, writeTokens, readSync, writeSync, replyDecisionsViaEvents, tokenScopes,
   clientConfigured, googleStatus, getAccessToken, checkHealth, listMessages, getMessage, fetchMessagesConcurrent,
-  parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions, heldBackBounceIds,
+  parseGmailMessage, extractEmail, parseFromHeader, isAtsRelayAddress, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions, heldBackBounceIds,
   exchangeCode, fetchProfileEmail, candidateAppsFor, rankCandidateApps, createDraft, logReplyToContact, previewEntry,
 };
