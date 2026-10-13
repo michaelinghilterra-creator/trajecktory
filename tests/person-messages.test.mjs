@@ -143,6 +143,9 @@ async function worker() {
     result.badSubject = await request(router, 'POST', '/api/applications/41/messages', {
       personRef: 'ta:1', direction: 'Sent', subject: ' ', body: 'Example body',
     });
+    result.wrongCompany = await request(router, 'POST', '/api/applications/41/messages', {
+      personRef: 'ta:3', direction: 'Sent', subject: 'Example subject', body: 'Example body',
+    });
   }
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
@@ -219,6 +222,9 @@ const errors = run('errors');
 check(errors.badPerson.status === 400, 'bad person ref returns 400');
 check(errors.badApp.status === 404, 'unknown application returns 404');
 check(errors.badSubject.status === 400, 'empty subject returns 400');
+check(errors.wrongCompany.status === 400
+  && errors.wrongCompany.body.error === "That person is not at this application's company",
+'person outside the application company returns the specific 400 error');
 
 const eventOn = run('event-on', true);
 check(eventOn.response.status === 200 && eventOn.messages.length === 1 && eventOn.followups.length === 1, 'event-store sent write renders both correspondence and follow-up data');

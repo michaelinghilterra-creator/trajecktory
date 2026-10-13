@@ -7,6 +7,10 @@
 
 const { useState: useStateF, useEffect: useEffectF, useMemo: useMemoF, useRef: useRefF } = React;
 
+const fetchFollowupPeople = (company) => fetch(`/api/people/by-company/${encodeURIComponent(company)}`)
+  .then(r => r.ok ? r.json() : { people: [] })
+  .then(d => Array.isArray(d.people) ? d.people : []);
+
 const FOLLOWUP_TIER_LABELS = Object.freeze({
   hm: 'Hiring manager',
   exec: 'Skip-level exec',
@@ -1034,8 +1038,10 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
   const gradeAbortRef = React.useRef(null);
   const gradeGenerationRef = React.useRef(0);
   const [logModal, setLogModal] = useStateF(null);
+  const [relatedPeople, setRelatedPeople] = useStateF([]);
   const [relatedTalent, setRelatedTalent] = useStateF([]);
-  const [crossLogIds, setCrossLogIds] = useStateF(new Set());
+  const [personChoice, setPersonChoice] = useStateF('');
+  const peopleGenerationRef = useRefF(0);
 
   const load = () => {
     fetch('/api/followups/stale')
@@ -1050,24 +1056,31 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
       .then(r => r.ok ? r.json() : [])
       .then(rows => setTouches((rows || []).filter(f => f.appNum === appId).sort((a, b) => (b.date || '').localeCompare(a.date || ''))))
       .catch(() => setTouches([]));
-    if (app.company) {
+    const generation = ++peopleGenerationRef.current;
+    if (!app.company) { setRelatedPeople([]); setRelatedTalent([]); return; }
+    Promise.all([
+      fetchFollowupPeople(app.company).catch(() => []),
       fetch(`/api/target-talent/by-company/${encodeURIComponent(app.company)}`)
         .then(r => r.ok ? r.json() : [])
-        .then(ta => { setRelatedTalent(ta || []); setCrossLogIds(new Set((ta || []).map(t => t.id))); })
-        .catch(() => setRelatedTalent([]));
-    }
+        .then(rows => Array.isArray(rows) ? rows : [])
+        .catch(() => []),
+    ]).then(([people, talent]) => {
+      if (peopleGenerationRef.current !== generation) return;
+      setRelatedPeople(people);
+      setRelatedTalent(talent);
+    });
   };
   useEffectF(() => {
+    setPersonChoice('');
+    setRelatedPeople([]);
+    setRelatedTalent([]);
     load();
     return () => {
+      peopleGenerationRef.current++;
       improveAbortRef.current?.abort();
       gradeAbortRef.current?.abort();
     };
   }, [appId]);
-
-  const toggleCrossLog = (id) => {
-    setCrossLogIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-  };
 
   const gradeDraft = (next, generation) => {
     if (window.tjkDraftGrading !== true) return Promise.resolve(null);
@@ -1213,17 +1226,25 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
   };
 
   const logTouch = (payload) => {
-    const taIds = Array.from(crossLogIds);
-    window.tjkMutate('/api/followups', {
+    const isMessage = personChoice !== 'other' && ['Email', 'LinkedIn'].includes(payload.channel);
+    const selectedPerson = relatedPeople.find(person => person.ref === personChoice);
+    const url = isMessage ? `/api/applications/${appId}/messages` : '/api/followups';
+    const requestBody = isMessage ? {
+      personRef: personChoice,
+      direction: 'Sent',
+      channel: payload.channel,
+      subject: payload.subject || `Follow-up re: ${app.role} (#${appId})`,
+      body: payload.body || payload.notes,
+    } : {
+      appNum: appId,
+      ...payload,
+      contact: selectedPerson?.name || payload.contact,
+      alsoLogToTalentIds: [],
+    };
+    window.tjkMutate(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        appNum: appId,
-        ...payload,
-        alsoLogToTalentIds: taIds,
-        alsoLogSubject: payload.subject || undefined,
-        alsoLogBody: payload.body || undefined,
-      }),
+      body: JSON.stringify(requestBody),
     })
       .then(r => r.json())
       .then((resp) => {
@@ -1259,21 +1280,22 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
         </div>
       )}
 
-      {/* Related TA Outreach contacts (cross-log targets) */}
-      {relatedTalent.length > 0 && (
-        <div className="cs-section">
+      {/* Person choice for application messages */}
+      <div className="cs-section">
           <div className="cs-section-head">
-            <span>Related TA contacts at {app.company}</span>
-            <span className="mono dim">{crossLogIds.size}/{relatedTalent.length} selected</span>
+            <span>Who was this to?</span>
           </div>
           <div className="dim mono" style={{ fontSize: 10.5, marginBottom: 8 }}>
-            Selected contacts also get this touch logged on their TA Outreach correspondence (prevents double-entry).
+            Pick the person who received the message, or choose the non-message option.
           </div>
           <div className="col" style={{ gap: 6 }}>
-            {relatedTalent.map(ta => {
-              const checked = crossLogIds.has(ta.id);
+            {relatedPeople.map(person => {
+              const checked = personChoice === person.ref;
+              const ta = person.ref.startsWith('ta:')
+                ? relatedTalent.find(row => row.id === Number(person.ref.slice(3)))
+                : null;
               return (
-                <div key={ta.id}
+                <div key={person.ref}
                   style={{
                     background: 'var(--panel)', borderRadius: 4,
                     borderLeft: `3px solid ${checked ? 'var(--green)' : 'var(--text-mute)'}`,
@@ -1283,28 +1305,31 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
                       display: 'flex', alignItems: 'center', gap: 10,
                       padding: '8px 10px', cursor: 'pointer',
                     }}>
-                    <input type="checkbox" checked={checked} onChange={() => toggleCrossLog(ta.id)} />
+                    <input type="radio" name={`followup-person-${appId}`} checked={checked} onChange={() => setPersonChoice(person.ref)} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600 }}>{ta.first} {ta.last}</div>
-                      <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>{ta.title}</div>
-                      {ta.linkedin && (
-                        <a href={window.safeHref(ta.linkedin)} target="_blank" rel="noreferrer"
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>{person.name}</div>
+                      <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>{person.title}</div>
+                      {person.linkedin && (
+                        <a href={window.safeHref(person.linkedin)} target="_blank" rel="noreferrer"
                           onClick={e => e.stopPropagation()}
                           className="mono"
                           style={{ fontSize: 10.5, color: 'var(--accent)' }}>LinkedIn ↗</a>
                       )}
                     </div>
-                    <span className="mono dim" style={{ fontSize: 10.5 }}>
+                    {ta && <span className="mono dim" style={{ fontSize: 10.5 }}>
                       {ta.status || 'Not Contacted'}{ta.lastTouch ? ` · ${ta.lastTouch}` : ''}
-                    </span>
+                    </span>}
                   </label>
-                  <TaFollowupComposer ta={ta} />
+                  {ta && <TaFollowupComposer ta={ta} />}
                 </div>
               );
             })}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', cursor: 'pointer' }}>
+              <input type="radio" name={`followup-person-${appId}`} checked={personChoice === 'other'} onChange={() => setPersonChoice('other')} />
+              <span style={{ fontSize: 12 }}>Not a message to a person (call, form, other)</span>
+            </label>
           </div>
         </div>
-      )}
 
       {/* Actions */}
       <div className="cs-section">
@@ -1369,14 +1394,15 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
             )}
             <div className="mono dim" style={{ fontSize: 10.5, marginTop: 4 }}>Your sign-off is added automatically: {window.mySignoff()}</div>
             <div className="row" style={{ gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-              <button className="btn primary sm" onClick={() => logTouch({
+              <button className="btn primary sm" disabled={!personChoice || !draft.body} onClick={() => logTouch({
                 channel: 'Email',
                 notes: `Sent follow-up. Subject: ${draft.subject}`,
                 subject: draft.subject,
                 body: draft.body,
               })}>
-                I sent this. Log touch{crossLogIds.size > 0 && ` + ${crossLogIds.size} TA`}
+                I sent this. Log touch
               </button>
+              {!personChoice && <span className="mono dim" style={{ fontSize: 10.5 }}>Pick who this was to</span>}
             </div>
           </div>
         )}
@@ -1425,12 +1451,12 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
                   {FU_CHANNELS.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-              <div>
+              {personChoice === 'other' && <div>
                 <label className="dim mono" style={{ fontSize: 10.5 }}>CONTACT (optional)</label>
                 <input type="text" aria-label="Contact name or email" placeholder="Name or email"
                   value={logModal.contact} onChange={e => setLogModal({ ...logModal, contact: e.target.value })}
                   style={{ width: '100%', padding: 8, marginTop: 4, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 12 }} />
-              </div>
+              </div>}
               <div>
                 <label className="dim mono" style={{ fontSize: 10.5 }}>NOTES</label>
                 <textarea aria-label="Follow-up context" placeholder="What did you send / what's the context?"
@@ -1439,20 +1465,11 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
                   style={{ width: '100%', padding: 8, marginTop: 4, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 12, fontFamily: 'inherit', resize: 'vertical' }} />
               </div>
             </div>
-            {relatedTalent.length > 0 && (
-              <div style={{ marginTop: 12, padding: 8, background: 'var(--panel)', borderRadius: 4, fontSize: 11 }}>
-                <span className="dim mono" style={{ fontSize: 10.5 }}>CROSS-LOG</span>
-                <div style={{ marginTop: 4 }}>
-                  {crossLogIds.size === 0
-                    ? <>No related TA contacts selected. This touch will only log to Follow-Ups.</>
-                    : <>Also logging to <span className="mono" style={{ color: 'var(--green)' }}>{crossLogIds.size}</span> TA contact{crossLogIds.size === 1 ? '' : 's'}: {relatedTalent.filter(t => crossLogIds.has(t.id)).map(t => `${t.first} ${t.last}`).join(', ')}. (Edit selection above before saving.)</>}
-                </div>
-              </div>
-            )}
             <div className="row" style={{ gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
               <button className="btn" onClick={() => setLogModal(null)}>Cancel</button>
-              <button className="btn primary" onClick={() => logTouch(logModal)}>
-                Save touch{crossLogIds.size > 0 && ` + ${crossLogIds.size} TA`}
+              {!personChoice && <span className="mono dim" style={{ fontSize: 10.5, alignSelf: 'center' }}>Pick who this was to</span>}
+              <button className="btn primary" disabled={!personChoice || (personChoice !== 'other' && ['Email', 'LinkedIn'].includes(logModal.channel) && !logModal.notes.trim())} onClick={() => logTouch(logModal)}>
+                Save touch
               </button>
             </div>
           </div>

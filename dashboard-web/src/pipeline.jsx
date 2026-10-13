@@ -9,6 +9,10 @@
 (function () {
 const { useState: useStateP, useMemo: useMemoP, useEffect: useEffectP, useRef: useRefP, useCallback: useCallbackP } = React;
 
+const fetchPipelinePeople = (company) => fetch(`/api/people/by-company/${encodeURIComponent(company)}`)
+  .then(r => r.ok ? r.json() : { people: [] })
+  .then(d => Array.isArray(d.people) ? d.people : []);
+
 // A render error in one drawer tab (a report field in a shape the tab does not expect) must not
 // unmount the whole dashboard. Show it in place, and reset when the role or the tab changes.
 class DrawerTabBoundary extends React.Component {
@@ -867,6 +871,14 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   const [notes, setNotes] = useStateP([]);
   const [noteDraft, setNoteDraft] = useStateP('');
   const [savingNote, setSavingNote] = useStateP(false);
+  const [noteIsMessage, setNoteIsMessage] = useStateP(false);
+  const [messagePeople, setMessagePeople] = useStateP([]);
+  const [messagePersonRef, setMessagePersonRef] = useStateP('');
+  const [messageDirection, setMessageDirection] = useStateP('Sent');
+  const [messageChannel, setMessageChannel] = useStateP('Email');
+  const [messageSubject, setMessageSubject] = useStateP('');
+  const [messageConfirmation, setMessageConfirmation] = useStateP('');
+  const messagePeopleGenerationRef = useRefP(0);
   // Quick "add a to-do for this application" — posts to the Today tab's to-do
   // list with source:'app' so it links back to this company.
   const [todoDraft, setTodoDraft] = useStateP('');
@@ -886,7 +898,9 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   useEffectP(() => {
     setTab('overview'); setStarOpen(0); setCustomWhich('cv');
     setApplyJob(null); setApplyResult(null); setElapsed(0);
-    setNotes([]); setNoteDraft('');
+    setNotes([]); setNoteDraft(''); setNoteIsMessage(false); setMessagePeople([]);
+    setMessagePersonRef(''); setMessageDirection('Sent'); setMessageChannel('Email');
+    setMessageSubject(''); setMessageConfirmation('');
     setTodoDraft(''); setTodoDue(''); setTodoAdded(false);
     setContacts([]); setSelContact(null); setFindOpen(false);
     setEventDate(localToday());
@@ -901,6 +915,19 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
       .catch(() => setContacts([]));
   };
   useEffectP(() => { loadContacts(); }, [app && app.id]);
+
+  useEffectP(() => {
+    const generation = ++messagePeopleGenerationRef.current;
+    if (!app || !app.company) { setMessagePeople([]); return; }
+    fetchPipelinePeople(app.company)
+      .then(people => {
+        if (messagePeopleGenerationRef.current === generation) setMessagePeople(people);
+      })
+      .catch(() => {
+        if (messagePeopleGenerationRef.current === generation) setMessagePeople([]);
+      });
+    return () => { messagePeopleGenerationRef.current++; };
+  }, [app && app.id]);
 
   useEffectP(() => {
     if (!applyJob || applyJob.status !== 'running') { setElapsed(0); return; }
@@ -973,14 +1000,32 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   const saveNote = () => {
     const text = noteDraft.trim();
     if (!text || savingNote) return;
+    if (noteIsMessage && (!messagePersonRef || !messageSubject.trim())) return;
     setSavingNote(true);
-    window.tjkMutate(`/api/notes/${app.id}`, {
+    const url = noteIsMessage ? `/api/applications/${app.id}/messages` : `/api/notes/${app.id}`;
+    const requestBody = noteIsMessage ? {
+      personRef: messagePersonRef,
+      direction: messageDirection,
+      channel: messageChannel,
+      subject: messageSubject.trim(),
+      body: text,
+    } : { text };
+    window.tjkMutate(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(requestBody),
     })
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(d => { setNotes(Array.isArray(d) ? d : []); setNoteDraft(''); })
+      .then(d => {
+        if (noteIsMessage) {
+          const person = messagePeople.find(p => p.ref === messagePersonRef);
+          setMessageConfirmation(`Logged on ${person?.name || 'contact'}'s card`);
+          setNoteDraft(''); setMessagePersonRef(''); setMessageSubject('');
+          setMessageDirection('Sent'); setMessageChannel('Email'); setNoteIsMessage(false);
+        } else {
+          setNotes(Array.isArray(d) ? d : []); setNoteDraft('');
+        }
+      })
       .catch(() => { /* keep draft so nothing is lost */ })
       .finally(() => setSavingNote(false));
   };
@@ -1662,6 +1707,28 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
 
               <div className="rp-section">
                 <div className="rp-section-head"><span>Add a note</span></div>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
+                  <input type="checkbox" checked={noteIsMessage} onChange={(e) => { setNoteIsMessage(e.target.checked); setMessageConfirmation(''); }} />
+                  This is a message I sent or received
+                </label>
+                {noteIsMessage && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
+                    {messagePeople.length === 0 ? (
+                      <div className="mono dim" style={{ fontSize: 10.5 }}>No contacts at {app.company} yet. Add one on the Network tab first.</div>
+                    ) : (
+                      <select value={messagePersonRef} onChange={(e) => setMessagePersonRef(e.target.value)}
+                        style={{ padding: 7, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }}>
+                        <option value="">Select a person</option>
+                        {messagePeople.map(person => <option key={person.ref} value={person.ref}>{person.name}{person.title ? ` · ${person.title}` : ''}</option>)}
+                      </select>
+                    )}
+                    <div className="row" style={{ gap: 6 }}>
+                      {['Sent', 'Received'].map(direction => <button key={direction} type="button" className={`btn sm ${messageDirection === direction ? 'accent' : 'ghost'}`} onClick={() => setMessageDirection(direction)}>{direction}</button>)}
+                      {['Email', 'LinkedIn'].map(channel => <button key={channel} type="button" className={`btn sm ${messageChannel === channel ? 'accent' : 'ghost'}`} onClick={() => setMessageChannel(channel)}>{channel}</button>)}
+                    </div>
+                    <input className="dr-note-input" style={{ minHeight: 0, height: 34, resize: 'none' }} placeholder="Subject" value={messageSubject} onChange={(e) => setMessageSubject(e.target.value)} />
+                  </div>
+                )}
                 <textarea
                   className="dr-note-input"
                   placeholder="Paste or type interview notes, a recruiter-call recap, next steps…"
@@ -1671,10 +1738,11 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                 />
                 <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                   <span className="mono dim" style={{ fontSize: 10.5 }}>⌘/Ctrl + Enter to save</span>
-                  <button className="btn primary sm" disabled={!noteDraft.trim() || savingNote} onClick={saveNote}>
+                  <button className="btn primary sm" disabled={!noteDraft.trim() || savingNote || (noteIsMessage && (!messagePersonRef || !messageSubject.trim() || messagePeople.length === 0))} onClick={saveNote}>
                     {savingNote ? 'Saving…' : 'Save note'}
                   </button>
                 </div>
+                {messageConfirmation && <div className="mono" style={{ marginTop: 6, fontSize: 10.5, color: 'var(--green)' }}>{messageConfirmation}</div>}
               </div>
 
               <div className="rp-section">

@@ -600,6 +600,7 @@ for (const suite of [
   'tests/email-queue.test.mjs',
   'tests/both-queue.test.mjs',
   'tests/ta-crosslog.test.mjs',
+  'tests/person-picker-ui.test.mjs',
   'tests/contact-channel-bucket.test.mjs',
   'tests/due-sequence-contacts.test.mjs',
   'tests/stale-ta.test.mjs',

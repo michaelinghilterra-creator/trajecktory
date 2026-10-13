@@ -122,6 +122,16 @@ function replyCompany(reply) {
   return reply.contact ? reply.contact.company : (reply.companyGuess ? reply.companyGuess.company : '');
 }
 
+const fetchReviewPeople = (company) => fetch(`/api/people/by-company/${encodeURIComponent(company)}`)
+  .then(r => r.ok ? r.json() : { people: [] })
+  .then(d => Array.isArray(d.people) ? d.people : []);
+
+function reviewContact(person) {
+  if (!person) return null;
+  const [source, id] = person.ref.split(':');
+  return { source, id, company: person.company, name: person.name };
+}
+
 // One reply row, made actionable. The reply resolves to one or more candidate
 // applications (server-attached by company); the user picks when there is more
 // than one, then Log (note only) or Rejected. Each POSTs to the
@@ -140,13 +150,35 @@ function ReplyRow({ reply, toast }) {
   // positive even on a bland info email), so it is an editable override, not a
   // verdict. Whatever it is set to is what gets written into the logged note.
   const [sentiment, setSentiment] = useStateRv(reply.sentiment || 'neutral');
+  const peopleGenerationRef = useRefRv(0);
+  const [people, setPeople] = useStateRv([]);
+  const [personRef, setPersonRef] = useStateRv('');
   const company = replyCompany(reply);
   const picked = cands.find(a => a.id === appId);
+  const pickedCompany = picked?.company || company;
+  const pickedPerson = people.find(person => person.ref === personRef);
+  const contact = reply.contact || reviewContact(pickedPerson);
   const tag = reply.companyGuess ? `≈ ${reply.companyGuess.company}` : (reply.contact ? reply.contact.company : '');
+
+  useEffectRv(() => {
+    const generation = ++peopleGenerationRef.current;
+    setPersonRef('');
+    setPeople([]);
+    if (reply.contact || !appId || !pickedCompany) return;
+    fetchReviewPeople(pickedCompany)
+      .then(nextPeople => {
+        if (peopleGenerationRef.current === generation) setPeople(nextPeople);
+      })
+      .catch(() => {
+        if (peopleGenerationRef.current === generation) setPeople([]);
+      });
+    return () => { peopleGenerationRef.current++; };
+  }, [appId, pickedCompany, reply.contact]);
 
   const act = (action, extra = {}) => {
     const noApp = action === 'dismiss' || action === 'not-related' || action === 'unmatched';
     if (!noApp && !appId) { toast && toast('Pick which application this reply belongs to.', 'error'); return; }
+    if (!noApp && !contact) { toast && toast('Pick who this reply was from.', 'error'); return; }
     setBusy(true);
     setGuard(null);
     const body = action === 'dismiss' ? {}
@@ -155,7 +187,7 @@ function ReplyRow({ reply, toast }) {
       : action === 'unmatched' ? { from: reply.from, subject: reply.subject, snippet: reply.snippet || reply.bodyPreview, date: reply.date, threadId: reply.threadId, company }
       // Sentiment is the user's override. The identifying fields are fallbacks if
       // the server cannot re-fetch the full message from Gmail by its message id.
-      : { appId, company, contact: reply.contact, sentiment: extra.sentiment || sentiment, pickConfirmed: true, ...(extra.acknowledged ? { acknowledged: true } : {}), from: reply.from, subject: reply.subject, snippet: reply.snippet, bodyPreview: reply.bodyPreview, date: reply.date, threadId: reply.threadId };
+      : { appId, company: pickedCompany, contact, sentiment: extra.sentiment || sentiment, pickConfirmed: true, ...(extra.acknowledged ? { acknowledged: true } : {}), from: reply.from, subject: reply.subject, snippet: reply.snippet, bodyPreview: reply.bodyPreview, date: reply.date, threadId: reply.threadId };
     fetch(`/api/google/replies/${encodeURIComponent(reply.msgId)}/${action}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -188,6 +220,7 @@ function ReplyRow({ reply, toast }) {
           {tag ? <span className="dim mono">· {tag}</span> : null}
         </div>
       </div>
+      {reply.contact ? <div className="dim" style={{ marginTop: 3 }}>From {reply.contact.name}</div> : null}
       {guard && !done ? (
         <div style={{ marginTop: 5, padding: '6px 8px', border: '1px solid var(--yellow, #f59e0b)', borderRadius: 5 }}>
           <div>{guard.warnings.map(w => w.type === 'older_than_application'
@@ -217,8 +250,15 @@ function ReplyRow({ reply, toast }) {
             {!appId ? <option value="" disabled>Select an application</option> : null}
             {cands.map(a => <option key={a.id} value={a.id}>{a.role} · {a.status} · {a.applyDate ? `applied ${a.applyDate}` : 'no apply date'}</option>)}
           </select>
-          <button className="btn sm" onClick={() => act('log')} disabled={busy || !appId}>Log</button>
-          <button className="btn ghost sm" onClick={() => act('rejected')} disabled={busy || !appId}>Rejected</button>
+          {!reply.contact && appId ? (
+            <select value={personRef} onChange={e => setPersonRef(e.target.value)}
+              style={{ fontSize: 12, padding: '2px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }}>
+              <option value="">Select a person</option>
+              {people.map(person => <option key={person.ref} value={person.ref}>{person.name}{person.title ? ` · ${person.title}` : ''}</option>)}
+            </select>
+          ) : null}
+          <button className="btn sm" onClick={() => act('log')} disabled={busy || !appId || !contact}>Log</button>
+          <button className="btn ghost sm" onClick={() => act('rejected')} disabled={busy || !appId || !contact}>Rejected</button>
           <button className="btn ghost sm" onClick={() => act('unmatched')} disabled={busy} title="None of these fit. Keep it on the unmatched list with its evidence.">Unmatched</button>
           <button className="btn ghost sm" onClick={() => act('dismiss')} disabled={busy} title="Hide just this email.">Dismiss</button>
           <button className="btn ghost sm" onClick={() => act('not-related')} disabled={busy} title="This email isn't about your job search. Hide it and stop surfacing future emails from this sender.">Not job-related</button>
@@ -233,18 +273,45 @@ function ReplyRow({ reply, toast }) {
 function UnmatchedList({ toast, refreshKey }) {
   const [items, setItems] = useStateRv([]);
   const [picks, setPicks] = useStateRv({});
+  const [peopleByMessage, setPeopleByMessage] = useStateRv({});
+  const [personPicks, setPersonPicks] = useStateRv({});
   const [busy, setBusy] = useStateRv(null);
   const [tick, setTick] = useStateRv(0);
+  const peopleGenerationsRef = useRefRv({});
   useEffectRv(() => {
     fetch('/api/google/replies/unmatched').then(r => r.json()).then(d => setItems(d.items || [])).catch(() => {});
   }, [refreshKey, tick]);
   if (!items.length) return null;
+  const pickApplication = (item, appId) => {
+    const app = item.suggestions.find(candidate => candidate.id === appId);
+    const company = app?.company || item.company;
+    const generation = (peopleGenerationsRef.current[item.msgId] || 0) + 1;
+    peopleGenerationsRef.current[item.msgId] = generation;
+    setPicks(current => ({ ...current, [item.msgId]: appId }));
+    setPersonPicks(current => ({ ...current, [item.msgId]: '' }));
+    setPeopleByMessage(current => ({ ...current, [item.msgId]: [] }));
+    if (!company) return;
+    fetchReviewPeople(company)
+      .then(people => {
+        if (peopleGenerationsRef.current[item.msgId] === generation) {
+          setPeopleByMessage(current => ({ ...current, [item.msgId]: people }));
+        }
+      })
+      .catch(() => {
+        if (peopleGenerationsRef.current[item.msgId] === generation) {
+          setPeopleByMessage(current => ({ ...current, [item.msgId]: [] }));
+        }
+      });
+  };
   const act = (item, action) => {
     const appId = picks[item.msgId];
     if (action === 'log' && !appId) { toast && toast('Pick which application this belongs to.', 'error'); return; }
+    const people = peopleByMessage[item.msgId] || [];
+    const person = people.find(candidate => candidate.ref === personPicks[item.msgId]);
+    if (action === 'log' && !person) { toast && toast('Pick who this reply was from.', 'error'); return; }
     setBusy(item.msgId);
     const body = action === 'log'
-      ? { appId, company: (item.suggestions.find(x => x.id === appId) || {}).company || item.company, pickConfirmed: true, from: item.from, subject: item.subject, snippet: item.snippet, bodyPreview: item.snippet, date: item.date, threadId: item.threadId }
+      ? { appId, company: (item.suggestions.find(x => x.id === appId) || {}).company || item.company, contact: reviewContact(person), pickConfirmed: true, from: item.from, subject: item.subject, snippet: item.snippet, bodyPreview: item.snippet, date: item.date, threadId: item.threadId }
       : {};
     fetch(`/api/google/replies/${encodeURIComponent(item.msgId)}/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(r => r.json())
@@ -261,13 +328,20 @@ function UnmatchedList({ toast, refreshKey }) {
           {it.snippet ? <div className="dim" style={{ marginTop: 2 }}>{it.snippet}</div> : null}
           <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
             {it.suggestions.length ? (
-              <select value={picks[it.msgId] || ''} onChange={e => setPicks(p => ({ ...p, [it.msgId]: parseInt(e.target.value, 10) }))}
+              <select value={picks[it.msgId] || ''} onChange={e => pickApplication(it, parseInt(e.target.value, 10))}
                 style={{ fontSize: 12, padding: '2px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }}>
                 <option value="" disabled>Select an application</option>
                 {it.suggestions.map(a => <option key={a.id} value={a.id}>{a.role} · {a.status} · {a.applyDate ? `applied ${a.applyDate}` : 'no apply date'}</option>)}
               </select>
             ) : <span className="dim">No application on file{it.company ? ` for ${it.company}` : ''}.</span>}
-            {it.suggestions.length ? <button className="btn sm" onClick={() => act(it, 'log')} disabled={busy === it.msgId}>Attach</button> : null}
+            {picks[it.msgId] ? (
+              <select value={personPicks[it.msgId] || ''} onChange={e => setPersonPicks(current => ({ ...current, [it.msgId]: e.target.value }))}
+                style={{ fontSize: 12, padding: '2px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }}>
+                <option value="">Select a person</option>
+                {(peopleByMessage[it.msgId] || []).map(person => <option key={person.ref} value={person.ref}>{person.name}{person.title ? ` · ${person.title}` : ''}</option>)}
+              </select>
+            ) : null}
+            {it.suggestions.length ? <button className="btn sm" onClick={() => act(it, 'log')} disabled={busy === it.msgId || !personPicks[it.msgId]}>Attach</button> : null}
             <button className="btn ghost sm" onClick={() => act(it, 'dismiss')} disabled={busy === it.msgId}>Dismiss</button>
           </div>
         </div>

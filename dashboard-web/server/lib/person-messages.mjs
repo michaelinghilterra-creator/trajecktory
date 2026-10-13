@@ -11,6 +11,7 @@ import {
   writeReferralCorrespondence,
 } from './referrals.mjs';
 import {
+  matchByCompany,
   parseTargetTalentMd,
   readTTCorrespondence,
   updateTTLine,
@@ -67,6 +68,18 @@ export function logPersonMessage({
 
   const appId = parseInt(appNum, 10);
   const app = Number.isFinite(appId) ? parseApplicationsMd().find(item => item.id === appId) : null;
+  const person = resolvePeople({
+    ta: taRows,
+    referrals: referralRows,
+    influencers: [],
+    pins: readPins(),
+  }).find(item => item.refs.includes(personRef));
+  const memberCompanies = [person?.members.ta?.company, person?.members.referral?.where]
+    .filter(Boolean)
+    .map(company => ({ company }));
+  if (app && matchByCompany(memberCompanies, app.company, member => member.company).length === 0) {
+    throw codedError('BAD_INPUT', "That person is not at this application's company");
+  }
   const name = personName(personRef, taRows, referralRows)
     || (source === 'ta' ? `${row.first || ''} ${row.last || ''}`.trim() : row.name || '');
   const entry = { timestamp: stamp, direction, channel: normalizedChannel, subject: cleanSubject, body: cleanBody };
