@@ -619,6 +619,7 @@ for (const suite of [
   'tests/google.test.mjs',
   'tests/audit-unlogged-mail.test.mjs',
   'tests/reply-save-route.test.mjs',
+  'tests/gmail-history.test.mjs',
   'tests/gmail-url-safety.test.mjs',
   'tests/reply-draft.test.mjs',
   'tests/google-connect.test.mjs',

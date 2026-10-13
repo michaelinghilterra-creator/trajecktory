@@ -400,6 +400,20 @@ async function getMessage({ id, accessToken, fetchImpl = fetch, format = 'full',
   return res.json();
 }
 
+export async function getThread({ id, accessToken, fetchImpl = fetch } = {}) {
+  if (!GMAIL_ID.test(String(id ?? ''))) throw new Error('Gmail thread get failed (bad thread id)');
+  const url = `${GMAIL_BASE}/threads/${encodeURIComponent(id)}?format=full`;
+  const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    const error = new Error(`Gmail thread get failed (${res.status}): ${body.slice(0, 300)}`);
+    error.status = res.status;
+    error.body = body;
+    throw error;
+  }
+  return res.json();
+}
+
 // ── Calendar read wrapper (network; injectable fetch) — READ ONLY ─────────────
 // One-way: reads events, never creates or edits them (no write wrapper exists).
 const CALENDAR_BASE = 'https://www.googleapis.com/calendar/v3';
@@ -543,6 +557,56 @@ function parseGmailMessage(raw) {
     labelIds: raw?.labelIds || [],
     text: (text.trim() || raw?.snippet || ''),
   };
+}
+
+export function stripQuotedReply(text) {
+  const original = String(text || '').trim();
+  const cappedOriginal = original.slice(0, MAX_CORR_BODY);
+  let lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
+  if (/^WARNING - External Email/i.test(lines[0] || '')) lines = lines.slice(1);
+
+  const isOriginalMessageMarker = (line) => {
+    const value = line.trim();
+    let first = 0;
+    let last = value.length - 1;
+    while (value[first] === '-') first++;
+    while (value[last] === '-') last--;
+    return first >= 2 && value.length - last - 1 >= 2
+      && value.slice(first, last + 1).trim().toLowerCase() === 'original message';
+  };
+
+  let cutAt = lines.length;
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+    const next = lines[index + 1] || '';
+    const onWrote = /^On .{5,200} wrote:$/.test(line.trimEnd())
+      || (/^On .{5,200}$/.test(line.trimEnd()) && next.trim() === 'wrote:');
+    const originalMessage = isOriginalMessageMarker(line);
+    const underscoreRule = line.length >= 10 && !line.replaceAll('_', '').length;
+    const forwardedHeaders = /^From:/i.test(line)
+      && lines.slice(index + 1, index + 4).some(candidate => /^(Sent|Date):/i.test(candidate));
+    if (onWrote || originalMessage || underscoreRule || forwardedHeaders || line.startsWith('>')) {
+      cutAt = index;
+      break;
+    }
+  }
+
+  const retained = [];
+  let blanks = 0;
+  for (const line of lines.slice(0, cutAt)) {
+    if (/reply directly to this message or click/i.test(line)) continue;
+    if (!line.trim()) {
+      blanks++;
+      if (blanks <= 2) retained.push('');
+    } else {
+      blanks = 0;
+      retained.push(line);
+    }
+  }
+  const cleaned = retained.join('\n')
+    .trim()
+    .slice(0, MAX_CORR_BODY);
+  return cleaned || cappedOriginal;
 }
 
 // Pull the bare address out of a "Name <alex@example.test>" header value.
