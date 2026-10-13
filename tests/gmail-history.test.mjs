@@ -3,6 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import { makeSandbox } from './helpers/sandbox.mjs';
+import { localStamp } from '../lib/local-date.mjs';
 
 const sandbox = makeSandbox('gmail-history');
 process.env.TJK_DATA_DIR = sandbox;
@@ -163,7 +164,11 @@ try {
   'backfill continues after a Gmail failure and skips automated mail');
   const correspondencePath = path.join(sandbox, 'target-talent-correspondence', '900001.md');
   const correspondence = fs.readFileSync(correspondencePath, 'utf8');
-  check(correspondence.indexOf('2025-04-07 08:00') < correspondence.indexOf('2025-04-08 10:30'),
+  // The expected stamps follow the machine's own timezone, so this passes on any runner.
+  const olderStamp = localStamp(new Date('Mon, 7 Apr 2025 08:00:00 -0500'));
+  const newerStamp = localStamp(new Date('Tue, 8 Apr 2025 10:30:00 -0500'));
+  check(correspondence.includes(olderStamp) && correspondence.includes(newerStamp)
+    && correspondence.indexOf(olderStamp) < correspondence.indexOf(newerStamp),
     'backfill logs oldest first with original local stamps');
 
   response = await post('/api/google/history/backfill', { personRef: 'ta:900001', appId: 900001, msgIds: ['older', 'newer'] });
