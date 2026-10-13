@@ -46,6 +46,7 @@ import { router as systemRoutes, updateJobs } from './routes/system.mjs';
 import { router as sequencesRoutes } from './routes/sequences.mjs';
 import { router as searchRoutes } from './routes/search.mjs';
 import { router as peopleRoutes } from './routes/people.mjs';
+import { router as personMessagesRoutes } from './routes/person-messages.mjs';
 import { getIdentity, getArchetypeNames } from './lib/profile.mjs';
 import { catchUpEventStore } from './lib/event-store-startup.mjs';
 
@@ -228,6 +229,7 @@ app.use(systemRoutes);
 app.use(sequencesRoutes);
 app.use(searchRoutes);
 app.use(peopleRoutes);
+app.use(personMessagesRoutes);
 
 // Public identity for the frontend's signature blocks, so no name/email/phone
 // is hardcoded in the client bundle. Reads config/profile.yml via the cached
