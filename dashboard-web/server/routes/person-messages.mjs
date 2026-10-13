@@ -55,8 +55,8 @@ router.post('/api/applications/:id/messages', (req, res) => {
     let result;
     let renderPending = {};
     try {
-      const { personRef, direction, channel, subject, body } = req.body || {};
-      result = logPersonMessage({ personRef, direction, channel, subject, body, appNum });
+      const { personRef, direction, channel, subject, body, backfill, sentAt, withFollowup } = req.body || {};
+      result = logPersonMessage({ personRef, direction, channel, subject, body, backfill, sentAt, withFollowup, appNum });
     } catch (error) {
       if (error.code === 'BAD_PERSON' || error.code === 'BAD_INPUT') {
         return res.status(400).json({ error: error.message });

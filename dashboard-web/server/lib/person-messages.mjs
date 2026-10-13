@@ -38,6 +38,39 @@ function personName(personRef, taRows, referralRows) {
   return person?.name || '';
 }
 
+function validateBackfillStamp(sentAt) {
+  const value = String(sentAt || '');
+  const match = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(value);
+  if (!match) throw codedError('BAD_INPUT', 'sentAt must be a local timestamp in YYYY-MM-DD HH:MM format');
+  const [, year, month, day, hour, minute] = match.map(Number);
+  const date = new Date(0);
+  date.setFullYear(year, month - 1, day);
+  date.setHours(hour, minute, 0, 0);
+  if (date.getFullYear() !== year
+    || date.getMonth() !== month - 1
+    || date.getDate() !== day
+    || date.getHours() !== hour
+    || date.getMinutes() !== minute) {
+    throw codedError('BAD_INPUT', 'sentAt must be a real local calendar date and time');
+  }
+  if (value > localStamp()) throw codedError('BAD_INPUT', 'sentAt cannot be later than now');
+  return value;
+}
+
+function laterLastTouch(current, candidate) {
+  return !current || candidate > current ? candidate : current;
+}
+
+function isDuplicateBackfill(messages, entry) {
+  const subject = entry.subject.trim().toLowerCase();
+  // Same minute, not just the same day: two real replies in one thread share a
+  // subject and a date, and only an exact send time says they are one message.
+  const minute = entry.timestamp.slice(0, 16);
+  return messages.some(message => String(message.timestamp || '').slice(0, 16) === minute
+    && message.direction === entry.direction
+    && String(message.subject || '').trim().toLowerCase() === subject);
+}
+
 export function logPersonMessage({
   personRef,
   appNum,
@@ -47,6 +80,9 @@ export function logPersonMessage({
   body,
   today = localToday(),
   stamp = localStamp(),
+  backfill = false,
+  sentAt,
+  withFollowup = true,
 } = {}) {
   const match = /^(ta|referral):(\d+)$/.exec(String(personRef || ''));
   if (!match) throw codedError('BAD_PERSON', 'personRef must identify an existing TA or referral person');
@@ -55,6 +91,8 @@ export function logPersonMessage({
   const cleanBody = String(body || '').trim();
   if (!['Sent', 'Received'].includes(direction)) throw codedError('BAD_INPUT', 'direction must be Sent or Received');
   if (!cleanSubject || !cleanBody) throw codedError('BAD_INPUT', 'subject and body required');
+  const backfillStamp = backfill ? validateBackfillStamp(sentAt) : null;
+  const touchDate = backfill ? backfillStamp.slice(0, 10) : today;
 
   const normalizedChannel = channel === 'LinkedIn' ? 'LinkedIn' : 'Email';
   const id = Number(match[2]);
@@ -82,57 +120,78 @@ export function logPersonMessage({
   }
   const name = personName(personRef, taRows, referralRows)
     || (source === 'ta' ? `${row.first || ''} ${row.last || ''}`.trim() : row.name || '');
-  const entry = { timestamp: stamp, direction, channel: normalizedChannel, subject: cleanSubject, body: cleanBody };
+  const entry = { timestamp: backfill ? backfillStamp : stamp, direction, channel: normalizedChannel, subject: cleanSubject, body: cleanBody };
   const link = source === 'referral' ? resolveReferralLink(row, taRows) : null;
-  let result = { ok: true, personRef, linkedTo: link ? `ta:${link.contact.id}` : null, followupN: null };
+  let result = {
+    ok: true,
+    personRef,
+    linkedTo: link ? `ta:${link.contact.id}` : null,
+    followupN: null,
+    ...(backfill ? { backfilled: true } : {}),
+  };
 
   const save = () => {
     if (source === 'ta') {
       const messages = readTTCorrespondence(id);
+      if (backfill && isDuplicateBackfill(messages, entry)) {
+        return { ok: true, skipped: 'duplicate', personRef };
+      }
       messages.push(entry);
       writeTTCorrespondence(id, messages);
-      const stages = { 'Not Contacted': 0, '': 0, Drafted: 1, Sent: 2, Replied: 3, 'Meeting Scheduled': 4, Connected: 5 };
-      const current = stages[row.status || ''] ?? 0;
-      const isHumanReply = direction === 'Received' && classifyInbound(entry) === 'human';
-      let status = row.status;
-      if (direction === 'Sent' && current < 2) status = 'Sent';
-      else if (isHumanReply && current < 3) status = 'Replied';
-      updateTTLine(id, { status, lastTouch: today });
-      applyTargetTalentCorrespondenceSideEffects({
-        contact: row,
-        id,
-        message: entry,
-        isHumanReply,
-        today,
-      });
+      if (backfill) {
+        updateTTLine(id, { lastTouch: laterLastTouch(row.lastTouch, touchDate) });
+      } else {
+        const stages = { 'Not Contacted': 0, '': 0, Drafted: 1, Sent: 2, Replied: 3, 'Meeting Scheduled': 4, Connected: 5 };
+        const current = stages[row.status || ''] ?? 0;
+        const isHumanReply = direction === 'Received' && classifyInbound(entry) === 'human';
+        let status = row.status;
+        if (direction === 'Sent' && current < 2) status = 'Sent';
+        else if (isHumanReply && current < 3) status = 'Replied';
+        updateTTLine(id, { status, lastTouch: today });
+        applyTargetTalentCorrespondenceSideEffects({
+          contact: row,
+          id,
+          message: entry,
+          isHumanReply,
+          today,
+        });
+      }
     } else {
       if (link) {
         const messages = readTTCorrespondence(link.contact.id);
+        if (backfill && isDuplicateBackfill(messages, entry)) {
+          return { ok: true, skipped: 'duplicate', personRef };
+        }
         messages.push(entry);
         writeTTCorrespondence(link.contact.id, messages);
-        updateTTLine(link.contact.id, { lastTouch: today });
+        updateTTLine(link.contact.id, {
+          lastTouch: backfill ? laterLastTouch(link.contact.lastTouch, touchDate) : today,
+        });
       } else {
         const messages = readReferralCorrespondence(id);
+        if (backfill && isDuplicateBackfill(messages, entry)) {
+          return { ok: true, skipped: 'duplicate', personRef };
+        }
         messages.push(entry);
         writeReferralCorrespondence(id, messages);
       }
-      const updates = { lastTouch: today };
-      if (row.status === 'Not Asked' || !row.status) updates.status = 'Catching Up';
-      else if (direction === 'Received' && row.status === 'Asked') updates.status = 'Responded';
+      const updates = { lastTouch: backfill ? laterLastTouch(row.lastTouch, touchDate) : today };
+      if (!backfill && (row.status === 'Not Asked' || !row.status)) updates.status = 'Catching Up';
+      else if (!backfill && direction === 'Received' && row.status === 'Asked') updates.status = 'Responded';
       updateReferralLine(id, updates);
     }
 
-    if (direction === 'Sent' && app) {
+    if (direction === 'Sent' && app && (!backfill || withFollowup !== false)) {
       result = {
         ...result,
         followupN: appendFollowupRow({
           appNum: app.id,
-          date: today,
+          date: touchDate,
           company: app.company,
           role: app.role,
           channel: normalizedChannel,
           contact: name,
-          notes: `Cross-logged from person card · Subject: ${cleanSubject}`,
+          notes: `Cross-logged from person card · Subject: ${cleanSubject}${backfill ? ' · backfilled' : ''}`,
         }),
       };
     }
