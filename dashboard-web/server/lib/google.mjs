@@ -379,17 +379,23 @@ async function listMessages({ q = '', accessToken, max = 50, fetchImpl = fetch }
   const j = await res.json();
   return j.messages || []; // [{ id, threadId }]
 }
-async function getMessage({ id, accessToken, fetchImpl = fetch } = {}) {
+async function getMessage({ id, accessToken, fetchImpl = fetch, format = 'full', metadataHeaders = [] } = {}) {
   // This value reaches the client from an HTTP route parameter, and the request
   // carries the user's OAuth token. A fixed host does not make its path safe, so
   // constrain the id before any request for the same reason SAFE_SLUG does in
   // lib/portal-additions.mjs, then keep encoding it at the interpolation boundary.
   if (!GMAIL_ID.test(String(id ?? ''))) throw new Error('Gmail get failed (bad message id)');
-  const url = `${GMAIL_BASE}/messages/${encodeURIComponent(id)}?format=full`;
+  const safeFormat = ['full', 'metadata', 'minimal', 'raw'].includes(format) ? format : 'full';
+  const params = new URLSearchParams({ format: safeFormat });
+  for (const header of metadataHeaders || []) params.append('metadataHeaders', String(header));
+  const url = `${GMAIL_BASE}/messages/${encodeURIComponent(id)}?${params}`;
   const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`Gmail get failed (${res.status}): ${body.slice(0, 300)}`);
+    const error = new Error(`Gmail get failed (${res.status}): ${body.slice(0, 300)}`);
+    error.status = res.status;
+    error.body = body;
+    throw error;
   }
   return res.json();
 }

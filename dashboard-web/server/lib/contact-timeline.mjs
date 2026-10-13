@@ -88,7 +88,7 @@ function senderEmail(sender) {
 // An ATS often sends as the same mailbox on a company subdomain
 // (pat@recruiting.examplecorp.test for pat@examplecorp.test). Same local part plus
 // a subdomain of the person's own domain counts; anything looser does not.
-function senderMatches(sender, emails) {
+export function senderMatches(sender, emails) {
   const address = senderEmail(sender);
   if (emails.includes(address)) return true;
   const [local, domain] = address.split('@');

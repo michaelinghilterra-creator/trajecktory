@@ -150,6 +150,7 @@ export const SYSTEM_PATHS = [
   'archive-discarded.mjs',
   'audit-discards.mjs',
   'audit-orphan-reports.mjs',
+  'audit-unlogged-mail.mjs',
   'auto-discard-low.mjs',
   'backfill-bounces.mjs',
   'backfill-connect-ids.mjs',
