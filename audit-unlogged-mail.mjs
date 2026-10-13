@@ -6,6 +6,7 @@ import {
   listMessages,
   getMessage,
   parseGmailMessage,
+  fetchProfileEmail,
 } from './dashboard-web/server/lib/google.mjs';
 import { parseTargetTalentMd, readTTCorrespondence } from './dashboard-web/server/lib/target-talent.mjs';
 import {
@@ -16,6 +17,7 @@ import {
 import { parseFollowupsMd } from './dashboard-web/server/lib/followups.mjs';
 import { readAppNotes } from './dashboard-web/server/lib/notes.mjs';
 import { senderMatches } from './dashboard-web/server/lib/contact-timeline.mjs';
+import { getIdentity } from './dashboard-web/server/lib/profile.mjs';
 
 const DAY_MS = 86400000;
 const MAX_PER_QUERY = 500;
@@ -34,6 +36,7 @@ const defaultReaders = {
   listMessages,
   getMessage,
   parseMessage: parseGmailMessage,
+  readCandidateEmail: () => getIdentity().email,
 };
 
 function localDate(value) {
@@ -97,11 +100,11 @@ function namesPerson(contact, name) {
     && candidateTokens.at(-1) === personTokens.at(-1);
 }
 
-function contactIndex(taRows, referralRows) {
+function contactIndex(taRows, referralRows, ownEmails) {
   const index = new Map();
   const add = (email, person) => {
     const clean = normalizeEmail(email);
-    if (!clean.includes('@')) return;
+    if (!clean.includes('@') || ownEmails.has(clean)) return;
     if (!index.has(clean)) index.set(clean, []);
     index.get(clean).push(person);
   };
@@ -232,6 +235,7 @@ export async function runAudit({
   since,
   fetchImpl = fetch,
   getToken = getAccessToken,
+  getProfileEmail = fetchProfileEmail,
   now = new Date(),
   readers = {},
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
@@ -246,8 +250,13 @@ export async function runAudit({
   const referralRows = source.readReferrals() || [];
   const followups = source.readFollowups() || [];
   const appNotes = source.readAppNotes() || {};
-  const index = contactIndex(taRows, referralRows);
   const accessToken = await getToken({ fetchImpl });
+  const gmailEmail = await getProfileEmail({ accessToken, fetchImpl });
+  const ownEmails = new Set([
+    normalizeEmail(source.readCandidateEmail()),
+    normalizeEmail(gmailEmail),
+  ].filter(email => email.includes('@')));
+  const index = contactIndex(taRows, referralRows, ownEmails);
   const queries = [
     { direction: 'Sent', query: `in:sent after:${sinceDate}` },
     { direction: 'Received', query: `in:inbox after:${sinceDate}` },
@@ -272,7 +281,7 @@ export async function runAudit({
         ? addresses([message.to, rawHeader(raw, 'Cc')].filter(Boolean).join(', '))
         : addresses(message.from);
       const people = new Map();
-      for (const address of candidates) {
+      for (const address of candidates.filter(address => !ownEmails.has(normalizeEmail(address)))) {
         for (const person of matchingPeople(address, index)) people.set(person.ref, person);
       }
       for (const person of people.values()) {

@@ -32,7 +32,7 @@ const referralRows = [
   { id: 41, name: 'Robin Lake', where: 'Contoso Devices', email: 'robin@contoso.example.test', notes: 'from TA Outreach #32' },
 ];
 
-async function audit({ sentPages = [[]], inboxPages = [[]], raw = {}, correspondence = {}, followups = [], appNotes = {}, detailResponse, sleep = async () => {} }) {
+async function audit({ sentPages = [[]], inboxPages = [[]], raw = {}, correspondence = {}, followups = [], appNotes = {}, detailResponse, sleep = async () => {}, ta = taRows, referrals = referralRows, candidateEmail = '', gmailProfileEmail = '' }) {
   const listCalls = [];
   const detailCalls = [];
   const fetchImpl = async (url) => {
@@ -68,14 +68,16 @@ async function audit({ sentPages = [[]], inboxPages = [[]], raw = {}, correspond
     now: new Date('2032-02-01T12:00:00Z'),
     fetchImpl,
     getToken: async () => 'fixture-token',
+    getProfileEmail: async () => gmailProfileEmail,
     sleep,
     readers: {
-      readTa: () => taRows,
-      readReferrals: () => referralRows,
+      readTa: () => ta,
+      readReferrals: () => referrals,
       readTaCorrespondence: id => correspondence[`ta:${id}`] || [],
       readReferralCorrespondence: id => correspondence[`referral:${id}`] || [],
       readFollowups: () => followups,
       readAppNotes: () => appNotes,
+      readCandidateEmail: () => candidateEmail,
       resolveReferralLink: row => row.id === 41 ? { source: 'ta', contact: taRows[1] } : null,
     },
   });
@@ -207,6 +209,29 @@ async function audit({ sentPages = [[]], inboxPages = [[]], raw = {}, correspond
     },
   });
   check(result.checked === 7 && peak === 3, 'message metadata fetches use at most three concurrent workers');
+}
+
+{
+  const selfRows = [
+    ...taRows,
+    { id: 91, first: 'Casey', last: 'Owner', company: 'Personal', email: 'candidate.owner@example.test' },
+    { id: 92, first: 'Casey', last: 'Mailbox', company: 'Personal', email: 'connected.mailbox@example.test' },
+  ];
+  const raw = {
+    selfSent: gmailMessage('selfSent', { to: 'Casey Owner <candidate.owner@example.test>', subject: 'Copy to myself', date: 'Thu, 27 Feb 2032 09:00:00 +0000' }),
+    knownSent: gmailMessage('knownSent', { to: 'Pat River <pat@northwind.example.test>', subject: 'Known contact', date: 'Fri, 28 Feb 2032 09:00:00 +0000' }),
+    selfInbox: gmailMessage('selfInbox', { from: 'Casey Mailbox <connected.mailbox@example.test>', subject: 'Mailbox copy', date: 'Sat, 29 Feb 2032 09:00:00 +0000' }),
+  };
+  const { result } = await audit({
+    sentPages: [[{ id: 'selfSent' }, { id: 'knownSent' }]],
+    inboxPages: [[{ id: 'selfInbox' }]],
+    raw,
+    ta: selfRows,
+    candidateEmail: 'CANDIDATE.OWNER@example.test',
+    gmailProfileEmail: 'connected.mailbox@example.test',
+  });
+  check(result.checked === 1 && result.missing.length === 1 && result.missing[0]?.subject === 'Known contact',
+    'candidate and connected Gmail addresses are excluded as contacts, recipients, and senders');
 }
 
 console.log(`\naudit-unlogged-mail: ${passed} passed, ${failed} failed`);
