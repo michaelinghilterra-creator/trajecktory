@@ -115,6 +115,7 @@ async function worker() {
       const { router: googleRouter } = await import('../dashboard-web/server/routes/google.mjs');
       response = await request(googleRouter, 'POST', '/api/google/replies/example-msg-900001/rejected', {
         appId: 900001, company: 'Zorblax Widgetry', from: 'Example Persontwo <example.persontwo@example.test>',
+        contact: { source: 'ta', id: 900001, company: 'Examplecorp', name: 'Alex Rivera' },
         subject: 'Invented pending decision', bodyPreview: 'Invented pending reply', date: '2030-04-10T12:00:00Z', threadId: 'example-thread-900001',
       });
     }

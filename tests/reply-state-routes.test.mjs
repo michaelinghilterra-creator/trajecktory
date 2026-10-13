@@ -24,6 +24,7 @@ fs.writeFileSync(path.join(sandbox, 'google-sync.json'), JSON.stringify({
   lastPreviewAt: '2030-03-02T00:00:00.000Z',
 }, null, 2) + '\n');
 fs.writeFileSync(path.join(sandbox, 'event-store.json'), JSON.stringify({ writes: 'on', flipped_at: '2030-03-01T00:00:00.000Z' }));
+fs.writeFileSync(path.join(sandbox, 'target-talent.md'), '| 900001 | Examplecorp | Rivera | Alex | | Talent Lead | | | | | alex.rivera@example.test | | Not Contacted | | | |\n', 'utf8');
 
 const { openEventStore, readEvents } = await import('../lib/event-store.mjs');
 const { appendEventsWithEffects, renderLegacyFile } = await import('../lib/legacy-files.mjs');
@@ -116,6 +117,7 @@ try {
   r = await send('POST', '/api/google/replies/m910003/log', {
     appId: 900003,
     company: 'Quennox Ratchet Works',
+    contact: { source: 'ta', id: 900001, company: 'Examplecorp', name: 'Alex Rivera' },
     from: 'Other <other@example.test>',
     subject: 'Example follow up',
     bodyPreview: 'Invented human reply.',

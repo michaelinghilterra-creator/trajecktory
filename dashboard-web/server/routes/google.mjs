@@ -5,10 +5,11 @@ import {
   readTokens, writeTokens, readSync, writeSync, replyDecisionsViaEvents, googleStatus, checkHealth, clientConfigured,
   getAccessToken, listMessages, fetchMessagesConcurrent, scanDecisions, heldBackBounceIds,
   buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState, rankCandidateApps, createDraft,
-  getMessage, parseGmailMessage, extractEmail, logReplyToContact, previewEntry,
+  getMessage, parseGmailMessage, extractEmail, parseFromHeader, isAtsRelayAddress, logReplyToContact, previewEntry,
   getTodayCalendarEvents,
 } from '../lib/google.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
+import { parseReferralsMd } from '../lib/referrals.mjs';
 import { DATA_DIR, PORT, TT_CORR_DIR } from '../config.mjs';
 import { patchRowInMd, parseApplicationsMd } from '../lib/applications.mjs';
 import { addNote, findNoteByMsgId } from '../lib/notes.mjs';
@@ -444,7 +445,7 @@ router.get('/api/google/replies/unmatched', (req, res) => {
 router.post('/api/google/replies/:msgId/:action', async (req, res) => {
   try {
     const { msgId, action } = req.params;
-    const { appId, company, contact, sentiment, from, subject, snippet, bodyPreview, date, threadId } = req.body || {};
+    const { appId, company, contact, sentiment, from, fromName, subject, snippet, bodyPreview, date, threadId } = req.body || {};
     const today = localToday();
     // Best-effort: the log/status may already be written, so a sync failure must not 500.
     const markHandled = (rec) => {
@@ -531,6 +532,33 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
       const accessToken = await getAccessToken({ tokens });
       message = parseGmailMessage(await getMessage({ id: msgId, accessToken }));
     } catch { /* request fields are the fallback when Gmail is unavailable */ }
+
+    const guardedAction = action === 'log' || action === 'rejected' || INTERVIEW_STAGES.includes(action);
+    if (guardedAction) {
+      const usableContact = contact && typeof contact === 'object' && !Array.isArray(contact)
+        && (contact.source === 'ta' || contact.source === 'referral');
+      const contactId = usableContact ? parseInt(contact.id, 10) : NaN;
+      const validContact = usableContact && Number.isFinite(contactId) && contactId > 0;
+      const contactRows = validContact
+        ? (contact.source === 'ta' ? parseTargetTalentMd() : parseReferralsMd())
+        : [];
+      const contactExists = validContact && contactRows.some(row => row.id === contactId);
+      if (!contactExists) {
+        const headerName = parseFromHeader(message.from).name;
+        const fallbackName = typeof fromName === 'string'
+          ? fromName.trim().split(/\s+/).filter(Boolean).join(' ').slice(0, 120)
+          : '';
+        const senderAddress = extractEmail(message.from) || from || '';
+        return res.status(409).json({
+          error: 'No contact is on file for this sender. Create one, or pick an existing person, before logging this reply.',
+          needsContact: true,
+          reason: validContact ? 'not_found' : 'missing',
+          suggestedName: headerName || fallbackName,
+          suggestedEmail: isAtsRelayAddress(senderAddress) ? '' : senderAddress,
+          company: company || '',
+        });
+      }
+    }
 
     // E-3: ask before attaching. More than one application at this employer needs an explicit pick, and a message
     // older than the application or an automated one needs an acknowledgement (or log it as neutral / dismiss it).

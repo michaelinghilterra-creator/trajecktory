@@ -21,6 +21,7 @@ fs.writeFileSync(path.join(sandbox, 'applications.md'),
   'utf8');
 fs.writeFileSync(path.join(sandbox, 'apply-dates.json'), JSON.stringify({ 900001: '2030-03-04', 900002: '2030-03-05', 900003: '2030-03-05' }, null, 2) + '\n');
 fs.writeFileSync(notesPath, '{}\n', 'utf8');
+fs.writeFileSync(path.join(sandbox, 'target-talent.md'), '| 900001 | Examplecorp | Rivera | Alex | | Talent Lead | | | | | alex.rivera@example.test | | Not Contacted | | | |\n', 'utf8');
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = (url, options) => (String(url).startsWith('http://127.0.0.1:') ? nativeFetch(url, options) : Promise.reject(new Error('no network in this test')));
@@ -46,7 +47,14 @@ const post = (msgId, action, body) => fetch(`${base}/api/google/replies/${msgId}
 const get = (url) => fetch(`${base}${url}`).then(async r => ({ status: r.status, body: await r.json() }));
 const notes = () => JSON.parse(fs.readFileSync(notesPath, 'utf8'));
 const sync = () => JSON.parse(fs.readFileSync(syncPath, 'utf8'));
-const human = (extra = {}) => ({ from: 'Example Personone <example.personone@zorblax.example>', subject: 'Next steps', bodyPreview: 'Invented reply.', date: '2030-03-12T15:00:00Z', ...extra });
+const human = (extra = {}) => ({
+  contact: { source: 'ta', id: 900001, company: 'Examplecorp', name: 'Alex Rivera' },
+  from: 'Alex Rivera <alex.rivera@example.test>',
+  subject: 'Next steps',
+  bodyPreview: 'Invented reply.',
+  date: '2030-03-12T15:00:00Z',
+  ...extra,
+});
 
 console.log('reply-prompts-route.test.mjs');
 try {
