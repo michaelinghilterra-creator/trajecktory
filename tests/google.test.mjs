@@ -239,6 +239,7 @@ check(soft && soft.flip === null, 'soft bounce produces no flip (transient, neve
 const rep = dec.replies.find(r => r.msgId === 'm-reply');
 check(rep && rep.contact?.source === 'ta' && rep.sentiment === 'positive', 'reply from a known contact routed with sentiment');
 check(rep?.fromName === 'Example Personone', 'reply scan entries carry the parsed sender name');
+check(rep?.fromIsRelay === false, 'a scanned reply from a normal sender is not marked as relay mail');
 check(dec.other.some(o => o.msgId === 'm-other'), 'reply from an unknown sender surfaced as other, not dropped');
 
 // ── matchByCompanyDomain (tier-2: unknown sender, known company) ──────────────
@@ -485,6 +486,7 @@ const atsGuess = decAts.other.find(o => o.msgId === 'm-ats');
 check(atsGuess && atsGuess.companyGuess?.appId === 900103, 'scanDecisions subject-matches an ATS-sent email the domain tier cannot');
 check(atsGuess && atsGuess.companyGuess?.confidence === 'subject', 'the subject-tier guess is labeled');
 check(atsGuess && atsGuess.sentiment === 'negative', 'the ATS rejection is still classified negative');
+check(atsGuess?.fromIsRelay === true, 'a scanned reply from a relay sender is marked as relay mail');
 check(rep && rep.threadId === 't1', 'reply decisions carry the Gmail thread id');
 
 const gmailNoteMeta = { msgId: 'msg-note-1', threadId: 'thread-note-1', sender: 'talent@northwind.example' };

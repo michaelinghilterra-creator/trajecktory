@@ -850,6 +850,7 @@ function scanDecisions({ messages = [], taRows = [], apps = [], applyDates = {} 
     const entry = {
       msgId: msg.id, threadId: msg.threadId, from: fromAddr, subject: msg.subject, date: msg.date,
       fromName: parseFromHeader(msg.from).name,
+      fromIsRelay: isAtsRelayAddress(fromAddr || ''),
       sentiment: suggestSentiment({ subject: msg.subject, text: msg.text, sender: fromAddr }),
       contact, companyGuess, snippet: msg.snippet, body: msg.text,
     };

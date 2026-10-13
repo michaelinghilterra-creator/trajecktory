@@ -29,12 +29,23 @@ check(pipeline.includes('`/api/applications/${app.id}/messages`') && pipeline.in
 check(/messagePeopleGenerationRef\.current\s*===\s*generation/.test(pipeline), 'application drawer people fetch ignores stale responses');
 
 check(review.includes('/api/people/by-company/'), 'Gmail reply review loads company people');
+const replyStart = review.indexOf('function ReplyRow');
 const unmatchedStart = review.indexOf('function UnmatchedList');
+const replySource = replyStart > -1 && unmatchedStart > replyStart ? review.slice(replyStart, unmatchedStart) : '';
 const unmatchedSource = unmatchedStart > -1 ? review.slice(unmatchedStart) : '';
 check(/contact:\s*reviewContact\(person\)/.test(unmatchedSource), 'unmatched Attach includes the selected contact');
 check(/const company = app\?\.company \|\| item\.company/.test(unmatchedSource), "unmatched replies fetch people from the item's company fallback");
 check(/peopleGenerationRef\.current\s*===\s*generation/.test(review), 'reply-row people fetch ignores stale responses');
 check(/setPersonRef\(''\);\s*setPeople\(\[\]\)/.test(review), 'reply row clears prior-application people before reloading');
+check(review.includes("fetch('/api/people/create'"), 'reply review creates a person through the people endpoint');
+check(review.includes('Create and log'), 'reply review shows the create and log action');
+check(replySource.includes('<NewPersonCard'), 'ReplyRow uses the shared NewPersonCard');
+check(unmatchedSource.includes('<NewPersonCard'), 'UnmatchedList uses the shared NewPersonCard');
+check(replySource.includes('<option value="__new__">+ New person</option>'), 'ReplyRow person picker offers a new person');
+check(unmatchedSource.includes('<option value="__new__">+ New person</option>'), 'UnmatchedList person picker offers a new person');
+check(replySource.includes('res.needsContact'), 'ReplyRow handles a needsContact refusal');
+check(/action === 'unmatched'[\s\S]{0,250}fromName:\s*reply\.fromName \|\| ''/.test(replySource), 'ReplyRow sends fromName when parking an unmatched reply');
+check(/const actionContact = extra\.contact \|\| contact/.test(replySource), 'ReplyRow accepts extra.contact as a contact override');
 
 console.log(`person-picker-ui: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

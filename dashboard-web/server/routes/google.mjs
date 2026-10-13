@@ -428,7 +428,12 @@ router.get('/api/google/replies/unmatched', (req, res) => {
     const applyDates = readApplyDates();
     const items = Object.entries(parked).map(([msgId, entry]) => {
       const ranked = rankCandidateApps(entry.company || '', apps, { emailDate: entry.date, subject: entry.subject, applyDates });
-      return { msgId, ...entry, suggestions: ranked.candidates };
+      return {
+        msgId,
+        ...entry,
+        fromIsRelay: isAtsRelayAddress(extractEmail(entry.from) || entry.from || ''),
+        suggestions: ranked.candidates,
+      };
     }).sort((a, b) => String(b.parkedOn || '').localeCompare(String(a.parkedOn || '')));
     res.json({ count: items.length, items });
   } catch (err) {
@@ -497,7 +502,8 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     // until the person attaches it (or dismisses it) from that list.
     if (action === 'unmatched') {
       const entry = {
-        from: from || '', subject: subject || '', date: date || null, threadId: threadId || null,
+        from: from || '', fromName: String(fromName || '').trim().slice(0, 120),
+        subject: subject || '', date: date || null, threadId: threadId || null,
         snippet: String(snippet || bodyPreview || '').slice(0, 400), company: company || '', parkedOn: today,
       };
       try {
