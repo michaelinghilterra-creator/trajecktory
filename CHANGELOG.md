@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.16.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.15.1...v5.16.0) (2026-10-13)
+
+
+### Features
+
+* log every message on the person it was sent to or received from ([#474](https://github.com/michaelinghilterra-creator/trajecktory/issues/474)) ([c9ee556](https://github.com/michaelinghilterra-creator/trajecktory/commit/c9ee5569b91df336ae49e05127f55f4055ed64b8))
+
 ## [5.15.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.15.0...v5.15.1) (2026-10-12)
 
 
