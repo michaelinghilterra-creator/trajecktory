@@ -133,6 +133,73 @@ async function worker() {
     result.messages = tt.readTTCorrespondence(900001);
     result.row = tt.parseTargetTalentMd().find(row => row.id === 900001);
     result.followups = followups.parseFollowupsMd();
+  } else if (action === 'backfill-ta') {
+    tt.updateTTLine(900001, { status: 'Drafted', lastTouch: '2035-06-01' });
+    result.response = await request(router, 'POST', '/api/applications/900003/messages', {
+      personRef: 'ta:900001', direction: 'Sent', channel: 'Email', subject: 'Older widget note', body: 'Older widget body',
+      backfill: true, sentAt: '2035-05-15 09:30',
+    });
+    result.messages = tt.readTTCorrespondence(900001);
+    result.row = tt.parseTargetTalentMd().find(row => row.id === 900001);
+    result.followups = followups.parseFollowupsMd();
+  } else if (action === 'backfill-advances-last-touch') {
+    tt.updateTTLine(900001, { status: 'Replied', lastTouch: '2035-04-01' });
+    result.response = await request(router, 'POST', '/api/applications/900003/messages', {
+      personRef: 'ta:900001', direction: 'Received', channel: 'Email', subject: 'Older reply', body: 'Older reply body',
+      backfill: true, sentAt: '2035-05-15 10:45',
+    });
+    result.row = tt.parseTargetTalentMd().find(row => row.id === 900001);
+  } else if (action === 'backfill-side-effects') {
+    const sequences = await import('../dashboard-web/server/lib/sequences.mjs');
+    const connects = await import('../dashboard-web/server/lib/connects.mjs');
+    const linkedin = await import('../dashboard-web/server/lib/tt-linkedin.mjs');
+    sequences.startSequence('ta', 900001, 'application-day-0-1-5-12', '2035-06-01');
+    result.beforeSequence = sequences.getSequence('ta', 900001);
+    result.response = await request(router, 'POST', '/api/applications/900003/messages', {
+      personRef: 'ta:900001', direction: 'Sent', channel: 'LinkedIn', subject: 'Older LinkedIn note', body: 'Older LinkedIn body',
+      backfill: true, sentAt: '2035-05-15 11:15',
+    });
+    result.afterSequence = sequences.getSequence('ta', 900001);
+    result.connects = connects.readConnects();
+    result.linkedinStatus = linkedin.getLinkedInStatus(900001);
+  } else if (action === 'backfill-duplicate') {
+    const message = {
+      personRef: 'ta:900001', direction: 'Sent', channel: 'Email', subject: 'Duplicate widget note', body: 'First body',
+      backfill: true, sentAt: '2035-05-16 08:00',
+    };
+    result.first = await request(router, 'POST', '/api/applications/900003/messages', message);
+    result.second = await request(router, 'POST', '/api/applications/900003/messages', {
+      ...message, subject: '  DUPLICATE WIDGET NOTE  ', body: 'Second body', sentAt: '2035-05-16 08:00',
+    });
+    result.third = await request(router, 'POST', '/api/applications/900003/messages', {
+      ...message, body: 'Later same-day reply', sentAt: '2035-05-16 17:00',
+    });
+    result.messages = tt.readTTCorrespondence(900001);
+    result.followups = followups.parseFollowupsMd();
+  } else if (action === 'backfill-no-followup') {
+    result.response = await request(router, 'POST', '/api/applications/900003/messages', {
+      personRef: 'ta:900001', direction: 'Sent', channel: 'Email', subject: 'No follow-up note', body: 'No follow-up body',
+      backfill: true, sentAt: '2035-05-17 08:00', withFollowup: false,
+    });
+    result.messages = tt.readTTCorrespondence(900001);
+    result.followups = followups.parseFollowupsMd();
+  } else if (action === 'backfill-referral-twin') {
+    tt.updateTTLine(900001, { status: 'Meeting Scheduled', lastTouch: '2035-04-01' });
+    referrals.updateReferralLine(900001, { status: 'Asked', lastTouch: '2035-04-02' });
+    result.response = await request(router, 'POST', '/api/applications/900003/messages', {
+      personRef: 'referral:900001', direction: 'Received', channel: 'Email', subject: 'Twin older reply', body: 'Twin older body',
+      backfill: true, sentAt: '2035-05-18 08:00',
+    });
+    result.taMessages = tt.readTTCorrespondence(900001);
+    result.referralMessages = referrals.readReferralCorrespondence(900001);
+    result.taRow = tt.parseTargetTalentMd().find(row => row.id === 900001);
+    result.referralRow = referrals.parseReferralsMd().find(row => row.id === 900001);
+  } else if (action === 'backfill-route-errors') {
+    const base = { personRef: 'ta:900001', direction: 'Sent', channel: 'Email', subject: 'Route note', body: 'Route body', backfill: true };
+    result.missing = await request(router, 'POST', '/api/applications/900003/messages', base);
+    result.future = await request(router, 'POST', '/api/applications/900003/messages', { ...base, sentAt: '2035-06-08 08:00' });
+    result.invalid = await request(router, 'POST', '/api/applications/900003/messages', { ...base, sentAt: '2035-02-30 08:00' });
+    result.valid = await request(router, 'POST', '/api/applications/900003/messages', { ...base, sentAt: '2035-05-19 08:00' });
   } else if (action === 'errors') {
     result.badPerson = await request(router, 'POST', '/api/applications/900003/messages', {
       personRef: 'ta:999999', direction: 'Sent', subject: 'Widget subject', body: 'Widget body',
@@ -217,6 +284,69 @@ check(internalDates.response.status === 200
   && internalDates.row.lastTouch === '2035-06-07'
   && internalDates.followups[0]?.date === '2035-06-07',
 'request-only date overrides cannot replace generated correspondence, contact, or follow-up dates');
+
+const backfillTa = run('backfill-ta', true);
+check(backfillTa.response.status === 200
+  && backfillTa.response.body.backfilled === true
+  && backfillTa.messages[0]?.timestamp === '2035-05-15 09:30',
+'backfill stores the requested timestamp and returns the backfilled marker with event-store writes on');
+check(backfillTa.row.lastTouch === '2035-06-01' && backfillTa.row.status === 'Drafted',
+'older TA backfill preserves a newer last touch and the existing status');
+check(backfillTa.followups.length === 1
+  && backfillTa.followups[0].date === '2035-05-15'
+  && backfillTa.followups[0].notes.endsWith(' · backfilled'),
+'sent backfill writes a dated and recognisable follow-up row');
+
+const backfillAdvance = run('backfill-advances-last-touch');
+check(backfillAdvance.response.status === 200
+  && backfillAdvance.row.lastTouch === '2035-05-15'
+  && backfillAdvance.row.status === 'Replied',
+'backfill moves an older last touch forward without changing status');
+
+const backfillSideEffects = run('backfill-side-effects');
+check(backfillSideEffects.response.status === 200
+  && backfillSideEffects.beforeSequence?.step === backfillSideEffects.afterSequence?.step
+  && backfillSideEffects.afterSequence?.paused === false,
+'LinkedIn backfill does not advance or pause an active sequence');
+check(backfillSideEffects.linkedinStatus !== 'Invite Pending' && !backfillSideEffects.connects?.length,
+'LinkedIn backfill does not record a connection request or mark an invite pending');
+
+const backfillDuplicate = run('backfill-duplicate');
+check(backfillDuplicate.first.status === 200
+  && backfillDuplicate.second.status === 200
+  && backfillDuplicate.second.body.skipped === 'duplicate',
+'a backfill with the same send minute, direction and subject is reported as a duplicate');
+check(backfillDuplicate.third.status === 200 && !backfillDuplicate.third.body.skipped,
+'a same-day, same-subject message at a different time is kept, not treated as a duplicate');
+check(backfillDuplicate.messages.length === 2 && backfillDuplicate.followups.length === 2,
+'the duplicate writes nothing, and the later same-day message writes its entry and row');
+
+const backfillNoFollowup = run('backfill-no-followup');
+check(backfillNoFollowup.response.status === 200
+  && backfillNoFollowup.response.body.backfilled === true
+  && backfillNoFollowup.messages.length === 1
+  && backfillNoFollowup.followups.length === 0,
+'withFollowup false stores the backfill without a follow-up row');
+
+const backfillTwin = run('backfill-referral-twin');
+check(backfillTwin.response.status === 200
+  && backfillTwin.response.body.linkedTo === 'ta:900001'
+  && backfillTwin.taMessages.length === 1
+  && backfillTwin.referralMessages.length === 0,
+'referral backfill writes correspondence to its TA twin');
+check(backfillTwin.taRow.lastTouch === '2035-05-18'
+  && backfillTwin.taRow.status === 'Meeting Scheduled'
+  && backfillTwin.referralRow.lastTouch === '2035-05-18'
+  && backfillTwin.referralRow.status === 'Asked',
+'referral backfill advances both applicable last touches without changing either status');
+
+const backfillRouteErrors = run('backfill-route-errors');
+check(backfillRouteErrors.missing.status === 400
+  && backfillRouteErrors.future.status === 400
+  && backfillRouteErrors.invalid.status === 400,
+'route rejects missing, future, and impossible backfill timestamps');
+check(backfillRouteErrors.valid.status === 200 && backfillRouteErrors.valid.body.backfilled === true,
+'route accepts a well-formed backfill timestamp');
 
 const errors = run('errors');
 check(errors.badPerson.status === 400, 'bad person ref returns 400');
