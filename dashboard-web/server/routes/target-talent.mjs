@@ -1,16 +1,15 @@
 import express from 'express';
 import { DATA_DIR, ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
-import { advanceSequence, expectedNextChannel, pauseSequence, getSequence, getTemplate, toneForNextTouch } from '../lib/sequences.mjs';
+import { getSequence, getTemplate, toneForNextTouch } from '../lib/sequences.mjs';
 import { generateText, readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
 import { generateWithRubric } from '../lib/draft-grader.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, crossLogAppNums, TT_STATUSES } from '../lib/target-talent.mjs';
+import { applyTargetTalentCorrespondenceSideEffects } from '../lib/target-talent-correspondence.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
-import { appendFollowupRow, contactChannelBucket, parseFollowupsMd } from '../lib/followups.mjs';
-import { logConnect } from '../lib/connects.mjs';
-import { isLinkedInInvite } from '../lib/channels.mjs';
-import { setLinkedInStatus, markInvitePending, isLinkedInState, LINKEDIN_STATES } from '../lib/tt-linkedin.mjs';
+import { appendFollowupRow, parseFollowupsMd } from '../lib/followups.mjs';
+import { setLinkedInStatus, isLinkedInState, LINKEDIN_STATES } from '../lib/tt-linkedin.mjs';
 import { isHighValueContact } from '../lib/followups.mjs';
 import { appendReferralRows, parseReferralsMd } from '../lib/referrals.mjs';
 import { linkedinKey } from '../lib/contact-identity.mjs';
@@ -228,29 +227,13 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
       // Sequence state is a direct sidecar write, not an event-log effect. Its
       // position still matters: a human reply must pause outreach immediately
       // after the contact row update, before any connect or follow-up writes.
-      if (isHumanReply) {
-        try { pauseSequence('ta', id, today); } catch { /* no active sequence, safe to ignore */ }
-      }
-      if (direction === 'Sent') {
-        const active = getSequence('ta', id);
-        if (active && !active.paused && !active.completedAt) {
-          const template = getTemplate(active.sequenceId);
-          const expected = expectedNextChannel(active, template);
-          const sentChannel = channel === 'LinkedIn' ? 'linkedin' : 'email';
-          if (expected && (expected === 'either' || expected === sentChannel)) {
-            const available = contactChannelBucket(r);
-            try {
-              advanceSequence('ta', id, ts.slice(0, 10), sentChannel, {
-                available: { email: available.hasEmail, linkedin: available.hasLinkedIn },
-              });
-            } catch { /* template or entry vanished mid-request, safe to ignore */ }
-          }
-        }
-      }
-      if (direction === 'Sent' && (channel === 'LinkedIn' || isLinkedInInvite(subject))) {
-        logConnect({ name: `${r.first || ''} ${r.last || ''}`.trim(), source: 'ta', id, date: ts.slice(0, 10) });
-        markInvitePending(id, ts.slice(0, 10));
-      }
+      applyTargetTalentCorrespondenceSideEffects({
+        contact: r,
+        id,
+        message,
+        isHumanReply,
+        today,
+      });
       if (direction === 'Sent') {
         const apps = parseApplicationsMd();
         const explicit = [

@@ -555,7 +555,7 @@ function MsgNode({ m }) {
       <div className="msg-node" style={{ borderColor: color, color }}><TIcon d={icon} size={11} /></div>
       <div className="msg-head">
         <span className={"msg-dir " + dir}>{m.kind ? kindLabels[m.kind] || m.kind : label}</span>
-        {m.store && <span className="chip">{m.store === "ta" ? "TA Outreach" : m.store === "referral" ? "Referrals" : "Influencers"}</span>}
+        {m.store && <span className="chip">{m.store === "ta" ? "TA Outreach" : m.store === "referral" ? "Referrals" : m.store === "app" ? `Application #${m.appNum}` : "Influencers"}</span>}
         <span className="msg-subj">{m.subject}</span>
         <span className="msg-date">{m.at || m.timestamp || "not sent"}</span>
       </div>
