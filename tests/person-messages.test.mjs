@@ -16,25 +16,25 @@ const REF_HEADER = '# Referral tracker\n\n| # | Name | How you know them | Where
 function fixture(dir, eventStore = false) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'applications.md'), APP_HEADER
-    + '| 41 | 2035-06-01 | Examplecorp | Example Engineer | 4/5 | Applied |  |  |  | Invented note | https://example.test/jobs/41 |\n');
+    + '| 900003 | 2035-06-01 | Zorblax Widgetry | Widget Operations Lead | 4/5 | Applied |  |  |  | Invented note | https://example.test/jobs/900003 |\n');
   fs.writeFileSync(path.join(dir, 'target-talent.md'), TT_HEADER
-    + '| 1 | Examplecorp | Example | Pat |  | Talent Lead |  |  |  |  | pat@example.test [v:valid:test:2035-06-01] | linkedin.com/in/pat-example | Not Contacted |  | Invented note | example.test |\n'
-    + '| 3 | Othercorp | Other | Pat |  | Other Lead |  |  |  |  | other@example.test | linkedin.com/in/pat-other | Not Contacted |  | Invented note | example.test |\n'
-    + '| 4 | 100% Pure | Percent | Perry |  | People Lead |  |  |  |  | perry@example.test | linkedin.com/in/perry-percent | Not Contacted |  | Invented note | example.test |\n');
+    + '| 900001 | Zorblax Widgetry | Personone | Example |  | Widget Operations Lead |  |  |  |  | personone@example.test [v:valid:test:2035-06-01] | linkedin.com/in/example-personone | Not Contacted |  | Invented note | example.test |\n'
+    + '| 900002 | Quennox Ratchet Works | Persontwo-Ratchet | Example |  | Ratchet Operations Lead |  |  |  |  | persontwo@ratchet.example.test | linkedin.com/in/example-persontwo-ratchet | Not Contacted |  | Invented note | example.test |\n'
+    + '| 900005 | 100% Quennox | Persontwo-Percent | Example |  | Ratchet Operations Lead |  |  |  |  | persontwo@percent.example.test | linkedin.com/in/example-persontwo-percent | Not Contacted |  | Invented note | example.test |\n');
   fs.writeFileSync(path.join(dir, 'referrals.md'), REF_HEADER
-    + '| 1 | Pat Example | Invented colleague | Examplecorp Inc | Example Engineer | Not Asked |  | Talent Lead · from TA Outreach #1 | linkedin.com/in/pat-example | pat@example.test |\n'
-    + '| 2 | Riley Example | Invented colleague | Examplecorp Inc | Example Engineer | Not Asked |  | Engineering Manager · connected 2035-01-01 | linkedin.com/in/riley-example | riley@example.test [v:valid:test:2035-06-01] |\n'
-    + '| 3 | Avery Example | Invented colleague | Othercorp | Other Engineer | Not Asked |  | Other Manager | linkedin.com/in/avery-example | avery@example.test |\n');
+    + '| 900001 | Example Personone | Invented colleague | Zorblax Widgetry Inc | Widget Operations Lead | Not Asked |  | Widget Operations Lead · from TA Outreach #900001 | linkedin.com/in/example-personone | personone@example.test |\n'
+    + '| 900002 | Example Persontwo | Invented colleague | Zorblax Widgetry Inc | Widget Operations Lead | Not Asked |  | Widget Operations Lead · connected 2035-01-01 | linkedin.com/in/example-persontwo | persontwo@example.test [v:valid:test:2035-06-01] |\n'
+    + '| 900003 | Example Persontwo-Ratchet | Invented colleague | Quennox Ratchet Works | Ratchet Operations Lead | Not Asked |  | Ratchet Operations Lead | linkedin.com/in/example-persontwo-ratchet | persontwo@ratchet.example.test |\n');
   fs.writeFileSync(path.join(dir, 'contact-links.json'), JSON.stringify({
     version: 1,
-    pins: { 'ta:1': { with: 'referral:1', by: 'manual', at: '2035-01-01' }, 'referral:1': { with: 'ta:1', by: 'manual', at: '2035-01-01' } },
+    pins: { 'ta:900001': { with: 'referral:900001', by: 'manual', at: '2035-01-01' }, 'referral:900001': { with: 'ta:900001', by: 'manual', at: '2035-01-01' } },
   }, null, 2));
   if (eventStore) {
     fs.writeFileSync(path.join(dir, 'event-store.json'), '{"writes":"on"}\n');
     const outputDir = path.join(dir, 'fixture-output');
     fs.mkdirSync(outputDir);
     const store = openEventStore(path.join(dir, 'trajecktory.db'));
-    importDataFolder(store, { dataDir: dir, outputDir, ownerName: 'Pat Example', definitionsVersion: 'v1', importedOn: '2035-06-01' });
+    importDataFolder(store, { dataDir: dir, outputDir, ownerName: 'Example Personone', definitionsVersion: 'v1', importedOn: '2035-06-01' });
     store.close();
   }
 }
@@ -70,15 +70,15 @@ async function worker() {
   const result = {};
 
   if (action === 'company') {
-    result.response = await request(router, 'GET', '/api/people/by-company/Examplecorp');
+    result.response = await request(router, 'GET', '/api/people/by-company/Zorblax Widgetry');
   } else if (action === 'company-percent') {
-    result.response = await request(router, 'GET', '/api/people/by-company/100%25%20Pure');
+    result.response = await request(router, 'GET', '/api/people/by-company/100%25%20Quennox');
   } else if (action === 'ta-sent' || action === 'event-on') {
-    result.response = await request(router, 'POST', '/api/applications/41/messages', {
-      personRef: 'ta:1', direction: 'Sent', channel: 'email', subject: 'Example subject', body: 'Example body',
+    result.response = await request(router, 'POST', '/api/applications/900003/messages', {
+      personRef: 'ta:900001', direction: 'Sent', channel: 'email', subject: 'Widget subject', body: 'Widget body',
     });
-    result.messages = tt.readTTCorrespondence(1);
-    result.row = tt.parseTargetTalentMd().find(row => row.id === 1);
+    result.messages = tt.readTTCorrespondence(900001);
+    result.row = tt.parseTargetTalentMd().find(row => row.id === 900001);
     result.followups = followups.parseFollowupsMd();
     if (action === 'event-on') {
       const { openDataStore } = await import('../lib/log-writes.mjs');
@@ -86,65 +86,65 @@ async function worker() {
       result.events = readEvents(openDataStore(process.env.TJK_DATA_DIR));
     }
   } else if (action === 'referral-sent') {
-    result.response = await request(router, 'POST', '/api/applications/41/messages', {
-      personRef: 'referral:2', direction: 'Sent', channel: 'LinkedIn', subject: 'Referral subject', body: 'Referral body',
+    result.response = await request(router, 'POST', '/api/applications/900003/messages', {
+      personRef: 'referral:900002', direction: 'Sent', channel: 'LinkedIn', subject: 'Referral subject', body: 'Referral body',
     });
-    result.messages = referrals.readReferralCorrespondence(2);
-    result.row = referrals.parseReferralsMd().find(row => row.id === 2);
+    result.messages = referrals.readReferralCorrespondence(900002);
+    result.row = referrals.parseReferralsMd().find(row => row.id === 900002);
     result.followups = followups.parseFollowupsMd();
   } else if (action === 'twin-sent') {
-    result.response = await request(router, 'POST', '/api/applications/41/messages', {
-      personRef: 'referral:1', direction: 'Sent', channel: 'Email', subject: 'Twin subject', body: 'Twin body',
+    result.response = await request(router, 'POST', '/api/applications/900003/messages', {
+      personRef: 'referral:900001', direction: 'Sent', channel: 'Email', subject: 'Twin subject', body: 'Twin body',
     });
-    result.taMessages = tt.readTTCorrespondence(1);
-    result.referralMessages = referrals.readReferralCorrespondence(1);
+    result.taMessages = tt.readTTCorrespondence(900001);
+    result.referralMessages = referrals.readReferralCorrespondence(900001);
   } else if (action === 'ta-received') {
-    result.response = await request(router, 'POST', '/api/applications/41/messages', {
-      personRef: 'ta:1', direction: 'Received', channel: 'Email', subject: 'Reply subject', body: 'Thanks for reaching out',
+    result.response = await request(router, 'POST', '/api/applications/900003/messages', {
+      personRef: 'ta:900001', direction: 'Received', channel: 'Email', subject: 'Reply subject', body: 'Thanks for reaching out',
     });
-    result.messages = tt.readTTCorrespondence(1);
+    result.messages = tt.readTTCorrespondence(900001);
     result.followups = followups.parseFollowupsMd();
   } else if (action === 'sequence-side-effects') {
     const sequences = await import('../dashboard-web/server/lib/sequences.mjs');
-    sequences.startSequence('ta', 1, 'application-day-0-1-5-12', '2035-06-07');
-    result.sent = await request(router, 'POST', '/api/applications/41/messages', {
-      personRef: 'ta:1', direction: 'Sent', channel: 'Email', subject: 'Sequence subject', body: 'Sequence body',
+    sequences.startSequence('ta', 900001, 'application-day-0-1-5-12', '2035-06-07');
+    result.sent = await request(router, 'POST', '/api/applications/900003/messages', {
+      personRef: 'ta:900001', direction: 'Sent', channel: 'Email', subject: 'Sequence subject', body: 'Sequence body',
     });
-    result.afterSent = sequences.getSequence('ta', 1);
-    result.received = await request(router, 'POST', '/api/applications/41/messages', {
-      personRef: 'ta:1', direction: 'Received', channel: 'Email', subject: 'Reply subject', body: 'Thanks for reaching out',
+    result.afterSent = sequences.getSequence('ta', 900001);
+    result.received = await request(router, 'POST', '/api/applications/900003/messages', {
+      personRef: 'ta:900001', direction: 'Received', channel: 'Email', subject: 'Reply subject', body: 'Thanks for reaching out',
     });
-    result.afterReply = sequences.getSequence('ta', 1);
+    result.afterReply = sequences.getSequence('ta', 900001);
   } else if (action === 'linkedin-side-effects') {
     const connects = await import('../dashboard-web/server/lib/connects.mjs');
     const linkedin = await import('../dashboard-web/server/lib/tt-linkedin.mjs');
-    result.response = await request(router, 'POST', '/api/applications/41/messages', {
-      personRef: 'ta:1', direction: 'Sent', channel: 'LinkedIn', subject: 'LinkedIn message', body: 'LinkedIn body',
+    result.response = await request(router, 'POST', '/api/applications/900003/messages', {
+      personRef: 'ta:900001', direction: 'Sent', channel: 'LinkedIn', subject: 'LinkedIn message', body: 'LinkedIn body',
     });
     result.connects = connects.readConnects();
-    result.linkedinStatus = linkedin.getLinkedInStatus(1);
+    result.linkedinStatus = linkedin.getLinkedInStatus(900001);
   } else if (action === 'internal-dates') {
     const { localStamp } = await import('../lib/local-date.mjs');
     result.expectedStamp = localStamp();
-    result.response = await request(router, 'POST', '/api/applications/41/messages', {
-      personRef: 'ta:1', direction: 'Sent', channel: 'Email', subject: 'Date subject', body: 'Date body',
-      today: '2099-01-01 | OVERRIDE', stamp: '2099-01-01 01:01\nOVERRIDE',
+    result.response = await request(router, 'POST', '/api/applications/900003/messages', {
+      personRef: 'ta:900001', direction: 'Sent', channel: 'Email', subject: 'Date subject', body: 'Date body',
+      today: '2039-01-01 | OVERRIDE', stamp: '2039-01-01 01:01\nOVERRIDE',
     });
-    result.messages = tt.readTTCorrespondence(1);
-    result.row = tt.parseTargetTalentMd().find(row => row.id === 1);
+    result.messages = tt.readTTCorrespondence(900001);
+    result.row = tt.parseTargetTalentMd().find(row => row.id === 900001);
     result.followups = followups.parseFollowupsMd();
   } else if (action === 'errors') {
-    result.badPerson = await request(router, 'POST', '/api/applications/41/messages', {
-      personRef: 'ta:999', direction: 'Sent', subject: 'Example subject', body: 'Example body',
+    result.badPerson = await request(router, 'POST', '/api/applications/900003/messages', {
+      personRef: 'ta:999999', direction: 'Sent', subject: 'Widget subject', body: 'Widget body',
     });
-    result.badApp = await request(router, 'POST', '/api/applications/999/messages', {
-      personRef: 'ta:1', direction: 'Sent', subject: 'Example subject', body: 'Example body',
+    result.badApp = await request(router, 'POST', '/api/applications/999999/messages', {
+      personRef: 'ta:900001', direction: 'Sent', subject: 'Widget subject', body: 'Widget body',
     });
-    result.badSubject = await request(router, 'POST', '/api/applications/41/messages', {
-      personRef: 'ta:1', direction: 'Sent', subject: ' ', body: 'Example body',
+    result.badSubject = await request(router, 'POST', '/api/applications/900003/messages', {
+      personRef: 'ta:900001', direction: 'Sent', subject: ' ', body: 'Widget body',
     });
-    result.wrongCompany = await request(router, 'POST', '/api/applications/41/messages', {
-      personRef: 'ta:3', direction: 'Sent', subject: 'Example subject', body: 'Example body',
+    result.wrongCompany = await request(router, 'POST', '/api/applications/900003/messages', {
+      personRef: 'ta:900002', direction: 'Sent', subject: 'Widget subject', body: 'Widget body',
     });
   }
   process.stdout.write(`${JSON.stringify(result)}\n`);
@@ -177,25 +177,25 @@ function run(action, eventStore = false) {
 console.log('person-messages.test.mjs');
 
 const company = run('company').response;
-check(company.status === 200 && company.body.people.length === 2, 'by-company returns only the two resolved Examplecorp people');
-check(company.body.people.some(person => person.ref === 'ta:1' && person.refs.includes('referral:1')), 'a TA and referral person appears once with the TA ref');
-check(company.body.people.some(person => person.ref === 'referral:2' && person.title === 'Engineering Manager'), 'suffix matching includes the referral-only person and derives the title');
-check(company.body.people.every(person => !person.email.includes('[v:')) && !company.body.people.some(person => person.name === 'Avery Example'), 'emails are clean and another company is excluded');
+check(company.status === 200 && company.body.people.length === 2, 'by-company returns only the two resolved Zorblax Widgetry people');
+check(company.body.people.some(person => person.ref === 'ta:900001' && person.refs.includes('referral:900001')), 'a TA and referral person appears once with the TA ref');
+check(company.body.people.some(person => person.ref === 'referral:900002' && person.title === 'Widget Operations Lead'), 'suffix matching includes the referral-only person and derives the title');
+check(company.body.people.every(person => !person.email.includes('[v:')) && !company.body.people.some(person => person.email === 'persontwo@ratchet.example.test'), 'emails are clean and another company is excluded');
 
 const percentCompany = run('company-percent').response;
-check(percentCompany.status === 200 && percentCompany.body.people.length === 1 && percentCompany.body.people[0].company === '100% Pure', 'by-company accepts an Express-decoded company name containing a percent sign');
+check(percentCompany.status === 200 && percentCompany.body.people.length === 1 && percentCompany.body.people[0].company === '100% Quennox', 'by-company accepts an Express-decoded company name containing a percent sign');
 
 const taSent = run('ta-sent');
 check(taSent.response.status === 200 && taSent.response.body.followupN === 1, 'sent TA message returns its follow-up number');
 check(taSent.messages.length === 1 && taSent.row.lastTouch === '2035-06-07' && taSent.row.status === 'Sent', 'sent TA message adds one entry and advances the contact');
-check(taSent.followups.length === 1 && taSent.followups[0].contact === 'Pat Example' && taSent.followups[0].notes.startsWith('Cross-logged from person card'), 'sent TA message adds one named cross-log row');
+check(taSent.followups.length === 1 && taSent.followups[0].contact === 'Example Personone' && taSent.followups[0].notes.startsWith('Cross-logged from person card'), 'sent TA message adds one named cross-log row');
 
 const referralSent = run('referral-sent');
 check(referralSent.messages.length === 1 && referralSent.row.lastTouch === '2035-06-07' && referralSent.row.status === 'Catching Up', 'unlinked referral stores the message and advances its ladder');
 check(referralSent.followups.length === 1 && referralSent.response.body.followupN === 1, 'unlinked referral sent message adds one follow-up row');
 
 const twinSent = run('twin-sent');
-check(twinSent.response.body.linkedTo === 'ta:1' && twinSent.taMessages.length === 1 && twinSent.referralMessages.length === 0, 'linked referral writes only to its TA twin');
+check(twinSent.response.body.linkedTo === 'ta:900001' && twinSent.taMessages.length === 1 && twinSent.referralMessages.length === 0, 'linked referral writes only to its TA twin');
 
 const received = run('ta-received');
 check(received.messages.length === 1 && received.messages[0].direction === 'Received', 'received TA message is stored');
@@ -208,7 +208,7 @@ check(sequenceEffects.received.status === 200 && sequenceEffects.afterReply?.pau
 const linkedinEffects = run('linkedin-side-effects');
 check(linkedinEffects.response.status === 200
   && linkedinEffects.linkedinStatus === 'Invite Pending'
-  && linkedinEffects.connects?.some(entry => entry.source === 'ta' && entry.id === 1 && entry.date === '2035-06-07'),
+  && linkedinEffects.connects?.some(entry => entry.source === 'ta' && entry.id === 900001 && entry.date === '2035-06-07'),
 'sent LinkedIn TA message records the connection request and Invite Pending state');
 
 const internalDates = run('internal-dates');
