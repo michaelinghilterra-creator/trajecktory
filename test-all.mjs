@@ -647,6 +647,7 @@ for (const suite of [
   'tests/contact-merge-suggest.test.mjs',
   'tests/people-routes.test.mjs',
   'tests/contact-timeline.test.mjs',
+  'tests/person-app-messages.test.mjs',
   'tests/touch-history-consistency.test.mjs',
   'tests/person-context.test.mjs',
   'tests/data-dir-sandbox.test.mjs',

@@ -26,7 +26,10 @@ import { readLinkedInMap } from './tt-linkedin.mjs';
 import { readEngagementLog } from './engagement-log.mjs';
 import { contactRef, resolvePeople } from './contact-identity.mjs';
 import { readPins } from './contact-links.mjs';
-import { buildTimeline, buildDisplayTimeline, personLastTouch } from './contact-timeline.mjs';
+import { parseFollowupsMd } from './followups.mjs';
+import { readAppNotes } from './notes.mjs';
+import { parseApplicationsMd } from './applications.mjs';
+import { buildTimeline, buildDisplayTimeline, personLastTouch, buildApplicationMessages, mergeDisplayTimeline } from './contact-timeline.mjs';
 
 function readInfluencers() {
   try {
@@ -62,12 +65,29 @@ export function getPersonContext(source, id, opts = {}) {
         return correspondence.get(ref);
       }),
     };
-    return {
-      person,
-      timeline: buildTimeline(person, timelineOpts),
-      displayTimeline: buildDisplayTimeline(person, timelineOpts),
-      lastTouch: personLastTouch(person, timelineOpts),
-    };
+    const timeline = buildTimeline(person, timelineOpts);
+    const lastTouch = personLastTouch(person, timelineOpts);
+    let displayTimeline;
+    const context = { person, timeline, lastTouch };
+    Object.defineProperty(context, 'displayTimeline', {
+      enumerable: true,
+      get() {
+        if (displayTimeline !== undefined) return displayTimeline;
+        displayTimeline = buildDisplayTimeline(person, timelineOpts);
+        try {
+          const followups = opts.followups ?? (opts.readFollowups || parseFollowupsMd)();
+          const appNotes = opts.appNotes ?? (opts.readAppNotes || readAppNotes)();
+          const apps = (opts.apps ?? (opts.readApps || parseApplicationsMd)())
+            .map(app => ({ id: app.id, company: app.company, role: app.role }));
+          const appMessages = buildApplicationMessages(person, { followups, appNotes, apps });
+          displayTimeline = mergeDisplayTimeline(displayTimeline, appMessages);
+        } catch (err) {
+          console.error(`Application message timeline failed: ${err?.message || err}`);
+        }
+        return displayTimeline;
+      },
+    });
+    return context;
   } catch (err) {
     console.error(`Person context resolution failed: ${err?.message || err}`);
     return null;
