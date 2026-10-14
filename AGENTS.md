@@ -895,6 +895,13 @@ referral row, and no match by email or by name at that company):
 Identify an ATS relay sender (Jobvite and similar) by the name in the signature, never by the
 relay address. Automated mail (booking reminders, receipts) is not logged.
 
+Automated mail that decides something (an ATS decline, an automated interview invite) has no
+person to log it on. Disposition it in Reply Review with the "Automated sender (no person)"
+choice: the message is recorded on the application together with the status change, nothing
+is written to any contact, and no outreach status moves. Never attach it to a recruiter who did
+not send it. The server accepts `automated: true` as the alternative to a contact for `log`,
+`rejected` and the interview stage actions, and still refuses a request with neither.
+
 Mechanics: the dashboard has no create-TA route, so a new recruiter or scheduler goes in
 through `POST /api/referrals`. The log API stamps messages with the current time; to backdate,
 call `logPersonMessage({ ..., today, stamp })` from a script. Back up `data/` first and

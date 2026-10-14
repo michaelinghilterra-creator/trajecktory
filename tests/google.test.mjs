@@ -582,5 +582,74 @@ check((await fetchMessagesConcurrent([], { accessToken: 'x', getImpl })).length 
   check(logReplyToContact(null, {}) === false, 'a null contact returns false');
 }
 
+const widenedCandidateRows = [
+  { id: 901001, company: 'Zorblax Widgetry', role: 'Example Cog Lead', status: 'Applied', url: 'https://jobs.example.test/901001' },
+  { id: 901002, company: 'Zorblax Widgetry Corporation', role: 'Example Pulley Lead', status: 'Applied', url: 'https://jobs.example.test/901002' },
+];
+check(rankCandidateApps('Zorblax Widgetry', widenedCandidateRows).candidates.length === 2
+  && rankCandidateApps('Zorblax Widgetry Corporation', widenedCandidateRows).candidates.length === 2,
+'candidate lists widen across legal suffix variants in either direction');
+
+const duplicateCandidateRows = [
+  { id: 901003, company: 'Quennox Ratchet Works Corporation', role: 'Example Ratchet Lead', status: 'Passed', url: 'https://jobs.example.test/ratchet?utm_source=fixture' },
+  { id: 901004, company: 'Quennox Ratchet Works', role: 'Example Ratchet Lead', status: 'Applied', url: 'https://jobs.example.test/ratchet' },
+  { id: 901005, company: 'Quennox Ratchet Works', role: 'Example Gear Lead', status: 'Applied', url: 'https://jobs.example.test/gear' },
+  { id: 901006, company: 'Quennox Ratchet Works', role: 'Example Spring Lead', status: 'Applied', url: '' },
+  { id: 901007, company: 'Quennox Ratchet Works', role: 'Example Spring Lead', status: 'Passed', url: '' },
+  { id: 901008, company: 'Quennox Ratchet Works', role: 'Example Pawl Lead', status: 'Applied', url: 'local:$fixture' },
+  { id: 901009, company: 'Quennox Ratchet Works', role: 'Example Pawl Lead', status: 'Passed', url: 'local:$fixture' },
+];
+const collapsedCandidates = rankCandidateApps('Quennox Ratchet Works', duplicateCandidateRows).candidates;
+check(collapsedCandidates.length === 6
+  && collapsedCandidates.some(row => row.id === 901004 && row.collapsedIds.length === 1 && row.collapsedIds[0] === 901003)
+  && collapsedCandidates.some(row => row.id === 901005)
+  && collapsedCandidates.some(row => row.id === 901006)
+  && collapsedCandidates.some(row => row.id === 901007)
+  && collapsedCandidates.some(row => row.id === 901008)
+  && collapsedCandidates.some(row => row.id === 901009),
+'canonical duplicate postings collapse to an active survivor while distinct and unresolvable URLs remain');
+
+const allPassedDuplicates = [
+  { id: 901010, company: 'Zorblax Widgetry', role: 'Example Axle Lead', status: 'Passed', url: 'https://jobs.example.test/axle' },
+  { id: 901011, company: 'Zorblax Widgetry Corporation', role: 'Example Axle Lead', status: 'Passed', url: 'https://jobs.example.test/axle?utm_medium=fixture' },
+];
+const allPassedResult = rankCandidateApps('Zorblax Widgetry', allPassedDuplicates).candidates;
+check(allPassedResult.length === 1 && allPassedResult[0].id === 901010
+  && allPassedResult[0].collapsedIds[0] === 901011,
+'an all Passed duplicate group keeps its first tracker row');
+
+const preselectRows = [
+  { id: 901012, company: 'Zorblax Widgetry', role: 'Example Cog Lead', status: 'Applied', url: 'https://jobs.example.test/cog' },
+  { id: 901013, company: 'Zorblax Widgetry', role: 'Example Pulley Director', status: 'Applied', url: 'https://jobs.example.test/pulley' },
+];
+check(rankCandidateApps('Zorblax Widgetry', [preselectRows[0]]).preselectAppId === 901012,
+'a single final candidate is preselected');
+check(rankCandidateApps('Zorblax Widgetry', preselectRows, { text: 'Your Example Pulley Director application has an update.' }).preselectAppId === 901013,
+'one role named in body text is preselected');
+check(rankCandidateApps('Zorblax Widgetry', preselectRows, { text: 'Example Cog Lead and Example Pulley Director updates.' }).preselectAppId === null
+  && rankCandidateApps('Zorblax Widgetry', preselectRows, { text: 'An application update.' }).preselectAppId === null,
+'both role matches and no role matches leave preselection empty');
+check(rankCandidateApps('Zorblax Widgetry', preselectRows, { subject: 'Example Cog Lead update' }).preselectAppId === 901012
+  && rankCandidateApps('Zorblax Widgetry', preselectRows, { subject: 'Application update' }).preselectAppId === null,
+'subject role mentions work and a missing text option is safe');
+
+const noDatePreselect = rankCandidateApps('Zorblax Widgetry', [preselectRows[0]], { emailDate: '2031-03-20T15:00:00Z' });
+check(noDatePreselect.suggestedAppId === null && noDatePreselect.preselectAppId === 901012,
+'preselection does not change the apply date eligibility rule for suggestions');
+
+const shortCoreCandidates = [
+  { id: 901014, company: 'Qx', role: 'Example Cog Lead', status: 'Applied', url: 'https://jobs.example.test/qx-one' },
+  { id: 901015, company: 'Qx Corporation', role: 'Example Pulley Lead', status: 'Applied', url: 'https://jobs.example.test/qx-two' },
+];
+check(rankCandidateApps('Qx', shortCoreCandidates).candidates.length === 1,
+'a two character core key never widens the candidate match');
+
+const sharedBoardRows = [
+  { id: 901016, company: 'Zorblax Widgetry', role: 'Example Cog Lead', status: 'Applied', url: 'https://jobs.example.test/board/901016900' },
+  { id: 901017, company: 'Zorblax Widgetry', role: 'Example Pulley Director', status: 'Applied', url: 'https://jobs.example.test/board/901016900' },
+];
+check(rankCandidateApps('Zorblax Widgetry', sharedBoardRows).candidates.length === 2,
+'rows that share a canonical URL but name different roles are not collapsed');
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

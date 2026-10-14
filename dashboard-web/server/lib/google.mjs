@@ -31,7 +31,7 @@ import { activeLegacyFileEvents, renderLegacyFile } from '../../../lib/legacy-fi
 import { REPLY_STATE_FILE, REPLY_STATE_KEYS, normalizeReplyState } from '../../../lib/reply-state.mjs';
 import { classifyBounce } from '../../../lib/bounce-parse.mjs';
 import { isApplicationReceipt } from '../../../lib/inbound-classify.mjs';
-import { normalizeCompany, sameRole } from '../../../lib/identity.mjs';
+import { canonicalUrl, normalizeCompany, sameRole } from '../../../lib/identity.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from './target-talent.mjs';
 import { parseReferralsMd, readReferralCorrespondence, writeReferralCorrespondence, updateReferralLine, resolveReferralLink } from './referrals.mjs';
 import { localToday } from '../../../lib/local-date.mjs';
@@ -852,21 +852,68 @@ function matchBySubject(subject, apps = [], options = {}) {
 // so a contact company that differs only by ", Inc." will not collapse — a
 // deliberate miss, since under-matching just shows the reply for manual handling
 // while over-matching would attach it to the wrong company. Pure; unit-tested.
+function _candidateCompanyKey(value) {
+  return _companyCoreTokens(value).join('');
+}
+
+function _collapseCandidatePostings(rows) {
+  const terminal = new Set(['Passed', 'Discarded', 'SKIP', 'Closed', 'Not a Fit']);
+  // A shared canonical URL is not enough on its own: a board page with no posting id can sit on two different roles,
+  // so a group also needs the roles to agree. Under-collapsing only costs one extra dropdown option.
+  const groups = [];
+  for (const row of rows) {
+    const key = canonicalUrl(row.url);
+    if (!key) continue;
+    const group = groups.find(g => g.key === key && sameRole(g.rows[0].role, row.role));
+    if (group) group.rows.push(row);
+    else groups.push({ key, rows: [row] });
+  }
+  const survivorByRow = new Map();
+  for (const { rows: group } of groups) {
+    if (group.length < 2) continue;
+    const survivor = group.find(row => !terminal.has(row.status)) || group[0];
+    survivorByRow.set(survivor, group.filter(row => row !== survivor).map(row => row.id));
+    for (const row of group) {
+      if (row !== survivor) survivorByRow.set(row, null);
+    }
+  }
+  return rows
+    .filter(row => survivorByRow.get(row) !== null)
+    .map(row => ({ ...row, collapsedIds: survivorByRow.get(row) || [] }));
+}
+
 function rankCandidateApps(company, apps = [], options = {}) {
   const token = normalizeCompany(company);
-  if (!token) return { candidates: [], suggestedAppId: null };
+  if (!token) return { candidates: [], suggestedAppId: null, preselectAppId: null };
+  const coreKey = _candidateCompanyKey(company);
+  const matched = apps.filter(a => {
+    if (normalizeCompany(a.company) === token) return true;
+    const rowCoreKey = _candidateCompanyKey(a.company);
+    return coreKey.length >= 3 && rowCoreKey === coreKey;
+  });
   const ranked = _rankCompanyCandidates(
-    apps.filter(a => normalizeCompany(a.company) === token),
+    _collapseCandidatePostings(matched),
     options,
   );
+  const messageTokens = _wordTokens(`${options.subject || ''} ${options.text || ''}`);
+  const roleMatches = ranked.rows.filter(row => {
+    const roleTokens = _wordTokens(row.role);
+    return roleTokens.length > 0 && _hasTokenSequence(messageTokens, roleTokens);
+  });
+  const preselectAppId = ranked.rows.length === 1
+    ? ranked.rows[0].id
+    : (roleMatches.length === 1 ? roleMatches[0].id : null);
   return {
     candidates: ranked.rows.map(a => ({
       id: a.id,
+      company: a.company,
       role: a.role,
       status: a.status,
       applyDate: options.applyDates?.[String(a.id)] || null,
+      collapsedIds: a.collapsedIds,
     })),
     suggestedAppId: ranked.appId,
+    preselectAppId,
   };
 }
 
