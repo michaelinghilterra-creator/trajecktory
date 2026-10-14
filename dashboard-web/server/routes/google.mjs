@@ -499,12 +499,14 @@ router.get('/api/google/replies', async (req, res) => {
       const ranked = rankCandidateApps(companyOf(r), apps, {
         emailDate: r.date,
         subject: r.subject,
+        text: r.body,
         applyDates,
       });
       return previewEntry({
         ...r,
         candidateApps: ranked.candidates,
         suggestedAppId: ranked.suggestedAppId,
+        preselectAppId: ranked.preselectAppId,
         handled: handled[r.msgId] || null,
       });
     });
@@ -534,12 +536,15 @@ router.get('/api/google/replies/unmatched', (req, res) => {
     const apps = (() => { try { return parseApplicationsMd(); } catch { return []; } })();
     const applyDates = readApplyDates();
     const items = Object.entries(parked).map(([msgId, entry]) => {
-      const ranked = rankCandidateApps(entry.company || '', apps, { emailDate: entry.date, subject: entry.subject, applyDates });
+      const ranked = rankCandidateApps(entry.company || '', apps, {
+        emailDate: entry.date, subject: entry.subject, text: entry.snippet, applyDates,
+      });
       return {
         msgId,
         ...entry,
         fromIsRelay: isAtsRelayAddress(extractEmail(entry.from) || entry.from || ''),
         suggestions: ranked.candidates,
+        preselectAppId: ranked.preselectAppId,
       };
     }).sort((a, b) => String(b.parkedOn || '').localeCompare(String(a.parkedOn || '')));
     res.json({ count: items.length, items });
@@ -647,6 +652,7 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     } catch { /* request fields are the fallback when Gmail is unavailable */ }
 
     const guardedAction = action === 'log' || action === 'rejected' || INTERVIEW_STAGES.includes(action);
+    let automatedWithoutContact = false;
     if (guardedAction) {
       const usableContact = contact && typeof contact === 'object' && !Array.isArray(contact)
         && (contact.source === 'ta' || contact.source === 'referral');
@@ -657,19 +663,23 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
         : [];
       const contactExists = validContact && contactRows.some(row => row.id === contactId);
       if (!contactExists) {
-        const headerName = parseFromHeader(message.from).name;
-        const fallbackName = typeof fromName === 'string'
-          ? fromName.trim().split(/\s+/).filter(Boolean).join(' ').slice(0, 120)
-          : '';
-        const senderAddress = extractEmail(message.from) || from || '';
-        return res.status(409).json({
-          error: 'No contact is on file for this sender. Create one, or pick an existing person, before logging this reply.',
-          needsContact: true,
-          reason: validContact ? 'not_found' : 'missing',
-          suggestedName: headerName || fallbackName,
-          suggestedEmail: isAtsRelayAddress(senderAddress) ? '' : senderAddress,
-          company: company || '',
-        });
+        if (req.body?.automated === true) {
+          automatedWithoutContact = true;
+        } else {
+          const headerName = parseFromHeader(message.from).name;
+          const fallbackName = typeof fromName === 'string'
+            ? fromName.trim().split(/\s+/).filter(Boolean).join(' ').slice(0, 120)
+            : '';
+          const senderAddress = extractEmail(message.from) || from || '';
+          return res.status(409).json({
+            error: 'No contact is on file for this sender. Create one, or pick an existing person, before logging this reply.',
+            needsContact: true,
+            reason: validContact ? 'not_found' : 'missing',
+            suggestedName: headerName || fallbackName,
+            suggestedEmail: isAtsRelayAddress(senderAddress) ? '' : senderAddress,
+            company: company || '',
+          });
+        }
       }
     }
 
@@ -729,7 +739,7 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
       if (statusFlip) patchRowInMd(id, { status: statusFlip }, { company });
 
       let contactLogged = false;
-      if (contact) {
+      if (contact && !automatedWithoutContact) {
         runLogWriteTestHook('before-google-reply-contact');
         try { contactLogged = logReplyToContact(contact, { subject: message.subject || subject, body: fullBody, timestamp: message.date || date }); }
         catch (error) {
@@ -751,7 +761,11 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
 
     // With the store on, the reply_attached event already carries the handled record.
     if (!viaEvents) markHandled({ action, appId: id, date: today });
-    res.json({ ok: true, appId: id, statusFlip, contactLogged, alreadyLogged, ...renderPending });
+    res.json({
+      ok: true, appId: id, statusFlip, contactLogged, alreadyLogged,
+      ...(automatedWithoutContact ? { automated: true } : {}),
+      ...renderPending,
+    });
   } catch (err) {
     logWriteRouteError(res, err);
   }

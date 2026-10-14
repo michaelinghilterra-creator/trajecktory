@@ -240,15 +240,78 @@ function NewPersonCard({ sender, company, role, busy, error, searchHistory, onCr
   );
 }
 
+function AppSearch({ onPick }) {
+  const [open, setOpen] = useStateRv(false);
+  const [query, setQuery] = useStateRv('');
+  const [applications, setApplications] = useStateRv(null);
+  const [loading, setLoading] = useStateRv(false);
+  const [error, setError] = useStateRv(false);
+  useEffectRv(() => {
+    if (!open || applications !== null || loading || error) return;
+    setLoading(true);
+    setError(false);
+    fetch('/api/applications')
+      .then(response => {
+        if (!response.ok) throw new Error('applications request failed');
+        return response.json();
+      })
+      .then(data => setApplications(Array.isArray(data) ? data : []))
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }, [open, applications, loading, error]);
+  const needle = query.trim().toLowerCase();
+  const matches = needle && applications
+    ? applications.filter(app => `#${app.id} ${app.company || ''} ${app.role || ''}`.toLowerCase().includes(needle)).slice(0, 8)
+    : [];
+  return (
+    <div style={{ position: 'relative' }}>
+      <button className="btn ghost sm" onClick={() => setOpen(current => !current)}>Other application...</button>
+      {open ? (
+        <div style={{ marginTop: 5, padding: 6, border: '1px solid var(--border)', borderRadius: 5, background: 'var(--panel-2)', minWidth: 260 }}>
+          <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search company, role or #"
+            style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, padding: '4px 6px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)' }} />
+          {loading ? <div className="dim" style={{ marginTop: 4 }}>Loading applications...</div> : null}
+          {error ? <div style={{ marginTop: 4, color: 'var(--red)' }}>Could not load applications.</div> : null}
+          {matches.length ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 4 }}>
+              {matches.map(app => (
+                <button key={app.id} className="btn ghost sm" style={{ textAlign: 'left' }} onClick={() => {
+                  onPick({ id: app.id, role: app.role, status: app.status, applyDate: null, company: app.company, collapsedIds: [] });
+                  setOpen(false);
+                  setQuery('');
+                }}>#{app.id} {app.company} · {app.role} · {app.status}</button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function applicationOptionText(app, company) {
+  const employer = app.company && app.company !== company ? `${app.company} · ` : '';
+  const duplicates = Array.isArray(app.collapsedIds) && app.collapsedIds.length ? ` · +${app.collapsedIds.length} duplicate` : '';
+  return `${employer}${app.role} · ${app.status} · ${app.applyDate ? `applied ${app.applyDate}` : 'no apply date'}${duplicates}`;
+}
+
+function applicationOptionTitle(app) {
+  return Array.isArray(app.collapsedIds) && app.collapsedIds.length
+    ? `Also tracked as ${app.collapsedIds.map(id => `#${id}`).join(', ')}`
+    : undefined;
+}
+
 // One reply row, made actionable. The reply resolves to one or more candidate
 // applications (server-attached by company); the user picks when there is more
 // than one, then Log (note only) or Rejected. Each POSTs to the
 // existing /replies/:msgId/:action, which logs a note and (for the status ones)
 // flips the application status. Once acted, the row shows a confirmation.
 function ReplyRow({ reply, toast }) {
-  const cands = reply.candidateApps || [];
-  // E-3: when more than one application at the employer fits, the person picks; nothing is preselected.
-  const initial = cands.length === 1 ? cands[0].id : null;
+  const baseCands = reply.candidateApps || [];
+  const [extraCands, setExtraCands] = useStateRv([]);
+  const cands = [...baseCands, ...extraCands.filter(extra => !baseCands.some(candidate => candidate.id === extra.id))];
+  const preferredInitial = reply.preselectAppId ?? (cands.length === 1 ? cands[0].id : null);
+  const initial = cands.some(candidate => candidate.id === preferredInitial) ? preferredInitial : null;
   const [appId, setAppId] = useStateRv(initial);
   const [done, setDone] = useStateRv(null);
   const [busy, setBusy] = useStateRv(false);
@@ -274,6 +337,8 @@ function ReplyRow({ reply, toast }) {
     const generation = ++peopleGenerationRef.current;
     setPersonRef('');
     setPeople([]);
+    // An ATS relay sender opens on the automated choice; the person can change it.
+    if (reply.fromIsRelay && !reply.contact) setPersonRef('__automated__');
     if (reply.contact || !appId || !pickedCompany) return;
     fetchReviewPeople(pickedCompany)
       .then(nextPeople => {
@@ -283,13 +348,14 @@ function ReplyRow({ reply, toast }) {
         if (peopleGenerationRef.current === generation) setPeople([]);
       });
     return () => { peopleGenerationRef.current++; };
-  }, [appId, pickedCompany, reply.contact]);
+  }, [appId, pickedCompany, reply.contact, reply.fromIsRelay]);
 
   const act = (action, extra = {}) => {
     const noApp = action === 'dismiss' || action === 'not-related' || action === 'unmatched';
     const actionContact = extra.contact || contact;
+    const automated = !noApp && !actionContact && personRef === '__automated__';
     if (!noApp && !appId) { toast && toast('Pick which application this reply belongs to.', 'error'); return; }
-    if (!noApp && !actionContact) {
+    if (!noApp && !actionContact && !automated) {
       if (action === 'log' || action === 'rejected') {
         setCreateError('');
         setNewPerson({ action });
@@ -306,7 +372,7 @@ function ReplyRow({ reply, toast }) {
       : action === 'unmatched' ? { from: reply.from, fromName: reply.fromName || '', subject: reply.subject, snippet: reply.snippet || reply.bodyPreview, date: reply.date, threadId: reply.threadId, company }
       // Sentiment is the user's override. The identifying fields are fallbacks if
       // the server cannot re-fetch the full message from Gmail by its message id.
-      : { appId, company: pickedCompany, contact: actionContact, sentiment: extra.sentiment || sentiment, pickConfirmed: true, ...(extra.acknowledged ? { acknowledged: true } : {}), from: reply.from, subject: reply.subject, snippet: reply.snippet, bodyPreview: reply.bodyPreview, date: reply.date, threadId: reply.threadId };
+      : { appId, company: pickedCompany, contact: actionContact, ...(automated ? { automated: true } : {}), sentiment: extra.sentiment || sentiment, pickConfirmed: true, ...(extra.acknowledged ? { acknowledged: true } : {}), from: reply.from, subject: reply.subject, snippet: reply.snippet, bodyPreview: reply.bodyPreview, date: reply.date, threadId: reply.threadId };
     return fetch(`/api/google/replies/${encodeURIComponent(reply.msgId)}/${action}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -321,8 +387,10 @@ function ReplyRow({ reply, toast }) {
         }
         if (res.error) { toast && toast(res.error, 'error'); return; }
         if (!noApp) refreshApplications(); // an attach can flip the application's status
+        setNewPerson(null);
         setDone(action === 'unmatched' ? 'unmatched' : action === 'dismiss' ? 'dismissed' : action === 'not-related' ? 'not-related' : (res.statusFlip || 'logged'));
-        toast && toast(action === 'unmatched' ? 'Parked on the unmatched list' : action === 'dismiss' ? 'Dismissed' : action === 'not-related' ? 'Marked not job-related' : (res.statusFlip ? `Marked ${res.statusFlip}` : 'Reply logged'), 'success');
+        const toastText = action === 'unmatched' ? 'Parked on the unmatched list' : action === 'dismiss' ? 'Dismissed' : action === 'not-related' ? 'Marked not job-related' : (res.statusFlip ? `Marked ${res.statusFlip}` : 'Reply logged');
+        toast && toast(`${toastText}${automated ? ' (automated, no person)' : ''}`, 'success');
         return true;
       })
       .catch(e => { toast && toast(e.message, 'error'); return false; }).finally(() => setBusy(false));
@@ -392,6 +460,10 @@ function ReplyRow({ reply, toast }) {
       ) : cands.length === 0 ? (
         <div style={{ display: 'flex', gap: 8, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="dim">No matching application on file{company ? ` for ${company}` : ''}.</span>
+          <AppSearch onPick={app => {
+            setExtraCands(current => current.some(candidate => candidate.id === app.id) ? current : [...current, app]);
+            setAppId(app.id);
+          }} />
           <button className="btn ghost sm" onClick={() => act('unmatched')} disabled={busy} title="Keep this on the unmatched list with its evidence, to attach later.">Unmatched</button>
           <button className="btn ghost sm" onClick={() => act('dismiss')} disabled={busy} title="Hide just this email.">Dismiss</button>
           <button className="btn ghost sm" onClick={() => act('not-related')} disabled={busy} title="Not about your job search. Hide it and stop surfacing future emails from this sender.">Not job-related</button>
@@ -402,27 +474,44 @@ function ReplyRow({ reply, toast }) {
           <select value={appId || ''} onChange={e => setAppId(parseInt(e.target.value, 10))}
             style={{ fontSize: 12, padding: '2px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }}>
             {!appId ? <option value="" disabled>Select an application</option> : null}
-            {cands.map(a => <option key={a.id} value={a.id}>{a.role} · {a.status} · {a.applyDate ? `applied ${a.applyDate}` : 'no apply date'}</option>)}
+            {cands.map(a => <option key={a.id} value={a.id} title={applicationOptionTitle(a)}>{applicationOptionText(a, company)}</option>)}
           </select>
+          <AppSearch onPick={app => {
+            setExtraCands(current => current.some(candidate => candidate.id === app.id) ? current : [...current, app]);
+            setAppId(app.id);
+          }} />
           {!reply.contact && appId ? (
             <select value={personRef} onChange={e => {
               if (e.target.value === '__new__') {
                 setPersonRef('');
                 setCreateError('');
                 setNewPerson({ action: 'log' });
-              } else setPersonRef(e.target.value);
+              } else {
+                setPersonRef(e.target.value);
+                setNewPerson(null);
+              }
             }}
               style={{ fontSize: 12, padding: '2px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }}>
               <option value="">Select a person</option>
               {people.map(person => <option key={person.ref} value={person.ref}>{person.name}{person.title ? ` · ${person.title}` : ''}</option>)}
+              <option value="__automated__">Automated sender (no person)</option>
               <option value="__new__">+ New person</option>
             </select>
           ) : null}
-          {!reply.contact && appId && people.length === 0 ? (
+          {!reply.contact && appId && people.length === 0 && personRef !== '__automated__' ? (
             <button className="btn ghost sm" onClick={() => { setCreateError(''); setNewPerson({ action: 'log' }); }}>Add as new contact</button>
           ) : null}
-          <button className="btn sm" onClick={() => act('log')} disabled={busy || !appId}>Log</button>
-          <button className="btn ghost sm" onClick={() => act('rejected')} disabled={busy || !appId}>Rejected</button>
+          {sentiment === 'negative' ? (
+            <>
+              <button className="btn sm" onClick={() => act('rejected')} disabled={busy || !appId}>Mark rejected</button>
+              <button className="btn ghost sm" onClick={() => act('log')} disabled={busy || !appId}>Log</button>
+            </>
+          ) : (
+            <>
+              <button className="btn sm" onClick={() => act('log')} disabled={busy || !appId}>Log</button>
+              <button className="btn ghost sm" onClick={() => act('rejected')} disabled={busy || !appId}>Rejected</button>
+            </>
+          )}
           <button className="btn ghost sm" onClick={() => act('unmatched')} disabled={busy} title="None of these fit. Keep it on the unmatched list with its evidence.">Unmatched</button>
           <button className="btn ghost sm" onClick={() => act('dismiss')} disabled={busy} title="Hide just this email.">Dismiss</button>
           <button className="btn ghost sm" onClick={() => act('not-related')} disabled={busy} title="This email isn't about your job search. Hide it and stop surfacing future emails from this sender.">Not job-related</button>
@@ -458,20 +547,23 @@ function UnmatchedList({ toast, refreshKey }) {
   const [personPicks, setPersonPicks] = useStateRv({});
   const [newPeople, setNewPeople] = useStateRv({});
   const [createErrors, setCreateErrors] = useStateRv({});
+  const [extraCandidatesByMessage, setExtraCandidatesByMessage] = useStateRv({});
   const [busy, setBusy] = useStateRv(null);
   const [tick, setTick] = useStateRv(0);
   const peopleGenerationsRef = useRefRv({});
-  useEffectRv(() => {
-    fetch('/api/google/replies/unmatched').then(r => r.json()).then(d => setItems(d.items || [])).catch(() => {});
-  }, [refreshKey, tick]);
-  if (!items.length) return null;
-  const pickApplication = (item, appId) => {
-    const app = item.suggestions.find(candidate => candidate.id === appId);
+  const preselectedRef = useRefRv({});
+  const candidatesFor = useCallbackRv(item => {
+    const suggestions = item.suggestions || [];
+    const extras = extraCandidatesByMessage[item.msgId] || [];
+    return [...suggestions, ...extras.filter(extra => !suggestions.some(candidate => candidate.id === extra.id))];
+  }, [extraCandidatesByMessage]);
+  const pickApplication = useCallbackRv((item, appId, appOverride = null) => {
+    const app = appOverride || candidatesFor(item).find(candidate => candidate.id === appId);
     const company = app?.company || item.company;
     const generation = (peopleGenerationsRef.current[item.msgId] || 0) + 1;
     peopleGenerationsRef.current[item.msgId] = generation;
     setPicks(current => ({ ...current, [item.msgId]: appId }));
-    setPersonPicks(current => ({ ...current, [item.msgId]: '' }));
+    setPersonPicks(current => ({ ...current, [item.msgId]: item.fromIsRelay ? '__automated__' : '' }));
     setPeopleByMessage(current => ({ ...current, [item.msgId]: [] }));
     if (!company) return;
     fetchReviewPeople(company)
@@ -485,37 +577,52 @@ function UnmatchedList({ toast, refreshKey }) {
           setPeopleByMessage(current => ({ ...current, [item.msgId]: [] }));
         }
       });
-  };
+  }, [candidatesFor]);
+  useEffectRv(() => {
+    fetch('/api/google/replies/unmatched').then(r => r.json()).then(d => setItems(d.items || [])).catch(() => {});
+  }, [refreshKey, tick]);
+  useEffectRv(() => {
+    items.forEach(item => {
+      if (!item.preselectAppId || Object.prototype.hasOwnProperty.call(picks, item.msgId) || preselectedRef.current[item.msgId]) return;
+      preselectedRef.current[item.msgId] = true;
+      pickApplication(item, item.preselectAppId);
+    });
+  }, [items, picks, pickApplication]);
+  if (!items.length) return null;
   const openNewPerson = (item, action = 'log') => {
     setCreateErrors(current => ({ ...current, [item.msgId]: '' }));
     setNewPeople(current => ({ ...current, [item.msgId]: { action } }));
   };
   const act = (item, action, extra = {}) => {
     const appId = picks[item.msgId];
-    if (action === 'log' && !appId) { toast && toast('Pick which application this belongs to.', 'error'); return Promise.resolve(false); }
+    const attaches = action === 'log' || action === 'rejected';
+    if (attaches && !appId) { toast && toast('Pick which application this belongs to.', 'error'); return Promise.resolve(false); }
     const people = peopleByMessage[item.msgId] || [];
     const person = people.find(candidate => candidate.ref === personPicks[item.msgId]);
     const selected = { contact: reviewContact(person) };
     const contact = extra.contact || selected.contact;
-    if (action === 'log' && !contact) { openNewPerson(item, action); return Promise.resolve(false); }
+    const automated = attaches && !contact && personPicks[item.msgId] === '__automated__';
+    if (attaches && !contact && !automated) { openNewPerson(item, action); return Promise.resolve(false); }
     setBusy(item.msgId);
-    const body = action === 'log'
-      ? { appId, company: (item.suggestions.find(x => x.id === appId) || {}).company || item.company, contact, pickConfirmed: true, from: item.from, subject: item.subject, snippet: item.snippet, bodyPreview: item.snippet, date: item.date, threadId: item.threadId }
+    const body = attaches
+      ? { appId, company: (candidatesFor(item).find(candidate => candidate.id === appId) || {}).company || item.company, contact, ...(automated ? { automated: true } : {}), pickConfirmed: true, from: item.from, subject: item.subject, snippet: item.snippet, bodyPreview: item.snippet, date: item.date, threadId: item.threadId }
       : {};
     return fetch(`/api/google/replies/${encodeURIComponent(item.msgId)}/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(r => r.json())
       .then(res => {
         if (res.error) { toast && toast(res.error, 'error'); return false; }
-        toast && toast(action === 'log' ? 'Attached' : 'Dismissed', 'success');
+        const toastText = action === 'log' ? 'Attached' : action === 'rejected' ? 'Marked rejected' : 'Dismissed';
+        toast && toast(`${toastText}${automated ? ' (automated, no person)' : ''}`, 'success');
         if (action === 'log') refreshApplications();
+        if (action === 'rejected') refreshApplications();
         setTick(t => t + 1);
-        return action === 'log';
+        return attaches;
       })
       .catch(e => { toast && toast(e.message, 'error'); return false; }).finally(() => setBusy(null));
   };
   const createAndAttach = (item, { name, title, email, historyMsgIds }) => {
     const appId = picks[item.msgId];
-    const app = item.suggestions.find(candidate => candidate.id === appId);
+    const app = candidatesFor(item).find(candidate => candidate.id === appId);
     const company = app?.company || item.company;
     const target = `${company} - ${app ? app.role : ''}`.replace(/\s+-\s*$/, '').trim();
     setBusy(item.msgId);
@@ -532,11 +639,12 @@ function UnmatchedList({ toast, refreshKey }) {
         }
         const [source, id] = String(data.ref || '').split(':');
         const contact = { source, id, company: data.company, name: data.name };
+        const nextAction = (newPeople[item.msgId] || {}).action || 'log';
         setNewPeople(current => { const next = { ...current }; delete next[item.msgId]; return next; });
         setCreateErrors(current => { const next = { ...current }; delete next[item.msgId]; return next; });
         setBusy(null);
         if (data.existed) toast && toast(`Already on file as ${data.name}. Logged on them.`, 'success');
-        return Promise.resolve(act(item, 'log', { contact })).then(attached => {
+        return Promise.resolve(act(item, nextAction, { contact })).then(attached => {
           if (!attached || !historyMsgIds.length) return attached;
           return logEarlierEmails({ personRef: data.ref, appId, msgIds: historyMsgIds, name: data.name, toast });
         });
@@ -550,18 +658,28 @@ function UnmatchedList({ toast, refreshKey }) {
     <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
       <div style={{ fontWeight: 600, fontSize: 13 }}>Unmatched ({items.length})</div>
       <div className="dim" style={{ fontSize: 11.5, marginBottom: 4 }}>Nothing here is attached until you pick an application.</div>
-      {items.map(it => (
+      {items.map(it => {
+        const candidates = candidatesFor(it);
+        const selectedApp = candidates.find(candidate => candidate.id === picks[it.msgId]);
+        return (
         <div key={it.msgId} style={{ padding: '6px 2px', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
           <div>{it.from} · {it.subject || '(no subject)'} <span className="dim mono">· {String(it.date || '').slice(0, 10)}</span></div>
           {it.snippet ? <div className="dim" style={{ marginTop: 2 }}>{it.snippet}</div> : null}
           <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-            {it.suggestions.length ? (
+            {candidates.length ? (
               <select value={picks[it.msgId] || ''} onChange={e => pickApplication(it, parseInt(e.target.value, 10))}
                 style={{ fontSize: 12, padding: '2px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }}>
                 <option value="" disabled>Select an application</option>
-                {it.suggestions.map(a => <option key={a.id} value={a.id}>{a.role} · {a.status} · {a.applyDate ? `applied ${a.applyDate}` : 'no apply date'}</option>)}
+                {candidates.map(a => <option key={a.id} value={a.id} title={applicationOptionTitle(a)}>{applicationOptionText(a, it.company)}</option>)}
               </select>
             ) : <span className="dim">No application on file{it.company ? ` for ${it.company}` : ''}.</span>}
+            <AppSearch onPick={app => {
+              setExtraCandidatesByMessage(current => {
+                const extras = current[it.msgId] || [];
+                return extras.some(candidate => candidate.id === app.id) ? current : { ...current, [it.msgId]: [...extras, app] };
+              });
+              pickApplication(it, app.id, app);
+            }} />
             {picks[it.msgId] ? (
               <select value={personPicks[it.msgId] || ''} onChange={e => {
                 if (e.target.value === '__new__') {
@@ -572,19 +690,21 @@ function UnmatchedList({ toast, refreshKey }) {
                 style={{ fontSize: 12, padding: '2px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }}>
                 <option value="">Select a person</option>
                 {(peopleByMessage[it.msgId] || []).map(person => <option key={person.ref} value={person.ref}>{person.name}{person.title ? ` · ${person.title}` : ''}</option>)}
+                <option value="__automated__">Automated sender (no person)</option>
                 <option value="__new__">+ New person</option>
               </select>
             ) : null}
-            {picks[it.msgId] && (peopleByMessage[it.msgId] || []).length === 0 ? (
+            {picks[it.msgId] && (peopleByMessage[it.msgId] || []).length === 0 && personPicks[it.msgId] !== '__automated__' ? (
               <button className="btn ghost sm" onClick={() => openNewPerson(it, 'log')}>Add as new contact</button>
             ) : null}
-            {it.suggestions.length ? <button className="btn sm" onClick={() => act(it, 'log')} disabled={busy === it.msgId || !picks[it.msgId]}>Attach</button> : null}
+            <button className="btn sm" onClick={() => act(it, 'log')} disabled={busy === it.msgId || !picks[it.msgId]}>Attach</button>
+            <button className="btn ghost sm" onClick={() => act(it, 'rejected')} disabled={busy === it.msgId || !picks[it.msgId]}>Rejected</button>
             <button className="btn ghost sm" onClick={() => act(it, 'dismiss')} disabled={busy === it.msgId}>Dismiss</button>
           </div>
           {newPeople[it.msgId] ? <NewPersonCard
             sender={{ address: it.from, name: it.fromName || '', isRelay: !!it.fromIsRelay }}
-            company={(it.suggestions.find(candidate => candidate.id === picks[it.msgId]) || {}).company || it.company}
-            role={(it.suggestions.find(candidate => candidate.id === picks[it.msgId]) || {}).role || ''}
+            company={selectedApp?.company || it.company}
+            role={selectedApp?.role || ''}
             busy={busy === it.msgId} error={createErrors[it.msgId] || ''}
             searchHistory={fields => fetch('/api/google/history/preview', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -600,7 +720,8 @@ function UnmatchedList({ toast, refreshKey }) {
             }}
           /> : null}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
