@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.18.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.17.0...v5.18.0) (2026-10-14)
+
+
+### Features
+
+* disposition any email from Reply Review in one click ([#479](https://github.com/michaelinghilterra-creator/trajecktory/issues/479)) ([ce8c61c](https://github.com/michaelinghilterra-creator/trajecktory/commit/ce8c61c11fca8c04ace1bc898f5dad9349c909a3))
+
 ## [5.17.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.16.0...v5.17.0) (2026-10-13)
 
 
