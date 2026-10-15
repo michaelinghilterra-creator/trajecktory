@@ -35,7 +35,7 @@ process.env.TJK_DATA_DIR = tmp;
 
 const {
   getAccessToken, googleStatus, checkHealth, parseGmailMessage, extractEmail, parseFromHeader, isAtsRelayAddress,
-  classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions, tokenScopes,
+  classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, matchBySender, scanDecisions, tokenScopes,
   candidateAppsFor, rankCandidateApps, fetchMessagesConcurrent, logReplyToContact,
 } = await import('../dashboard-web/server/lib/google.mjs');
 const { APP_NOTES_PATH, GOOGLE_TOKENS_PATH, TARGET_TALENT_MD } = await import('../dashboard-web/server/config.mjs');
@@ -323,6 +323,13 @@ check(kestrel && kestrel.appId === 900103 && kestrel.confidence === 'subject', '
 check(matchBySubject('Re: your Kestrel, Inc. application', subjApps, subjectMatchOptions)?.appId === 900103, 'company tokens stay whole-word matched when the subject adds a legal suffix');
 check(matchBySubject('Following up on your Corvane Systems role', subjApps, subjectMatchOptions)?.appId === 900104, 'a multi-word company matches as consecutive whole tokens');
 check(matchBySubject('Weekly newsletter, nothing to see here', subjApps) === null, 'a subject naming no known company matches nothing');
+
+// ── matchBySender: ATS relay mail that names the employer only in the sender (the Quillmark case) ──
+const senderApps = [{ id: 900120, company: 'Quillmark', role: 'Example Ops Lead', status: 'Applied' }];
+const senderOpts = { emailDate: '2030-03-10', applyDates: { 900120: '2030-03-04' } };
+check(matchBySender('pat@quillmark.example-mail.test', 'Pat Doe - Quillmark', senderApps, senderOpts)?.appId === 900120, 'a display name naming the company resolves it');
+check(matchBySender('pat@quillmark.example-mail.test', 'Pat Doe', senderApps, senderOpts)?.appId === 900120, 'a relay subdomain naming the company resolves it');
+check(matchBySender('pat@example-mail.test', 'Pat Doe', senderApps, senderOpts) === null, 'a sender naming no known company matches nothing');
 
 const collisionApps = [
   { id: 900118, company: 'Plica', role: 'Example Cog Director', status: 'Applied' },

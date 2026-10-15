@@ -816,6 +816,32 @@ function matchByCompanyDomain(fromAddr, apps = [], options = {}) {
   return null;
 }
 
+// Tier-2b match: ATS mail relays often name the employer in the sender, not the subject:
+// "Pat Doe - Quillmark <pat@quillmark.example-mail.test>". The display name and any
+// subdomain label are checked with the same whole-token rules as the subject tier, so a
+// short single-token core is never searched alone. Still only a suggestion for confirmation.
+function matchBySender(fromAddr, fromName, apps = [], options = {}) {
+  const at = String(fromAddr || '').split('@')[1] || '';
+  const labels = at.toLowerCase().split('.').filter(Boolean);
+  const subdomain = labels.length >= 3 ? _normCompanyToken(labels[0]) : '';
+  const nameTokens = _wordTokens(fromName);
+  for (const app of apps) {
+    const companyTokens = _wordTokens(app.company);
+    const coreTokens = _companyCoreTokens(app.company);
+    const coreIsSafe = coreTokens.length > 1
+      || (coreTokens.length === 1 && coreTokens[0].length >= 4);
+    const comp = _normCompanyToken(app.company);
+    const bySubdomain = subdomain.length >= 4 && (subdomain === comp || subdomain === companyTokens.join(''));
+    const byName = _hasTokenSequence(nameTokens, companyTokens) || (coreIsSafe && _hasTokenSequence(nameTokens, coreTokens));
+    if (!bySubdomain && !byName) continue;
+    const companyKey = normalizeCompany(app.company);
+    const sameCompany = apps.filter(a => normalizeCompany(a.company) === companyKey);
+    const ranked = _rankCompanyCandidates(sameCompany, options);
+    return { appId: ranked.appId, company: app.company, confidence: 'sender' };
+  }
+  return null;
+}
+
 // Tier-3 match: the SENDER told us nothing, but the SUBJECT may name a company.
 // Full company words or a distinctive core must appear consecutively as whole
 // tokens. A short single-token core is not searched alone. Candidate rows for the
@@ -958,6 +984,13 @@ function scanDecisions({ messages = [], taRows = [], apps = [], applyDates = {} 
     if (!contact && !companyGuess) {
       companyGuess = matchBySubject(msg.subject, apps, { emailDate: msg.date, applyDates });
     }
+    if (!contact && !companyGuess) {
+      companyGuess = matchBySender(fromAddr, parseFromHeader(msg.from).name, apps, {
+        emailDate: msg.date,
+        subject: msg.subject,
+        applyDates,
+      });
+    }
     const entry = {
       msgId: msg.id, threadId: msg.threadId, from: fromAddr, subject: msg.subject, date: msg.date,
       fromName: parseFromHeader(msg.from).name,
@@ -1093,6 +1126,6 @@ function logReplyToContact(contact, { subject, body, timestamp, advanceStatus = 
 export {
   readTokens, writeTokens, readSync, writeSync, replyDecisionsViaEvents, tokenScopes,
   clientConfigured, googleStatus, getAccessToken, checkHealth, listMessages, getMessage, fetchMessagesConcurrent,
-  parseGmailMessage, extractEmail, parseFromHeader, isAtsRelayAddress, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions, heldBackBounceIds,
+  parseGmailMessage, extractEmail, parseFromHeader, isAtsRelayAddress, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, matchBySender, scanDecisions, heldBackBounceIds,
   exchangeCode, fetchProfileEmail, candidateAppsFor, rankCandidateApps, createDraft, logReplyToContact, previewEntry,
 };
