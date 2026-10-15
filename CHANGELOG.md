@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.18.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.18.0...v5.18.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* match ATS relay replies and keep a held Rejected's status flip ([#481](https://github.com/michaelinghilterra-creator/trajecktory/issues/481)) ([d09c734](https://github.com/michaelinghilterra-creator/trajecktory/commit/d09c734436456b432c042a5623f76ac76ebb0aed))
+
 ## [5.18.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.17.0...v5.18.0) (2026-10-14)
 
 
