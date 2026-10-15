@@ -318,6 +318,17 @@ const tie = findStatusMismatches([{
 }]);
 check(tie.length === 1 && tie[0].message_id === 'msg-900020', 'same-day messages are ordered by message_id');
 
+// Rejection phrasings the status guard used to miss (the application stayed at Applied after the email was logged).
+const fromEmployer = (subject, body) => classifyStatusSignal({ direction: 'from_employer', subject, body });
+check(fromEmployer('Thanks for your interest', "After reviewing your work, we've made the decision to not move forward at this time.") === 'rejection',
+  'from_employer: "made the decision to not move forward" gives rejection');
+check(fromEmployer('Thank you for your interest', 'After reviewing your application, we have made the difficult decision to move forward with other candidates.') === 'rejection',
+  'from_employer: "decision to move forward with other candidates" gives rejection');
+check(fromEmployer('Thank you again', 'Unfortunately we could not interview everyone. While we won’t be moving forward with your application, thank you.') === 'rejection',
+  'from_employer: "won’t be moving forward" with a curly apostrophe gives rejection');
+check(fromEmployer('Re: your note', 'We are moving forward with scheduling the call, and the decision to move forward with the panel is made.') === 'human_reply',
+  'from_employer: moving forward with scheduling stays a plain human reply');
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) {
   process.exit(1);

@@ -726,6 +726,7 @@ for (const suite of [
   'tests/weekly-review-exclude-route.test.mjs',
   'tests/passed-merge.test.mjs',
   'tests/reply-guards.test.mjs',
+  'tests/reply-guard-held-action.test.mjs',
   'tests/reply-prompts-route.test.mjs',
   'tests/event-undo.test.mjs',
   'tests/inbound-events.test.mjs',
