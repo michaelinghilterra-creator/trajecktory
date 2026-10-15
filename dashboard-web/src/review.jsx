@@ -379,7 +379,8 @@ function ReplyRow({ reply, toast }) {
     }).then(r => r.json())
       .then(res => {
         // E-3: an old or automated message is held until the person confirms, logs it as neutral, or dismisses it.
-        if (res.guard && res.guard.reason === 'needs_acknowledgement') { setGuard(res.guard); return; }
+        // Remember the action that was held, so "anyway" repeats it (a held Rejected must still flip the status).
+        if (res.guard && res.guard.reason === 'needs_acknowledgement') { setGuard({ ...res.guard, heldAction: action }); return; }
         if (res.needsContact) {
           setCreateError('');
           setNewPerson({ action, suggestedName: res.suggestedName || '', suggestedEmail: res.suggestedEmail || '' });
@@ -449,7 +450,7 @@ function ReplyRow({ reply, toast }) {
             ? `This message is dated ${w.message_on}, before you applied (${w.apply_date}).`
             : `This looks automated (${String(w.kind).replace(/_/g, ' ')}).`).join(' ')}</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-            <button className="btn ghost sm" onClick={() => act('log', { acknowledged: true })} disabled={busy}>Log anyway</button>
+            <button className="btn ghost sm" onClick={() => act(guard.heldAction || 'log', { acknowledged: true })} disabled={busy}>{!guard.heldAction || guard.heldAction === 'log' ? 'Log anyway' : guard.heldAction === 'rejected' ? 'Mark Rejected anyway' : `Mark ${guard.heldAction} anyway`}</button>
             <button className="btn ghost sm" onClick={() => act('log', { acknowledged: true, sentiment: 'neutral' })} disabled={busy}>Log as neutral</button>
             <button className="btn ghost sm" onClick={() => act('dismiss')} disabled={busy}>Dismiss</button>
           </div>

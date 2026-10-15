@@ -820,11 +820,11 @@ function matchByCompanyDomain(fromAddr, apps = [], options = {}) {
 // "Pat Doe - Quillmark <pat@quillmark.example-mail.test>". The display name and any
 // subdomain label are checked with the same whole-token rules as the subject tier, so a
 // short single-token core is never searched alone. Still only a suggestion for confirmation.
-function matchBySender(fromAddr, fromName, apps = [], options = {}) {
+function matchByFromHeader(fromAddr, fromName, apps = [], options = {}) {
   const at = String(fromAddr || '').split('@')[1] || '';
   const labels = at.toLowerCase().split('.').filter(Boolean);
   const subdomain = labels.length >= 3 ? _normCompanyToken(labels[0]) : '';
-  const nameTokens = _wordTokens(fromName);
+  const fromNameWords = _wordTokens(fromName);
   for (const app of apps) {
     const companyTokens = _wordTokens(app.company);
     const coreTokens = _companyCoreTokens(app.company);
@@ -832,7 +832,7 @@ function matchBySender(fromAddr, fromName, apps = [], options = {}) {
       || (coreTokens.length === 1 && coreTokens[0].length >= 4);
     const comp = _normCompanyToken(app.company);
     const bySubdomain = subdomain.length >= 4 && (subdomain === comp || subdomain === companyTokens.join(''));
-    const byName = _hasTokenSequence(nameTokens, companyTokens) || (coreIsSafe && _hasTokenSequence(nameTokens, coreTokens));
+    const byName = _hasTokenSequence(fromNameWords, companyTokens) || (coreIsSafe && _hasTokenSequence(fromNameWords, coreTokens));
     if (!bySubdomain && !byName) continue;
     const companyKey = normalizeCompany(app.company);
     const sameCompany = apps.filter(a => normalizeCompany(a.company) === companyKey);
@@ -985,7 +985,7 @@ function scanDecisions({ messages = [], taRows = [], apps = [], applyDates = {} 
       companyGuess = matchBySubject(msg.subject, apps, { emailDate: msg.date, applyDates });
     }
     if (!contact && !companyGuess) {
-      companyGuess = matchBySender(fromAddr, parseFromHeader(msg.from).name, apps, {
+      companyGuess = matchByFromHeader(fromAddr, parseFromHeader(msg.from).name, apps, {
         emailDate: msg.date,
         subject: msg.subject,
         applyDates,
@@ -1126,6 +1126,6 @@ function logReplyToContact(contact, { subject, body, timestamp, advanceStatus = 
 export {
   readTokens, writeTokens, readSync, writeSync, replyDecisionsViaEvents, tokenScopes,
   clientConfigured, googleStatus, getAccessToken, checkHealth, listMessages, getMessage, fetchMessagesConcurrent,
-  parseGmailMessage, extractEmail, parseFromHeader, isAtsRelayAddress, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, matchBySender, scanDecisions, heldBackBounceIds,
+  parseGmailMessage, extractEmail, parseFromHeader, isAtsRelayAddress, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, matchByFromHeader, scanDecisions, heldBackBounceIds,
   exchangeCode, fetchProfileEmail, candidateAppsFor, rankCandidateApps, createDraft, logReplyToContact, previewEntry,
 };
