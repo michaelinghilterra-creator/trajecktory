@@ -682,7 +682,7 @@ function matchAddress(address, { taRows = [] } = {}) {
 const _GENERIC_COMPANY_WORD_LIST = [
   'inc', 'corp', 'corporation', 'llc', 'ltd', 'limited', 'co', 'company',
   'group', 'holdings', 'technologies', 'technology', 'labs', 'software',
-  'systems', 'solutions', 'global',
+  'systems', 'solutions', 'global', 'enterprises',
 ];
 const _GENERIC_COMPANY_WORDS = new Set(_GENERIC_COMPANY_WORD_LIST);
 const _GENERIC_COMPANY_WORD_RE = new RegExp(`\\b(?:${_GENERIC_COMPANY_WORD_LIST.join('|')})\\b`, 'g');
