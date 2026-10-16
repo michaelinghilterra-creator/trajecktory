@@ -90,13 +90,25 @@ function formatCompMidpoint(a) {
   return '$' + (a.salary * 1000).toLocaleString('en-US');
 }
 
+// When a related posting was recorded: " on Sep 2, 2026 (6w ago)". Empty when the row has no usable date, so a
+// missing date never prints "Invalid Date". Age uses relAge, the same scale as the table's Date column.
+function relatedWhen(rel) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(rel?.date || ''));
+  if (!m) return '';
+  const when = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (Number.isNaN(when.getTime())) return '';
+  const days = Math.max(0, Math.round((Date.now() - when.getTime()) / 86400000));
+  const age = relAge(days);
+  return ` on ${when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} (${age === 'today' ? age : age + ' ago'})`;
+}
+
 // One line describing a related (repeat) posting, shared by the table tooltip
 // and the drawer banner: "Seen before: #900001 Evaluated, 3.2 to 4.1 (+0.9)".
 // The identical posting recorded twice reads "Same posting" in either direction.
 function relatedLabel(app, rel) {
   const scoreText = (n) => Number.isFinite(Number(n)) ? Number(n).toFixed(1) : null;
   const label = rel.kind === 'same-posting' ? 'Same posting' : rel.direction === 'earlier' ? 'Seen before' : 'Seen again';
-  const text = `${label}: #${rel.num} ${rel.status || ''}`.trim();
+  const text = `${label}: #${rel.num} ${rel.status || ''}${relatedWhen(rel)}`.trim();
   if (rel.scoreDelta == null) return text;
   const first = rel.direction === 'earlier' ? scoreText(rel.score) : scoreText(app.score);
   const second = rel.direction === 'earlier' ? scoreText(app.score) : scoreText(rel.score);
@@ -1165,7 +1177,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                 <div>
                   {shownRelated.map(rel => <div key={`${rel.num}:${rel.direction}`}>{relatedLabel(app, rel)}</div>)}
                   {relatedRoles.length > shownRelated.length && (
-                    <div className="dim" title={relatedRoles.map(rel => `#${rel.num} ${rel.status || ''}`.trim()).join(', ')}>+{relatedRoles.length - shownRelated.length} more</div>
+                    <div className="dim" title={relatedRoles.map(rel => `#${rel.num} ${rel.status || ''}${relatedWhen(rel)}`.trim()).join('\n')}>+{relatedRoles.length - shownRelated.length} more</div>
                   )}
                 </div>
               </div>
