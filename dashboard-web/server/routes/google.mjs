@@ -494,7 +494,10 @@ router.get('/api/google/replies', async (req, res) => {
     // Senders the user marked "not job-related" are dropped from every sweep going
     // forward, so a random email that got picked up once stops resurfacing.
     const notRelated = sync.notRelatedSenders || {};
-    const notSuppressed = (r) => { const a = senderAddress(r.from); return !(a && notRelated[a]); };
+    // An ATS relay (greenhouse-mail, myworkday, ashby) sends for every employer, so suppressing it by address hides
+    // every company's mail, rejections included. Older records for a relay are ignored here; the message itself can
+    // still be dismissed.
+    const notSuppressed = (r) => { const a = senderAddress(r.from); return !(a && notRelated[a] && !isAtsRelayAddress(a)); };
     const withMeta = (rows, companyOf) => rows.filter(notSuppressed).map(r => {
       const ranked = rankCandidateApps(companyOf(r), apps, {
         emailDate: r.date,
@@ -595,7 +598,9 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     // future sweeps drop their emails too — the user teaching the filter after a
     // random email got picked up. No application, no note, no status change.
     if (action === 'not-related') {
-      const addr = senderAddress(req.body?.from);
+      // A relay address is shared by every employer on that ATS, so only this message is hidden, never the sender.
+      const rawAddr = senderAddress(req.body?.from);
+      const addr = isAtsRelayAddress(rawAddr) ? '' : rawAddr;
       try {
         if (viaEvents) {
           recordEvent(buildSenderNotRelatedEvent({ msg_id: msgId, address: addr, occurred_on: today }));
