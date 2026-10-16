@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.19.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.18.1...v5.19.0) (2026-10-16)
+
+
+### Features
+
+* show recorded dates on repeat postings and fix reply matching across name variants ([#483](https://github.com/michaelinghilterra-creator/trajecktory/issues/483)) ([f4b4ce4](https://github.com/michaelinghilterra-creator/trajecktory/commit/f4b4ce42e79bd52f722bf7a8b54e0e4532f86eeb))
+
 ## [5.18.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.18.0...v5.18.1) (2026-10-15)
 
 
