@@ -98,6 +98,12 @@ try {
     && state.notRelatedSenders?.['someone@example.test']
     && allEvents().some(e => e.type === 'sender_not_related'), 'not-related writes handled state, sender state and event');
 
+  r = await send('POST', '/api/google/replies/m910009/not-related', { from: 'Example Relay <noreply@jobvite.example.test>' });
+  state = projectedReplyState();
+  check(r.status === 200
+    && state.handledReplies?.m910009?.action === 'not-related'
+    && !state.notRelatedSenders?.['noreply@jobvite.example.test'], 'not-related on an ATS relay hides the message but never the sender');
+
   r = await send('POST', '/api/google/replies/m910003/unmatched', {
     from: 'Example Persontwo <example.persontwo@jobvite.example.test>',
     fromName: 'Example Persontwo',

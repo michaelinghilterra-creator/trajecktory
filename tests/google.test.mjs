@@ -658,5 +658,18 @@ const sharedBoardRows = [
 check(rankCandidateApps('Zorblax Widgetry', sharedBoardRows).candidates.length === 2,
 'rows that share a canonical URL but name different roles are not collapsed');
 
+// An ATS names the employer without its entity word ("Zorblax"), while a tracker row may carry it
+// ("Zorblax Enterprises"). Both rows are the same employer, so the applied one must be a candidate.
+const entityWordRows = [
+  { id: 900301, company: 'Zorblax Enterprises', role: 'Example Flange Lead', status: 'Applied', url: 'https://boards.example.test/zorblax/jobs/9001' },
+  { id: 900302, company: 'Zorblax', role: 'Example Flange Director', status: 'Passed', url: 'https://boards.example.test/zorblax/jobs/9002' },
+];
+const entityWordRank = rankCandidateApps('Zorblax', entityWordRows, {
+  emailDate: '2030-03-20T15:00:00Z',
+  applyDates: { 900301: '2030-03-19' },
+});
+check(entityWordRank.candidates.length === 2 && entityWordRank.suggestedAppId === 900301,
+  'a company named without its entity word still reaches the applied row and ranks it first');
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
