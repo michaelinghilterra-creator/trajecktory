@@ -738,6 +738,7 @@ for (const suite of [
   'tests/interview-schedule.test.mjs',
   'tests/interview-schedule-route.test.mjs',
   'tests/interview-outcome-route.test.mjs',
+  'tests/debrief-marks-held.test.mjs',
   'tests/weekly-review-builders.test.mjs',
   'tests/weekly-review-route.test.mjs',
   'tests/status-guards.test.mjs',
