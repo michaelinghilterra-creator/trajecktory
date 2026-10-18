@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.20.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.20.0...v5.20.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* revive auto-archived contacts when a company reopens and match company aliases in the contact nudges ([#487](https://github.com/michaelinghilterra-creator/trajecktory/issues/487)) ([6e50776](https://github.com/michaelinghilterra-creator/trajecktory/commit/6e50776f220e1875998520047ac950e2655b9cc2))
+
 ## [5.20.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.19.0...v5.20.0) (2026-10-18)
 
 
