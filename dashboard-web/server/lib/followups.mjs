@@ -6,7 +6,7 @@ import { parseTargetTalentMd, readTTCorrespondence, matchByCompany, getNewBaseli
 import { readApplyDates, readMute, parseStatusEvents } from './sidecars.mjs';
 import { INTERVIEW_STAGES, isInterviewStage, OUTREACH_ELIGIBLE_STATUSES } from './statuses.mjs';
 import { isSendable } from '../../../lib/email-verify.mjs';
-import { normalizeCompany } from '../../../lib/identity.mjs';
+import { normalizeCompany, companyAliasKeys } from '../../../lib/identity.mjs';
 import { isLinkedInEntry } from './channels.mjs';
 import { readLinkedInMap } from './tt-linkedin.mjs';
 import { outreachCapState, isChannelCapped } from './correspondence-context.mjs';
@@ -288,7 +288,7 @@ function computeStaleTA() {
   for (const c of contacts) {
     if (!TA_TRACKED_STATUSES.includes(c.status)) continue;
     if (!c.lastTouch) continue;
-    if (!eligible.has(normalizeCompany(c.company))) continue;
+    if (!_inEligible(eligible, c.company)) continue;
     const daysSinceLastTouch = _calendarDaysAgo(c.lastTouch);
     if (daysSinceLastTouch == null || daysSinceLastTouch < TA_STALE_THRESHOLD_DAYS) continue;
 
@@ -391,7 +391,7 @@ function computeDueSequenceContacts({ apps } = {}) {
     const c = byId.get(id);
     if (!c) continue;
     if (c.status === 'Archived') continue;
-    if (!eligible.has(normalizeCompany(c.company))) continue;
+    if (!_inEligible(eligible, c.company)) continue;
     if (_shadowedBySibling(c, siblings.get(c.id), liMap)) continue;
 
     const template = getTemplate(active.sequenceId);
@@ -540,7 +540,7 @@ function _shadowedBySibling(row, siblings, liMap) {
 function outreachEligibleCompanies(apps) {
   const set = new Set();
   for (const a of (apps || [])) {
-    if (OUTREACH_ELIGIBLE_STATUSES.includes(a.status)) set.add(normalizeCompany(a.company));
+    if (OUTREACH_ELIGIBLE_STATUSES.includes(a.status)) for (const key of companyAliasKeys(a.company)) set.add(key);
   }
   return set;
 }
@@ -571,10 +571,15 @@ const QUEUE_POLICY_BY_STORE = {
   referral: { gateOnLiveApplication: true, reason: row => ['Not Asked', 'Catching Up'].includes(row.status) ? 'Reach out' : ['Asked', 'Responded'].includes(row.status) ? 'Follow up' : '' },
 };
 
+// A contact's company matches when any key it is known by is in the set (see companyAliasKeys).
+function _inEligible(eligible, company) {
+  return companyAliasKeys(company).some(key => eligible.has(key));
+}
+
 function _passesCompanyGate(source, company, eligible) {
   // The live application gate protects TA and referral outreach from becoming
   // noise.
-  return !QUEUE_POLICY_BY_STORE[source].gateOnLiveApplication || eligible.has(normalizeCompany(company));
+  return !QUEUE_POLICY_BY_STORE[source].gateOnLiveApplication || _inEligible(eligible, company);
 }
 
 // One row shape for both queues. `email` is the clean address (verified.address),
@@ -1201,7 +1206,7 @@ function computeJustConnectedQueue({ taRows, referralRows, influencers, apps } =
   for (const row of ta) {
     if (row.linkedinStatus !== 'Connected') continue;            // accepted the invite
     if (row.status === 'Archived') continue;
-    if (!applied.has(normalizeCompany(row.company))) continue;   // only live applications
+    if (!_inEligible(applied, row.company)) continue;   // only live applications
     const connectedOn = liMap[String(row.id)]?.updated || '';
     // Cool-off: with a known connect date, stay quiet until it is old enough. A
     // missing date still surfaces (below) rather than risk hiding a real cue.

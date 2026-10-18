@@ -130,6 +130,23 @@ check(q[q.length - 1].company === 'Northwind Robotics', 'sort puts Northwind las
 // empty input is safe
 check(computeConnectQueue({ taRows: [] }).length === 0, 'empty rows → empty queue');
 
+// A company filed with an aside or a pairing still gates its contacts in: the application says
+// "Zorblax Widgetry (Parentco)" and the contact is filed under "Zorblax Widgetry".
+const variantQueue = computeConnectQueue({
+  taRows: [ta({ id: 91, first: 'Ines', last: 'Okafor', title: 'VP Sales', company: 'Zorblax Widgetry', linkedin: 'linkedin.com/in/ines-okafor-ex', status: 'Not Contacted' })],
+  referralRows: [],
+  influencers: [],
+  apps: [{ id: 7, company: 'Zorblax Widgetry (Parentco)', status: 'Applied', role: 'Ops Lead', date: '2030-03-01' }],
+});
+check(variantQueue.map(r => r.id).join() === '91', 'a contact is queued when the live application is filed with a parenthetical aside');
+const closedVariantQueue = computeConnectQueue({
+  taRows: [ta({ id: 92, first: 'Ines', last: 'Okafor', title: 'VP Sales', company: 'Zorblax Widgetry', linkedin: 'linkedin.com/in/ines-okafor-ex', status: 'Not Contacted' })],
+  referralRows: [],
+  influencers: [],
+  apps: [{ id: 8, company: 'Zorblax Widgetry (Parentco)', status: 'No Response', role: 'Ops Lead', date: '2030-03-01' }],
+});
+check(closedVariantQueue.length === 0, 'a contact is not queued when that application is closed');
+
 // ── channelFor: the corrected unverified-is-not-a-channel rule ────────────────
 check(channelFor('Brightwave Labs', taRows) === 'email', 'verified email → email channel');
 check(channelFor('Corvane Systems', taRows) === 'linkedin',
