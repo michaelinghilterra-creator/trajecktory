@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.20.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.19.0...v5.20.0) (2026-10-18)
+
+
+### Features
+
+* No Response closes a company's contacts, a debrief marks the interview held, receipts no longer block ([#485](https://github.com/michaelinghilterra-creator/trajecktory/issues/485)) ([9731c86](https://github.com/michaelinghilterra-creator/trajecktory/commit/9731c86661c98e3a44183ec482ad5f94d6f44ac4))
+
 ## [5.19.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.18.1...v5.19.0) (2026-10-16)
 
 
