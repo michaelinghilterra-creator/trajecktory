@@ -136,7 +136,7 @@ const records = recordsOf(events);
   check(strictGate.blocking === true && strictGate.warn_only === false && strictGate.count === gate.count, 'with the store on (strict) the gate blocks');
   check(types.join() === 'status_mismatch:900006,unconfirmed_interview:900002,unconfirmed_interview:900003', 'the range lists the line with no recording, the held line with no evidence and a No Response that has a rejection on record');
   const mismatch = gate.warnings.find(w => w.id === 900006);
-  check(gate.other_replies_in_range === 2, 'plain replies on No Response applications inside the range are counted, not listed, and one outside the range is not counted');
+  check(gate.other_replies_in_range === 0, 'plain replies on No Response applications are not a response, so they are neither counted nor listed');
   check(mismatch.mismatch_type === 'rejection_after_no_response' && mismatch.company === 'Vantrix Sprocketry', 'a status mismatch warning names its type and company');
   const first = gate.warnings.find(w => w.id === 900003);
   check(first.company === 'Vantrix Sprocketry' && first.role === 'Example Sprocket Designer' && first.stage === 'Phone Screen' && first.reasons.join() === 'no_evidence', 'a warning names the company, role, stage and reason');

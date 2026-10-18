@@ -5,6 +5,7 @@ import { readAppNotes, addNote } from '../lib/notes.mjs';
 import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
 import { pendingDebriefs, debriefTemplate, formatDebriefNote, isDebriefFor } from '../lib/debrief.mjs';
 import { localToday } from '../../../lib/local-date.mjs';
+import { markHeldFromDebrief } from '../lib/interview-events.mjs';
 
 export const router = express.Router();
 
@@ -96,12 +97,13 @@ router.get('/api/interview/debriefs/template', (req, res) => {
 
 // POST /api/interview/debriefs/:id — save a debrief. Body: { stage, fields?, text? }.
 // `fields` is the structured form; `text` is freeform (the header is added if
-// absent so detection still works). Persisted via addNote to data/app-notes.json.
+// absent so detection still works). Persisted via addNote to data/app-notes.json. Also records the interview
+// as held, optionally on `heldOn` (YYYY-MM-DD), so Today and the Activity Tracker stop asking.
 router.post('/api/interview/debriefs/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid application id' });
-    const { stage, fields, text } = req.body || {};
+    const { stage, fields, text, heldOn } = req.body || {};
     if (!stage || !INTERVIEW_STAGES.includes(stage)) {
       return res.status(400).json({ error: `Provide an interview stage (one of: ${INTERVIEW_STAGES.join(', ')}). Got: ${stage}` });
     }
@@ -116,7 +118,9 @@ router.post('/api/interview/debriefs/:id', (req, res) => {
       note = formatDebriefNote(stage, fields || {}, { date, company: app?.company, role: app?.role });
     }
     const history = addNote(id, note);
-    res.json({ ok: true, notes: history });
+    // The debrief says the interview happened, so record it as held too (see markHeldFromDebrief).
+    const held = markHeldFromDebrief({ appId: id, stage, heldOn });
+    res.json({ ok: true, notes: history, held });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

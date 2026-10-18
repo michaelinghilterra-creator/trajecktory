@@ -199,7 +199,7 @@ const app3 = {
   id: 900103,
   status: 'No Response',
   messages: [
-    { message_id: 'msg-900005', direction: 'from_employer', subject: 'thanks for your time', body: '', sent_on: '2030-03-05' }
+    { message_id: 'msg-900005', direction: 'from_employer', subject: 'Interview invitation: please select a time', body: '', sent_on: '2030-03-05' }
   ]
 };
 
@@ -211,7 +211,7 @@ check(
     mismatches3[0].message_id === 'msg-900005' &&
     mismatches3[0].dated_on === '2030-03-05' &&
     mismatches3[0].proposed === null,
-  'findStatusMismatches: human reply after no response yields reply mismatch with proposed null'
+  'findStatusMismatches: an interview invitation after no response yields a mismatch with proposed null'
 );
 
 // rejection wins over earlier human reply
@@ -328,6 +328,14 @@ check(fromEmployer('Thank you again', 'Unfortunately we could not interview ever
   'from_employer: "won’t be moving forward" with a curly apostrophe gives rejection');
 check(fromEmployer('Re: your note', 'We are moving forward with scheduling the call, and the decision to move forward with the panel is made.') === 'human_reply',
   'from_employer: moving forward with scheduling stays a plain human reply');
+
+// An automated application receipt is not the employer answering, so it must not block No Response.
+check(fromEmployer('Thank you for applying to Example Co', 'We have received your application.') === 'none',
+  'from_employer: an application receipt gives none');
+check(fromEmployer('Thank you for applying to Example Co', 'Unfortunately we will not be moving forward.') === 'rejection',
+  'from_employer: a receipt subject with a rejection body still gives rejection');
+check(fromEmployer('Re: your application', 'Can we talk on Tuesday?') === 'human_reply',
+  'from_employer: a reply to the person stays a human reply');
 
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) {

@@ -9,7 +9,8 @@
  * Run: node tests/tt-reconcile.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { reconcilePreview, normCompany } from '../dashboard-web/server/lib/tt-reconcile-core.mjs';
+import { reconcilePreview, normCompany, contactIdsToArchiveForCompany } from '../dashboard-web/server/lib/tt-reconcile-core.mjs';
+import { companyAliasKeys } from '../lib/identity.mjs';
 
 let passed = 0, failed = 0;
 const check = (c, m) => { if (c) { console.log(`  ✅ ${m}`); passed++; } else { console.log(`  ❌ ${m}`); failed++; } };
@@ -117,6 +118,35 @@ const resetAttempts = {
 const withReset = reconcilePreview(apps, ttRows, { attempts: resetAttempts });
 const resetCos = withReset.companiesNeedingContacts.map(c => c.company);
 check(resetCos.includes('Brightwave'), 'Brightwave re-included when app date (2026-03-01) is newer than lastSearched');
+
+// One company at a time: the status route calls this when a role goes No Response.
+const liveRows = ttRows.filter(r => r.status !== 'Archived');
+const ghostlyIds = contactIdsToArchiveForCompany(apps, liveRows, 'Ghostly');
+check(ghostlyIds.length === 1 && ghostlyIds[0] === 14, 'per-company: a No Response company archives its contact');
+check(contactIdsToArchiveForCompany(apps, liveRows, 'Northwind').length === 0, 'per-company: a company with a live application keeps its contacts');
+check(contactIdsToArchiveForCompany(apps, liveRows, 'Limbo Co').length === 0, 'per-company: an Evaluated-only company is left alone');
+check(contactIdsToArchiveForCompany(apps, liveRows, 'ghostly, inc.').join() === '14', 'per-company: company names match after normalizing');
+check(contactIdsToArchiveForCompany(apps, liveRows, '').length === 0, 'per-company: a blank company archives nothing');
+const acmeIds = contactIdsToArchiveForCompany(apps, liveRows, 'Acme Labs');
+check(acmeIds.includes(10) && acmeIds.includes(13), 'per-company: a decision maker is archived along with the TA contact');
+
+// Company name variants: a tracker cell with an aside or a pairing still meets a contact filed under one name.
+check(companyAliasKeys('Zenco (Parentco)').join() === 'zencoparentco,zenco', 'alias keys: a parenthetical aside adds the plain name');
+check(companyAliasKeys('Alphaco / Betaco').join() === 'alphacobetaco,alphaco,betaco', 'alias keys: each side of a slash is a key');
+check(companyAliasKeys('Ab / Cd').join() === 'abcd', 'alias keys: fragments under four characters are not keys');
+check(companyAliasKeys('').length === 0, 'alias keys: a blank name has none');
+const variantApps = [
+  { id: 201, company: 'Alphaco / Betaco', status: 'No Response', role: 'Ops', date: '2026-02-01' },
+  { id: 202, company: 'Zenco (Parentco)', status: 'Applied', role: 'Ops', date: '2026-02-02' },
+];
+const variantRows = [
+  { id: 301, first: 'P', last: 'One', company: 'Betaco', title: 'VP Sales', status: 'Not Contacted', notes: '[tier:exec]' },
+  { id: 302, first: 'Q', last: 'Two', company: 'Zenco', title: 'VP Sales', status: 'Not Contacted', notes: '[tier:exec]' },
+];
+const variantArchive = reconcilePreview(variantApps, variantRows).toArchive.map(c => c.id);
+check(variantArchive.join() === '301', 'a decision maker filed under one half of a slash company is archived when that application is closed');
+check(!variantArchive.includes(302), 'a contact at a company whose application, filed with an aside, is still live is kept');
+check(contactIdsToArchiveForCompany(variantApps, variantRows, 'Alphaco / Betaco').join() === '301', 'per-company archive follows the same variants');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -294,7 +294,10 @@ window.tjkGuardStatus = async function tjkGuardStatus(app, to, { interactive = t
       guard = { ...guard, phoneRejectionOn: answer.trim() };
       continue;
     }
-    window.alert(dialog.text);
+    // A native alert opens at the top of the window, away from the row being edited, and the person has to
+    // go up there to dismiss it. A toast shows the same words in the app and clears itself.
+    if (window.tjkToast) window.tjkToast(dialog.text, 'error', 9000);
+    else window.alert(dialog.text);
     return { ok: false, guard, reason: dialog.text };
   }
   return { ok: false, guard, reason: '' };

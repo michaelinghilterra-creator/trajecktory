@@ -1139,7 +1139,6 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   const [err, setErr] = useStateCq(null);
   const [channel, setChannel] = useStateCq('all');
   const [book, setBook] = useStateCq('all');   // contact type: referral / ta / influencer
-  const [showHeld, setShowHeld] = useStateCq(false);
   const [inmail, setInmail] = useStateCq(null);
   const [setBox, setSetBox] = useStateCq(false);
   const [setVal, setSetVal] = useStateCq('');
@@ -1154,7 +1153,7 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   // in a data file, so the restore list has to come from there: keeping it in
   // localStorage meant clearing site data left contacts muted with nothing that
   // knew about them, which is the no-undo trap the control exists to avoid.
-  const [mutedContacts, setMutedContacts] = useStateCq([]);
+  const [, setMutedContacts] = useStateCq([]);
   const loadMuted = () => fetch('/api/followups/muted?sources=ta,referral,influencer').then(r => r.json())
     .then(d => setMutedContacts(Array.isArray(d.muted) ? d.muted : []))
     .catch(() => { /* the list is a convenience; never break the queue over it */ });
@@ -1254,19 +1253,6 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
     }).catch(e => toast && toast(e.message, 'error'));
   };
 
-  const unmuteContact = (c) => {
-    window.tjkMutate('/api/followups/unmute', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: c.source, id: c.id }),
-    }).then(async r => {
-      const res = await r.json().catch(() => ({}));
-      if (!r.ok || res.error) throw new Error(res.error || `Restore failed (${r.status})`);
-      loadMuted();
-      toast && toast(`Restored: ${c.name || 'contact'}`, 'success');
-      load();
-    }).catch(e => toast && toast(e.message, 'error'));
-  };
-
   if (err) return <div className="dim" style={{ padding: 28 }}>Could not load the follow-up queue: {err}</div>;
   if (!queue) return <div className="dim" style={{ padding: 28 }}>Loading follow-up queue…</div>;
 
@@ -1307,20 +1293,8 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   // reply). blocks is absent on the standalone /queue endpoint, so fall back to the
   // held/capped estimates there rather than showing everything.
   const isBlocked = (c) => Array.isArray(c.blocks) && c.blocks.length > 0;
-  // Time-gated blocks (gap / awaiting reply) that are not the daily/InMail hold or the
-  // cold-cap rest. These clear on their own on the contact's nextEligible date.
-  const isWaiting = (c) => isBlocked(c) && !isHeld(c) && !isCapped(c);
   const isHiddenRow = (c) => isHeld(c) || isCapped(c) || isBlocked(c);
-  const heldCount = queue.filter(isHeld).length;
-  const restingCount = queue.filter(isCapped).length;
-  const waitingCount = queue.filter(isWaiting).length;
-  const anyDaily = queue.some(isHeldDaily);
-  const anyInmailOut = queue.some(isInmailBlocked);
-  const heldReasons = [
-    anyDaily ? 'that company already has its allotment of contacts queued for today' : null,
-    anyInmailOut ? 'you are out of InMail credits this month' : null,
-  ].filter(Boolean).join('; ');
-  const base = showHeld ? queue : queue.filter(c => !isHiddenRow(c));
+  const base = queue.filter(c => !isHiddenRow(c));
   const counts = {
     all: base.length,
     linkedin: base.filter(c => c.channel === 'linkedin').length,
@@ -1446,22 +1420,6 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
           </div>
         )}
       </div>
-      {(heldCount > 0 || restingCount > 0 || waitingCount > 0 || mutedContacts.length > 0) && (
-        <div className="dim" style={{ fontSize: 12, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '7px 11px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 240 }}>
-            {heldCount > 0 && <span>{heldCount} contact{heldCount === 1 ? '' : 's'} hidden right now ({heldReasons}). They return automatically once that clears (tomorrow, or when your InMail credits reset).</span>}
-            {waitingCount > 0 && <span>{waitingCount} contact{waitingCount === 1 ? '' : 's'} recently contacted — waiting out the gap between touches. They return on their own once eligible.</span>}
-            {restingCount > 0 && <span>{restingCount} contact{restingCount === 1 ? '' : 's'} resting — reached the outreach cap with no reply. They stay parked here until they reply, or you message anyway.</span>}
-            {mutedContacts.length > 0 && <span>
-              {mutedContacts.length} contact{mutedContacts.length === 1 ? '' : 's'} marked Done for now.{' '}
-              {mutedContacts.map((c, i) => <span key={`${c.source}:${c.id}`}>{i ? ', ' : ''}<button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => unmuteContact(c)}>Restore {c.name}</button></span>)}
-            </span>}
-          </div>
-          {(heldCount > 0 || restingCount > 0 || waitingCount > 0) ? <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setShowHeld(v => !v)}>
-            {showHeld ? 'Hide them' : 'Show anyway'}
-          </button> : null}
-        </div>
-      )}
       {rows.length === 0
         ? <div className="card dim">
             {queue.length === 0

@@ -8,6 +8,7 @@
 // all of them are closed for outreach, including No Response. Recruiters are
 // external firms, not tied to one opportunity, and are never considered here.
 import { OUTREACH_ELIGIBLE_STATUSES, OUTREACH_DEAD_STATUSES } from './statuses.mjs';
+import { companyAliasKeys } from '../../../lib/identity.mjs';
 import { parseInfluenceTier, INFLUENCE_RANK } from '../../../lib/influence-tier.mjs';
 import { isAtCap } from './contact-search-attempts.mjs';
 
@@ -32,6 +33,27 @@ export function normCompany(s) {
     .replace(/[^a-z0-9]/g, '');
 }
 
+// The contacts to archive at ONE company, by the same rule as the full reconcile (every application there
+// is closed for outreach). The status route calls this when a role goes No Response, so the person does
+// not have to open the TA tab and run reconcile to retire that company's TA and decision-maker contacts.
+// ttRows must already exclude Archived rows. Returns TA ids.
+export function contactIdsToArchiveForCompany(apps, ttRows, company) {
+  const wanted = aliasSet(company);
+  if (wanted.size === 0) return [];
+  return reconcilePreview(apps, ttRows).toArchive
+    .filter(c => [...aliasSet(c.company)].some(key => wanted.has(key)))
+    .map(c => c.id);
+}
+
+// Every key a company cell is known by, so "Example (Parent)" and "Example / Other" meet a contact filed under
+// plain "Example". Used only to look applications up for a contact; the per-company maps below keep their
+// single key so a company is never counted twice.
+function aliasSet(name) {
+  const keys = new Set([normCompany(name), ...companyAliasKeys(name)]);
+  keys.delete('');
+  return keys;
+}
+
 // apps: parseApplicationsMd() output. ttRows: parseTargetTalentMd() output ALREADY
 // filtered to non-Archived. Returns { toArchive, companiesNeedingContacts,
 // companiesNeedingPrincipal }, the exact shape the preview endpoint returns.
@@ -44,6 +66,18 @@ export function reconcilePreview(apps, ttRows, { mode, attempts } = {}) {
     if (!appsByCompany.has(k)) appsByCompany.set(k, []);
     appsByCompany.get(k).push(a);
   }
+  const appsByAlias = new Map();
+  for (const a of apps) {
+    for (const k of aliasSet(a.company)) {
+      if (!appsByAlias.has(k)) appsByAlias.set(k, new Set());
+      appsByAlias.get(k).add(a);
+    }
+  }
+  const appsForContact = (company) => {
+    const found = new Set();
+    for (const k of aliasSet(company)) for (const a of appsByAlias.get(k) || []) found.add(a);
+    return [...found];
+  };
 
   // Archive a contact only when their company is DEFINITIVELY dead: it has apps
   // and EVERY one is terminal (Rejected/Discarded/SKIP/Closed/Not a Fit/No Response).
@@ -53,7 +87,7 @@ export function reconcilePreview(apps, ttRows, { mode, attempts } = {}) {
   // keep-worthy" test, which would have archived Evaluated-only contacts.
   const toArchive = [];
   for (const c of ttRows) {
-    const companyApps = appsByCompany.get(normCompany(c.company)) || [];
+    const companyApps = appsForContact(c.company);
     if (companyApps.length === 0) continue;               // no apps logged — leave alone
     if (!companyApps.every(a => OUTREACH_DEAD_STATUSES.includes(a.status))) continue; // any live/limbo app — keep
     toArchive.push({
