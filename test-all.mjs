@@ -582,6 +582,8 @@ for (const suite of [
   'tests/sequence-panel-refresh.test.mjs',
   'tests/influence-predicate.test.mjs',
   'tests/unthreaded-apps.test.mjs',
+  'tests/contact-revive.test.mjs',
+  'tests/revive-archived-contacts.test.mjs',
   'tests/influence-ranking.test.mjs',
   'tests/stakeholder-gap.test.mjs',
   'tests/influence-ui-copy.test.mjs',

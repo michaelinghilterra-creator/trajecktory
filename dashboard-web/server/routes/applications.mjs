@@ -21,6 +21,7 @@ import { localToday, logWriteRouteError, logWritesEnabled, renderPendingResponse
 import { startCadences } from '../lib/cadence-start.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
 import { contactIdsToArchiveForCompany } from '../lib/tt-reconcile-core.mjs';
+import { contactIdsToRevive, withWasTag } from '../lib/contact-revive.mjs';
 
 export const router = express.Router();
 
@@ -265,6 +266,18 @@ router.patch('/api/applications/:id', (req, res) => {
         .catch(() => { /* pushObsidianNote already logs; never surfaces here */ });
     }
 
+    let contactsRevived = 0;
+    if (becomingApplied && updated) {
+      try {
+        const revivals = contactIdsToRevive(parseApplicationsMd(), parseTargetTalentMd(), updated.company);
+        for (const contact of revivals) {
+          if (updateTTLine(contact.id, { status: contact.status, notes: contact.notes })) contactsRevived++;
+        }
+      } catch (err) {
+        console.warn(`[contacts] could not revive contacts for ${updated.company}: ${err.message}`);
+      }
+    }
+
     let cadenceStarted = 0;
     if (becomingApplied && updated) {
       try {
@@ -283,19 +296,24 @@ router.patch('/api/applications/:id', (req, res) => {
     let contactsArchived = 0;
     if (status === 'No Response' && updated && (!prevRow || prevRow.status !== 'No Response')) {
       try {
+        const currentContacts = parseTargetTalentMd().filter(r => r.status !== 'Archived');
+        const contactsById = new Map(currentContacts.map(row => [row.id, row]));
         const ids = contactIdsToArchiveForCompany(
           parseApplicationsMd(),
-          parseTargetTalentMd().filter(r => r.status !== 'Archived'),
+          currentContacts,
           updated.company,
         );
-        for (const contactId of ids) if (updateTTLine(contactId, { status: 'Archived' })) contactsArchived++;
+        for (const contactId of ids) {
+          const row = contactsById.get(contactId);
+          if (row && updateTTLine(contactId, { status: 'Archived', notes: withWasTag(row.notes, row.status) })) contactsArchived++;
+        }
       } catch (err) {
         console.warn(`[contacts] could not archive contacts for ${updated.company}: ${err.message}`);
       }
     }
 
     const response = renderPending.render_pending ? { id, ...updates } : (updated || { id, ...updates });
-    res.json({ ...response, ...renderPending, ...(cadenceStarted > 0 ? { cadenceStarted } : {}), ...(contactsArchived > 0 ? { contactsArchived } : {}) });
+    res.json({ ...response, ...renderPending, ...(cadenceStarted > 0 ? { cadenceStarted } : {}), ...(contactsRevived > 0 ? { contactsRevived } : {}), ...(contactsArchived > 0 ? { contactsArchived } : {}) });
   } catch (err) {
     logWriteRouteError(res, err);
   }

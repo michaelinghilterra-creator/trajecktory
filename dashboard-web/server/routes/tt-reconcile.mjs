@@ -17,6 +17,7 @@ import { readReconcileDismissed, addReconcileDismissed } from '../lib/sidecars.m
 import { readAttempts, recordAttempt, writeAttempts } from '../lib/contact-search-attempts.mjs';
 import { currentBatch } from '../lib/pricing.mjs';
 import { startCadences } from '../lib/cadence-start.mjs';
+import { withWasTag } from '../lib/contact-revive.mjs';
 
 export const router = express.Router();
 
@@ -319,9 +320,12 @@ router.post('/api/tt-reconcile/archive', (req, res) => {
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'ids[] required' });
     }
+    const rowsById = new Map(parseTargetTalentMd().map(row => [row.id, row]));
     let archived = 0;
     for (const id of ids) {
-      const ok = updateTTLine(parseInt(id, 10), { status: 'Archived' });
+      const contactId = parseInt(id, 10);
+      const row = rowsById.get(contactId);
+      const ok = row && updateTTLine(contactId, { status: 'Archived', notes: withWasTag(row.notes, row.status) });
       if (ok) archived++;
     }
     res.json({ ok: true, archived });

@@ -6,7 +6,7 @@ import { parseTargetTalentMd, readTTCorrespondence, matchByCompany, getNewBaseli
 import { readApplyDates, readMute, parseStatusEvents } from './sidecars.mjs';
 import { INTERVIEW_STAGES, isInterviewStage, OUTREACH_ELIGIBLE_STATUSES } from './statuses.mjs';
 import { isSendable } from '../../../lib/email-verify.mjs';
-import { normalizeCompany, companyAliasKeys } from '../../../lib/identity.mjs';
+import { normalizeCompany, companyAliasKeys, companiesMatchForOutreach } from '../../../lib/identity.mjs';
 import { isLinkedInEntry } from './channels.mjs';
 import { readLinkedInMap } from './tt-linkedin.mjs';
 import { outreachCapState, isChannelCapped } from './correspondence-context.mjs';
@@ -1055,13 +1055,11 @@ function isHighValueContact(row) {
 function computeContactlessApps({ apps, taRows } = {}) {
   const appList = apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })();
   const { ta } = _bothBooks({ taRows });
-  const hasContact = new Set();
-  for (const r of ta) if ((r.company || '').trim()) hasContact.add(normalizeCompany(r.company));
   const out = [];
   for (const a of appList) {
     if (!OUTREACH_ELIGIBLE_STATUSES.includes(a.status)) continue;
-    const co = normalizeCompany(a.company);
-    if (!co || hasContact.has(co)) continue;
+    if (!String(a.company || '').trim()) continue;
+    if (ta.some(contact => companiesMatchForOutreach(contact.company, a.company))) continue;
     out.push({
       source: 'app',
       id: a.id,   // parseApplicationsMd exposes the tracker number as `id`, not `num`
@@ -1086,22 +1084,12 @@ function computeContactlessApps({ apps, taRows } = {}) {
 function computeUnthreadedApps({ apps, taRows } = {}) {
   const appList = apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })();
   const { ta } = _bothBooks({ taRows });
-  const contactsByCompany = new Map();
-  for (const contact of ta) {
-    // Deliberately unlike computeContactlessApps, archived rows do not count
-    // here: mapping a company once is coverage there, but an archived decision
-    // maker cannot move a live hire and therefore is not active threading.
-    if (contact.status === 'Archived') continue;
-    const company = normalizeCompany(contact.company);
-    if (!company) continue;
-    if (!contactsByCompany.has(company)) contactsByCompany.set(company, []);
-    contactsByCompany.get(company).push(contact);
-  }
+  const activeContacts = ta.filter(contact => contact.status !== 'Archived');
 
   const out = [];
   for (const a of appList) {
     if (!OUTREACH_ELIGIBLE_STATUSES.includes(a.status)) continue;
-    const contacts = contactsByCompany.get(normalizeCompany(a.company)) || [];
+    const contacts = activeContacts.filter(contact => companiesMatchForOutreach(contact.company, a.company));
     if (contacts.length === 0 || contacts.some(canInfluenceHire)) continue;
     const top = contacts.slice().sort((x, y) => influenceRank(y) - influenceRank(x))[0];
     out.push({
