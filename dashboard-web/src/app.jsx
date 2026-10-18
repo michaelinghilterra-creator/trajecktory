@@ -428,10 +428,10 @@ function App() {
   }
 
   // Toast helper
-  const toast = useCallback((msg, kind) => {
+  const toast = useCallback((msg, kind, ms = 2800) => {
     const id = Date.now() + Math.random();
     setToasts(t => [...t, { id, msg, kind }]);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2800);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), ms);
   }, []);
   // Exposed globally because PipelineDrawer is rendered from three different
   // parents and receives no toast prop, so its own saves had no way to report a

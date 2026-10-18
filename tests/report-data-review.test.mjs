@@ -29,7 +29,7 @@ writeFileSync(join(dataDir, 'applications.md'), [
 const reply = (date, subject, tag, body) => ({ timestamp: `${date}T10:00:00.000Z`, text: `### Reply logged (${date})\nhr@example.test: ${subject} [${tag}]\n\n${body}` });
 writeFileSync(join(dataDir, 'app-notes.json'), `${JSON.stringify({
   900001: [reply('2030-03-08', 'Update on your application', 'negative', 'Unfortunately we will not be moving forward.')],
-  900002: [reply('2030-03-09', 'Thanks for your time, let us know a good time to talk', 'positive', '')],
+  900002: [reply('2030-03-09', 'Interview invitation: please select a time', 'positive', '')],
   900003: [reply('2030-03-10', 'Update on your application', 'negative', 'Unfortunately we will not be moving forward.')],
 }, null, 2)}\n`, 'utf8');
 writeFileSync(join(dataDir, 'twc-overrides.json'), `${JSON.stringify({

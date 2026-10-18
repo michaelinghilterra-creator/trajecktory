@@ -82,7 +82,7 @@ try {
   check(r.status === 409 && r.body.guard.reason === 'future_phone_date' && statusOf(900003) === 'Applied', 'a phone rejection dated in the future is refused');
 
   // An explicit event date wins over the evidence date.
-  fs.writeFileSync(path.join(sandbox, 'app-notes.json'), JSON.stringify({ 900003: [reply(6, 'We will not be moving forward with your application')], 900004: [reply(4, 'thanks for your time, let us know a good time to talk')] }, null, 2) + '\n');
+  fs.writeFileSync(path.join(sandbox, 'app-notes.json'), JSON.stringify({ 900003: [reply(6, 'We will not be moving forward with your application')], 900004: [reply(4, 'We will not be moving forward with your application')] }, null, 2) + '\n');
   r = await patch(900003, { status: 'Rejected', eventDate: daysBack(3) });
   check(r.status === 200 && eventsFor(900003).some(e => e[2] === 'Rejected' && e[1] === daysBack(3)), 'an explicit event date wins over the message date');
 

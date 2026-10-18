@@ -75,7 +75,11 @@ v = evaluateStatusChange({ to: 'No Response', messages: [receipt('m900010', '203
 check(v.allowed, 'a receipt does not stop No Response');
 
 v = evaluateStatusChange({ to: 'No Response', messages: [human('m900011', '2030-03-05')], applied_on: '2030-03-01', by_hand: true });
-check(!v.allowed && v.reason === 'employer_message_exists' && v.show_first[0].message_id === 'm900011', 'a human employer message blocks No Response and is shown first');
+check(v.allowed, 'a friendly human reply is not a response, so it does not stop No Response');
+
+const invite = (id, sentOn) => msg(id, sentOn, 'from_employer', 'Interview invitation: please select a time');
+v = evaluateStatusChange({ to: 'No Response', messages: [human('m900016', '2030-03-04'), invite('m900017', '2030-03-05')], applied_on: '2030-03-01', by_hand: true });
+check(!v.allowed && v.reason === 'employer_message_exists' && v.show_first.length === 1 && v.show_first[0].message_id === 'm900017', 'an interview invitation blocks No Response and is shown first');
 
 v = evaluateStatusChange({ to: 'No Response', messages: [reject('m900012', '2030-03-05')], applied_on: '2030-03-01', by_hand: true });
 check(!v.allowed && v.reason === 'employer_message_exists', 'a rejection blocks No Response');
@@ -89,7 +93,7 @@ check(!v.allowed && v.reason === 'must_be_set_by_hand', 'by_hand must be exactly
 // The prompt
 let p = noResponsePrompt({ messages: [], applied_on: '2030-03-01' });
 check(p.offer === true && p.show_first.length === 0, 'the prompt is offered when no employer message exists');
-p = noResponsePrompt({ messages: [human('m900014', '2030-03-06'), human('m900015', '2030-03-04')], applied_on: '2030-03-01' });
+p = noResponsePrompt({ messages: [reject('m900014', '2030-03-06'), reject('m900015', '2030-03-04')], applied_on: '2030-03-01' });
 check(p.offer === false && p.show_first.map((m) => m.message_id).join() === 'm900015,m900014', 'the prompt is not offered and lists the messages oldest first');
 p = noResponsePrompt();
 check(p.offer === true, 'the prompt works with no arguments');

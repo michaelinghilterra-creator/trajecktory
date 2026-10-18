@@ -65,7 +65,7 @@ const note = (text, timestamp = '2030-03-08T10:00:00.000Z') => ({ timestamp, tex
 {
   const notes = {
     900001: [note('### Reply logged (2030-03-08)\nhr@example.test: Update on your application [negative]\n\nUnfortunately we will not be moving forward.')],
-    900002: [note('### Reply logged (2030-03-09)\nhr@example.test: Thanks for your time, let us know a good time to talk [positive]')],
+    900002: [note('### Reply logged (2030-03-09)\nhr@example.test: Interview invitation: please select a time [positive]')],
     900003: [note('### Reply logged (2030-03-10)\nhr@example.test: Update on your application [negative]\n\nUnfortunately we will not be moving forward.')],
     900004: [note('### Reply logged (2030-03-11)\nhr@example.test: Automatic reply: out of office [neutral]\n\nI am out of office')],
   };

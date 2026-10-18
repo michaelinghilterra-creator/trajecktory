@@ -32,7 +32,7 @@ d = dialogFor({ allowed: false, reason: 'invalid_phone_date' }, CO);
 check(d.kind === 'ask_phone_date' && d.needsDate === true && d.text.startsWith('That is not a real date.'), 'a bad date asks again');
 
 d = dialogFor({ allowed: false, reason: 'employer_message_exists', show_first: two }, CO);
-check(d.kind === 'read_first' && d.needsDate === false && d.text === 'Zorblax Widgetry has written since you applied. Read it before you mark No Response:\n2030-03-05 Example Cog Lead update\n2030-03-06 Second note', 'an existing employer message is listed, oldest first as given');
+check(d.kind === 'read_first' && d.needsDate === false && d.text === 'Zorblax Widgetry has sent a rejection or an interview invitation since you applied. Read it before you mark No Response:\n2030-03-05 Example Cog Lead update\n2030-03-06 Second note', 'an existing employer message is listed, oldest first as given');
 d = dialogFor({ allowed: false, reason: 'employer_message_exists' }, CO);
 check(d.kind === 'read_first' && d.text.endsWith('mark No Response:'), 'a missing message list is not an error');
 d = dialogFor({ allowed: false, reason: 'employer_message_exists', show_first: [{ sent_on: '2030-03-05' }] }, CO);
@@ -52,9 +52,9 @@ check(dialogFor(undefined, CO).kind === 'blocked' && dialogFor(null, CO).needsDa
 check(dialogFor({ allowed: false, reason: 'must_be_set_by_hand' }).text === 'Mark this employer as No Response yourself?', 'a missing company reads as "this employer"');
 
 // The words match what the guard really returns.
-const real = evaluateStatusChange({ to: 'No Response', messages: [{ message_id: 'm900003', sent_on: '2030-03-05', direction: 'from_employer', subject: 'thanks for your time, let us know a good time to talk', body: '' }], applied_on: '2030-03-01', by_hand: true });
+const real = evaluateStatusChange({ to: 'No Response', messages: [{ message_id: 'm900003', sent_on: '2030-03-05', direction: 'from_employer', subject: 'we will not be moving forward with your application', body: '' }], applied_on: '2030-03-01', by_hand: true });
 d = dialogFor(real, CO);
-check(d.kind === 'read_first' && d.text.includes('2030-03-05 thanks for your time'), 'a real guard verdict for No Response is shown with the message');
+check(d.kind === 'read_first' && d.text.includes('2030-03-05 we will not be moving forward'), 'a real guard verdict for No Response is shown with the message');
 d = dialogFor(evaluateStatusChange({ to: 'Rejected', messages: [] }), CO);
 check(d.kind === 'ask_phone_date', 'a real guard verdict for Rejected asks for a phone date');
 d = dialogFor(evaluateStatusChange({ to: 'Rejected', messages: [], withdrawn: true }), CO);
