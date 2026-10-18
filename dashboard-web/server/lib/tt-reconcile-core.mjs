@@ -32,6 +32,18 @@ export function normCompany(s) {
     .replace(/[^a-z0-9]/g, '');
 }
 
+// The contacts to archive at ONE company, by the same rule as the full reconcile (every application there
+// is closed for outreach). The status route calls this when a role goes No Response, so the person does
+// not have to open the TA tab and run reconcile to retire that company's TA and decision-maker contacts.
+// ttRows must already exclude Archived rows. Returns TA ids.
+export function contactIdsToArchiveForCompany(apps, ttRows, company) {
+  const key = normCompany(company);
+  if (!key) return [];
+  return reconcilePreview(apps, ttRows).toArchive
+    .filter(c => normCompany(c.company) === key)
+    .map(c => c.id);
+}
+
 // apps: parseApplicationsMd() output. ttRows: parseTargetTalentMd() output ALREADY
 // filtered to non-Archived. Returns { toArchive, companiesNeedingContacts,
 // companiesNeedingPrincipal }, the exact shape the preview endpoint returns.

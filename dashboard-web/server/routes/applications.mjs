@@ -19,6 +19,8 @@ import { recordInterview } from '../lib/interview-events.mjs';
 import { buildScheduleFields, scheduleNote, CHANNELS, ORGANIZER_TYPES } from '../../../lib/interview-schedule.mjs';
 import { localToday, logWriteRouteError, logWritesEnabled, renderPendingResponse, withLogWrite } from '../../../lib/log-writes.mjs';
 import { startCadences } from '../lib/cadence-start.mjs';
+import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
+import { contactIdsToArchiveForCompany } from '../lib/tt-reconcile-core.mjs';
 
 export const router = express.Router();
 
@@ -274,8 +276,26 @@ router.patch('/api/applications/:id', (req, res) => {
       }
     }
 
+    // A role going No Response is closed for outreach. Retire that company's TA and decision-maker contacts
+    // now, by the same rule as the TA tab's reconcile (they are only archived when EVERY application at the
+    // company is closed). Referrals have no archived state; the follow-up queues already skip them once no
+    // application at the company is live. A failure here must never undo the status change.
+    let contactsArchived = 0;
+    if (status === 'No Response' && updated && (!prevRow || prevRow.status !== 'No Response')) {
+      try {
+        const ids = contactIdsToArchiveForCompany(
+          parseApplicationsMd(),
+          parseTargetTalentMd().filter(r => r.status !== 'Archived'),
+          updated.company,
+        );
+        for (const contactId of ids) if (updateTTLine(contactId, { status: 'Archived' })) contactsArchived++;
+      } catch (err) {
+        console.warn(`[contacts] could not archive contacts for ${updated.company}: ${err.message}`);
+      }
+    }
+
     const response = renderPending.render_pending ? { id, ...updates } : (updated || { id, ...updates });
-    res.json({ ...response, ...renderPending, ...(cadenceStarted > 0 ? { cadenceStarted } : {}) });
+    res.json({ ...response, ...renderPending, ...(cadenceStarted > 0 ? { cadenceStarted } : {}), ...(contactsArchived > 0 ? { contactsArchived } : {}) });
   } catch (err) {
     logWriteRouteError(res, err);
   }

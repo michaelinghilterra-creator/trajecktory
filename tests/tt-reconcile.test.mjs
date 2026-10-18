@@ -9,7 +9,7 @@
  * Run: node tests/tt-reconcile.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { reconcilePreview, normCompany } from '../dashboard-web/server/lib/tt-reconcile-core.mjs';
+import { reconcilePreview, normCompany, contactIdsToArchiveForCompany } from '../dashboard-web/server/lib/tt-reconcile-core.mjs';
 
 let passed = 0, failed = 0;
 const check = (c, m) => { if (c) { console.log(`  ✅ ${m}`); passed++; } else { console.log(`  ❌ ${m}`); failed++; } };
