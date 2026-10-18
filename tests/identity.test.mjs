@@ -21,6 +21,7 @@ import { join } from 'path';
 import { makeSandbox } from './helpers/sandbox.mjs';
 import {
   canonicalUrl, normalizeCompany, sameEmployer, sameRole, roleSignature,
+  companiesMatchForOutreach,
   urlFromReport, buildDecidedIndex, findDecided,
   buildActiveRoleIndex, findActiveRepost,
 } from '../lib/identity.mjs';
@@ -142,6 +143,13 @@ console.log('\n2. company and role identity');
 
 check(normalizeCompany('Northwind, Inc.') === 'northwindinc', 'company normalizes to alphanumerics');
 check(normalizeCompany(null) === '', 'null company is safe');
+check(companiesMatchForOutreach('Zorblax', 'Zorblax Software'), 'outreach employer match accepts an allowed software suffix');
+check(companiesMatchForOutreach('Quennox', 'Quennox Commerce'), 'outreach employer match accepts an allowed commerce suffix');
+check(companiesMatchForOutreach('Zorblax', 'Zorblax (Widgetry)'), 'outreach employer match accepts a parenthetical alias');
+check(!companiesMatchForOutreach('Quennox', 'Quennox Renovation'), 'outreach employer match rejects an unrelated extra word');
+check(!companiesMatchForOutreach('Quennox', 'Quennoxchain.test'), 'outreach employer match rejects a partial first word');
+check(!companiesMatchForOutreach('Zed', 'Zed XP'), 'outreach employer prefix match requires four first-word characters');
+check(!companiesMatchForOutreach('', '') && !companiesMatchForOutreach('', 'Zorblax'), 'outreach employer match rejects empty strings');
 
 check(sameRole('Director, Platform Engineering', 'Director of Platform Engineering') === true,
   'punctuation and filler do not change a role');

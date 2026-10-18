@@ -61,6 +61,22 @@ const talentOnly = unthreaded.find(row => row.id === 1);
 check(talentOnly?.contactCount === 2 && talentOnly?.topTier === 'ta', 'contact count and top tier describe existing coverage');
 check(JSON.stringify(unthreadedIds) === JSON.stringify([8, 6, 1]), 'unthreaded rows are sorted newest applied first');
 
+const aliasApps = [
+  app(21, 'Alpha Works Software', '2031-02-02'),
+  app(22, 'Beta Lights Commerce', '2031-02-01'),
+];
+const aliasRows = [
+  contact('alias-ta', 'Alpha Works', 'ta'),
+  contact('alias-hm', 'Beta Lights', 'hm'),
+];
+const aliasContactless = computeContactlessApps({ apps: aliasApps, taRows: aliasRows });
+const aliasUnthreaded = computeUnthreadedApps({ apps: aliasApps, taRows: aliasRows });
+check(aliasContactless.length === 0, 'short-name contacts cover long-name applications in the contactless nudge');
+check(aliasUnthreaded.some(row => row.id === 21), 'short-name talent contact leaves a long-name application unthreaded');
+check(!aliasUnthreaded.some(row => row.id === 22), 'short-name hiring manager covers a long-name application in the unthreaded nudge');
+check(aliasUnthreaded.find(row => row.id === 21)?.contactCount === 1
+  && aliasUnthreaded.find(row => row.id === 21)?.topTier === 'ta', 'alias-matched contacts supply contact count and top tier');
+
 const reconcileApps = [
   app(11, 'Talent Reconcile.example', '2026-08-20'),
   app(12, 'Manager Reconcile.example', '2026-08-19'),
