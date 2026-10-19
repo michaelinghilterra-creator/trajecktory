@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.20.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.20.1...v5.20.2) (2026-10-19)
+
+
+### Bug Fixes
+
+* treat a retried self-sourced evaluation as superseded in the orphan audit ([#489](https://github.com/michaelinghilterra-creator/trajecktory/issues/489)) ([c99009d](https://github.com/michaelinghilterra-creator/trajecktory/commit/c99009dc9ba2b06589dfdbf80c002833e02d620e))
+
 ## [5.20.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.20.0...v5.20.1) (2026-10-18)
 
 
