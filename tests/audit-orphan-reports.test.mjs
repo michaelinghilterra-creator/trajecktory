@@ -72,8 +72,8 @@ try {
   // 9308 and 9309 — a failed first attempt left 9308 with a `local:` file path
   // for a URL and no row. The retry is 9309: same company and role, real URL,
   // on the tracker. 9308 is superseded, not lost.
-  rpt(9308, 'Gannet', 'Director, Lighthouse Operations', 'local:Open Roles/Gannet.md');
-  rpt(9309, 'Gannet', 'Director, Lighthouse Operations', 'https://jobs.example.com/gannet/8');
+  rpt(9308, 'Gannet', 'Director, Quillwork Operations', 'local:Open Roles/Gannet.md');
+  rpt(9309, 'Gannet', 'Director, Quillwork Operations', 'https://jobs.example.com/gannet/8');
   // 9310 and 9311 — same company and role as a live row, but BOTH carry real,
   // different URLs. Two requisitions with one title are two jobs: 9310 stays lost.
   rpt(9310, 'Heron', 'Director, Canal Dredging', 'https://jobs.example.com/heron/10');
@@ -93,7 +93,7 @@ try {
     '| # | Date | Company | Role | Score | Status | PDF | Resume | Report | Notes | URL |',
     '|---|------|---------|------|-------|--------|-----|--------|--------|-------|-----|',
     row(9301, 'Acme', 'Director, Glassblowing Standards', 'https://jobs.example.com/acme/1'),
-    row(9309, 'Gannet', 'Director, Lighthouse Operations', 'https://jobs.example.com/gannet/8'),
+    row(9309, 'Gannet', 'Director, Quillwork Operations', 'https://jobs.example.com/gannet/8'),
     row(9311, 'Heron', 'Director, Canal Dredging', 'https://jobs.example.com/heron/11'),
     row(9314, 'Jay', 'Director, Kite Safety', 'https://jobs.example.com/jay/14', '2026-06-01'),
     '',
