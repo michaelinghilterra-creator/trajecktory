@@ -41,8 +41,8 @@ try {
     join(sb, 'reports', `${n}-${co.toLowerCase()}-2026-07-01.md`),
     `---\n{"schema":"trajecktory-report/v1","id":${n},"company":"${co}","role":"${role}","date":"2026-07-01","url":"${url}"}\n---\n\n# ${co}\n`,
   );
-  const row = (n, co, role, url) =>
-    `| ${n} | 2026-07-01 | ${co} | ${role} | 4.0/5 | Evaluated | ❌ | — | [${n}](reports/${n}-${co.toLowerCase()}-2026-07-01.md) | Note | ${url} |`;
+  const row = (n, co, role, url, date = '2026-07-01') =>
+    `| ${n} | ${date} | ${co} | ${role} | 4.0/5 | Evaluated | ❌ | — | [${n}](reports/${n}-${co.toLowerCase()}-2026-07-01.md) | Note | ${url} |`;
 
   // 9301 — on the tracker. Not an orphan.
   rpt(9301, 'Acme', 'Director, Glassblowing Standards', 'https://jobs.example.com/acme/1');
@@ -69,6 +69,21 @@ try {
   rpt(9307, 'Fulmar', 'Director, Horology Calibration', 'https://jobs.example.com/fulmar/7');
   writeFileSync(join(sb, 'batch/tracker-additions/merged/9307-grebe.tsv'),
     ['9307', '2026-07-01', 'Grebe', 'Unrelated Role', 'Evaluated', '3.0/5', '❌', 'x', 'y'].join('\t') + '\n');
+  // 9308 and 9309 — a failed first attempt left 9308 with a `local:` file path
+  // for a URL and no row. The retry is 9309: same company and role, real URL,
+  // on the tracker. 9308 is superseded, not lost.
+  rpt(9308, 'Gannet', 'Director, Quillwork Operations', 'local:Open Roles/Gannet.md');
+  rpt(9309, 'Gannet', 'Director, Quillwork Operations', 'https://jobs.example.com/gannet/8');
+  // 9310 and 9311 — same company and role as a live row, but BOTH carry real,
+  // different URLs. Two requisitions with one title are two jobs: 9310 stays lost.
+  rpt(9310, 'Heron', 'Director, Canal Dredging', 'https://jobs.example.com/heron/10');
+  rpt(9311, 'Heron', 'Director, Canal Dredging', 'https://jobs.example.com/heron/11');
+  // 9312 — a `local:` orphan with no live row for that company at all. Still lost.
+  rpt(9312, 'Ibis', 'Director, Ferry Scheduling', 'local:Open Roles/Ibis.md');
+  // 9313 and 9314 — a `local:` orphan whose only matching live row is OLDER than
+  // the report, so it cannot be its retry. Still lost.
+  rpt(9313, 'Jay', 'Director, Kite Safety', 'local:Open Roles/Jay.md');
+  rpt(9314, 'Jay', 'Director, Kite Safety', 'https://jobs.example.com/jay/14');
   // A non-numbered file in reports/ must be ignored entirely, not counted.
   writeFileSync(join(sb, 'reports', 'README.md'), '# not an evaluation\n');
 
@@ -78,6 +93,9 @@ try {
     '| # | Date | Company | Role | Score | Status | PDF | Resume | Report | Notes | URL |',
     '|---|------|---------|------|-------|--------|-----|--------|--------|-------|-----|',
     row(9301, 'Acme', 'Director, Glassblowing Standards', 'https://jobs.example.com/acme/1'),
+    row(9309, 'Gannet', 'Director, Quillwork Operations', 'https://jobs.example.com/gannet/8'),
+    row(9311, 'Heron', 'Director, Canal Dredging', 'https://jobs.example.com/heron/11'),
+    row(9314, 'Jay', 'Director, Kite Safety', 'https://jobs.example.com/jay/14', '2026-06-01'),
     '',
   ].join('\n'));
 
@@ -109,16 +127,20 @@ try {
   const lostNums = r.lost.map(l => l.num).sort();
 
   console.log('\n1. Bucketing');
-  check(r.counts.reports === 7, `only numbered reports counted, README ignored: got ${r.counts.reports}`);
-  check(r.counts.onTracker === 1, `report with a live row is not an orphan: got ${r.counts.onTracker}`);
+  check(r.counts.reports === 14, `only numbered reports counted, README ignored: got ${r.counts.reports}`);
+  check(r.counts.onTracker === 4, `report with a live row is not an orphan: got ${r.counts.onTracker}`);
   check(r.counts.archived === 1, `deliberately archived report is not a loss: got ${r.counts.archived}`);
-  check(r.counts.duplicateOfLive === 1, `second report for a live posting is not a loss: got ${r.counts.duplicateOfLive}`);
+  check(r.counts.duplicateOfLive === 2, `second report for a live posting, and a failed first attempt, are not losses: got ${r.counts.duplicateOfLive}`);
 
   console.log('\n2. Real losses');
-  check(r.counts.lost === 4, `exactly the distinct postings with no row: got ${r.counts.lost}`);
-  check(JSON.stringify(lostNums) === JSON.stringify([9304, 9305, 9306, 9307]), `the right ones: got ${JSON.stringify(lostNums)}`);
+  check(r.counts.lost === 7, `exactly the distinct postings with no row: got ${r.counts.lost}`);
+  check(JSON.stringify(lostNums) === JSON.stringify([9304, 9305, 9306, 9307, 9310, 9312, 9313]), `the right ones: got ${JSON.stringify(lostNums)}`);
   check(!lostNums.includes(9302), 'an archived report is NEVER reported as lost');
   check(!lostNums.includes(9303), 'a duplicate of a live posting is NEVER reported as lost');
+  check(!lostNums.includes(9308), 'a failed first attempt retried under a real URL is NEVER reported as lost');
+  check(lostNums.includes(9310), 'a differing real URL vetoes the company and role match');
+  check(lostNums.includes(9312), 'a local: orphan with no live row for its company is still lost');
+  check(lostNums.includes(9313), 'a live row older than the orphan cannot be its retry');
 
   console.log('\n3. Recoverability');
   check(r.counts.recoverable === 2, `only losses with a confidently-matched TSV: got ${r.counts.recoverable}`);
