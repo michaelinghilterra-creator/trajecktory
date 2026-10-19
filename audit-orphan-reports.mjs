@@ -32,7 +32,8 @@ import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join, dirname, basename, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine } from './lib/tracker.mjs';
-import { canonicalUrl, normalizeCompany, urlFromReport, urlForRow, roleSignature, sameRoleSignature } from './lib/identity.mjs';
+import { canonicalUrl, normalizeCompany, urlFromReport, urlForRow } from './lib/identity.mjs';
+import { roleSignature, sameRoleSignature } from './lib/identity.mjs';
 
 /**
  * Classify every report on disk against the tracker. Pure and read-only.
@@ -159,7 +160,7 @@ export function auditOrphanReports(rootDir) {
     // URL is a `local:` file path, so it has no web identity to match on. The
     // retry re-evaluates the same posting as a NEW report and that one lands on
     // the tracker with the real URL. Same company and role, on a live row dated
-    // the same day or later, is that retry: superseded, not lost. Only a `local:`
+    // the same day or after, is that retry: superseded, not lost. Only a `local:`
     // URL qualifies, so two real postings with identical titles (different URLs)
     // can never hide each other.
     if (/^local:/i.test(url || '') && m2.company && m2.role) {
