@@ -32,7 +32,7 @@ import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join, dirname, basename, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine } from './lib/tracker.mjs';
-import { canonicalUrl, normalizeCompany, urlFromReport, urlForRow } from './lib/identity.mjs';
+import { canonicalUrl, normalizeCompany, urlFromReport, urlForRow, roleSignature, sameRoleSignature } from './lib/identity.mjs';
 
 /**
  * Classify every report on disk against the tracker. Pure and read-only.
@@ -154,6 +154,23 @@ export function auditOrphanReports(rootDir) {
     }
 
     const m2 = meta(file);
+
+    // A self-sourced evaluation whose batch attempt failed leaves a report whose
+    // URL is a `local:` file path, so it has no web identity to match on. The
+    // retry re-evaluates the same posting as a NEW report and that one lands on
+    // the tracker with the real URL. Same company and role, on a live row dated
+    // the same day or later, is that retry: superseded, not lost. Only a `local:`
+    // URL qualifies, so two real postings with identical titles (different URLs)
+    // can never hide each other.
+    if (/^local:/i.test(url || '') && m2.company && m2.role) {
+      const sig = roleSignature(m2.role);
+      const retry = liveRows.find(r =>
+        normalizeCompany(r.company) === normalizeCompany(m2.company)
+        && sameRoleSignature(roleSignature(r.role), sig)
+        && String(r.date || '') >= String(m2.date || ''));
+      if (retry) { duplicate.push({ num, file, coveredBy: retry.num }); continue; }
+    }
+
     lost.push({ num, file, url, ...m2, ...resolveTsv(num, m2.company) });
   }
 
