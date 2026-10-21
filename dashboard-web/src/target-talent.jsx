@@ -221,6 +221,7 @@ function ContactsTableView({ contacts, audience, otherCount, onOpen, selId, onRe
   const [sortDir, setSortDir] = useState("desc");
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState("");
+  const [findingEmails, setFindingEmails] = useState(false);
   const q = search || "";
 
   const setSort = (k) => {
@@ -297,6 +298,34 @@ function ContactsTableView({ contacts, audience, otherCount, onOpen, selId, onRe
     reader.readAsText(file);
   }
 
+  // Find + verify an email for every active contact on THIS tab that has none
+  // (Hunter finder, then MillionVerifier; only a verified address is written).
+  // Sent in chunks so one request never runs for minutes, and it stops the moment
+  // Hunter reports it is out of search credits.
+  const needEmail = useMemo(
+    () => active.filter(c => !(c.email || "").trim() && c.first && c.last && c.company),
+    [active]);
+  async function findEmails() {
+    const ids = needEmail.map(c => c.id);
+    if (!ids.length || findingEmails) return;
+    if (!window.confirm(`Find + verify emails for ${ids.length} contact${ids.length === 1 ? "" : "s"} on this tab? This uses up to ${ids.length} Hunter searches and writes only verified addresses.`)) return;
+    setFindingEmails(true); setImportMsg("");
+    let checked = 0, written = 0, stopped = "";
+    try {
+      for (let i = 0; i < ids.length && !stopped; i += 20) {
+        setImportMsg(`Finding emails… ${checked} of ${ids.length} checked, ${written} verified`);
+        const r = await window.tjkMutate("/api/tt-reconcile/find-emails", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ids: ids.slice(i, i + 20) }) });
+        const d = await r.json();
+        if (!d.ok) { stopped = d.error || "Email lookup failed."; break; }
+        checked += d.checked; written += d.written;
+        if (d.skippedForBudget > 0 || d.creditsBefore === 0) stopped = "Hunter is out of search credits.";
+      }
+    } catch (err) { stopped = err.message || "Email lookup failed."; }
+    setFindingEmails(false);
+    setImportMsg(`Checked ${checked} of ${ids.length}, ${written} verified email${written === 1 ? "" : "s"} added.${stopped ? " Stopped: " + stopped : ""}`);
+    onImported && onImported();
+  }
+
   const cols = [
     { k: "name",     label: "Contact",    w: 210 },
     { k: "title",    label: "Title",      w: 220 },
@@ -344,6 +373,10 @@ function ContactsTableView({ contacts, audience, otherCount, onOpen, selId, onRe
             {importing ? "Importing…" : "Import CSV"}
             <input type="file" accept=".csv,text/csv" style={{ display: "none" }} disabled={importing} onChange={handleImport} />
           </label>
+          {needEmail.length > 0 && <button className="btn" onClick={findEmails} disabled={findingEmails}
+            title="Look up and verify an email for each contact on this tab that has none.">
+            {findingEmails ? "Finding emails…" : `Find emails (${needEmail.length})`}
+          </button>}
           {decisionMakers && <button className="btn" onClick={onFindDecisionMakers}
             title="Search every live application that has contacts but nobody who can decide, and propose people to add.">
             <TIcon d={TI.users} size={14} /> Find decision-makers
