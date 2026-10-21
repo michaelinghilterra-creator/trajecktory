@@ -14,7 +14,7 @@ import { parseTargetTalentMd, updateTTLine, readTTCorrespondence, findRelatedApp
 import { parseReferralsMd, referralTitle } from '../lib/referrals.mjs';
 import { getLinkedInStatus } from '../lib/tt-linkedin.mjs';
 import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
-import { getPersonContext } from '../lib/person-context.mjs';
+import { getPersonContext, bucketOwner } from '../lib/person-context.mjs';
 import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { readEngagementLog } from '../lib/engagement-log.mjs';
 import { getInmailBudget, decrementInmail, setInmailRemaining } from '../lib/inmail-budget.mjs';
@@ -326,7 +326,9 @@ function connectNoteSequenceTone(source, id) {
 router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
   try {
     const body = req.body || {};
-    const { source, id, angle = '' } = body;
+    const { angle = '' } = body;
+    // Draft for the row that holds this person's bucket, not necessarily the row asked for.
+    const { source, id } = body.source && body.id != null ? bucketOwner(body.source, body.id) : body;
     const tone = String(body.tone || '').trim();
 
     // Resolve from the queue when given a source+id, so we reuse the same
@@ -443,11 +445,11 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
 router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
   try {
     const body = req.body || {};
-    const { id } = body;
-    if (id == null) return res.status(400).json({ error: 'A contact id is required.' });
+    if (body.id == null) return res.status(400).json({ error: 'A contact id is required.' });
     // Source-aware: an id alone is ambiguous across the three books. Defaulting to
     // target talent here drafted to whoever happened to hold that id in THAT book.
-    const source = body.source || 'ta';
+    // Then moved to the row that holds the person's bucket (one bucket per contact).
+    const { source, id } = bucketOwner(body.source || 'ta', body.id);
     const recipient = resolveRecipient(source, id);
     if (!recipient) return res.status(404).json({ error: 'Contact not found.' });
     const name = recipient.name || (body.name || '').trim();
@@ -505,7 +507,7 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
     res.json({ response: fu.body, length: fu.body.length, review: null, reviewStatus: 'pending', surfaceId: 'li_followup', gradeContext: {
       surfaceId: 'li_followup', source, id, appId: topApp?.id ?? null,
       recipientRole, recipientTier, appliedRole, appliedDate,
-    }, recipient: { source: 'ta', id, name }, inmail: !connected });
+    }, recipient: { source, id, name }, inmail: !connected });
   } catch (err) {
     console.error('Error generating follow-up message:', err);
     res.status(500).json({ error: err.message });

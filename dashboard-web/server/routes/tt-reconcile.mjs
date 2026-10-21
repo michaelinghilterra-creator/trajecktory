@@ -12,7 +12,8 @@ import { findAndVerify, hunterSearchesLeft, millionVerifierCreditsLeft, planFind
 import { hunterDomainSearch, planDomainBudget } from '../../../lib/hunter-domain.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { mergeStakeholderAdditions, validateStakeholder, knownDomainKey } from '../../../lib/stakeholder-additions.mjs';
-import { findExistingContact } from '../../../lib/contact-match.mjs';
+import { findExistingContact, heldContactRows } from '../../../lib/contact-match.mjs';
+import { parseReferralsMd } from '../lib/referrals.mjs';
 import { readReconcileDismissed, addReconcileDismissed } from '../lib/sidecars.mjs';
 import { readAttempts, recordAttempt, writeAttempts } from '../lib/contact-search-attempts.mjs';
 import { currentBatch } from '../lib/pricing.mjs';
@@ -71,13 +72,21 @@ function discoverRequestTimeoutMs() {
 // lands, so a long run does not strand all of its useful work until the end.
 const discoverJobs = new Map();
 
+// The rows an add path must not duplicate: the whole TA book plus every live
+// referral (one bucket per contact), each read defensively.
+function heldBookRows() {
+  const ta = (() => { try { return parseTargetTalentMd(); } catch { return []; } })();
+  const referrals = (() => { try { return parseReferralsMd(); } catch { return []; } })();
+  return heldContactRows({ ta, referrals });
+}
+
 function dismissKey({ company, first, last }) {
   return `${normCompany(company)}|${(last || '').toLowerCase().trim()}|${(first || '').toLowerCase().trim()}`;
 }
 
 async function runDiscoverJob(job, tasks, generate) {
   const dismissed = readReconcileDismissed();
-  const heldRows = (() => { try { return parseTargetTalentMd(); } catch { return []; } })();
+  const heldRows = heldBookRows();
   const attempts = readAttempts();
   const apps = parseApplicationsMd();
   // Pre-compute each company's newest app date for the attempt-reset check.
@@ -486,6 +495,7 @@ router.post('/api/tt-reconcile/discover-hunter', async (req, res) => {
     }
 
     const existingRows = parseTargetTalentMd();
+    const heldRows = heldBookRows();
     const existingDomains = new Map();
     for (const row of existingRows) {
       const domain = bareHostname(row.website);
@@ -529,7 +539,7 @@ router.post('/api/tt-reconcile/discover-hunter', async (req, res) => {
         const knownDomains = { [knownDomainKey(company)]: domain };
         const merged = mergeStakeholderAdditions(candidates, {
           today,
-          existingRows,
+          existingRows: heldRows,
           knownDomains,
         });
         return {
@@ -582,7 +592,7 @@ router.post('/api/tt-reconcile/bulk-add', async (req, res) => {
     // Existing callers without a source are hand-entry flows. Unknown values
     // stay ungated so adding this opt-in machine guard cannot refuse their writes.
     // Machine callers must opt in, and a future audit should confirm all do so.
-    const existing = parseTargetTalentMd();
+    const existing = heldBookRows();
     const rejected = [];
     let candidates = contacts;
     if (gated) {
@@ -616,7 +626,7 @@ router.post('/api/tt-reconcile/bulk-add', async (req, res) => {
     for (const c of candidates) {
       const hit = findExistingContact(c, [...existing, ...toWrite]);
       if (hit) {
-        matched.push({ name: `${c.first || ''} ${c.last || ''}`.trim(), company: String(c.company || ''), existingId: hit.id, existingStatus: hit.status || '' });
+        matched.push({ name: `${c.first || ''} ${c.last || ''}`.trim(), company: String(c.company || ''), existingId: hit.id, existingStatus: hit.status || '', existingSource: hit.source || 'ta' });
         continue;
       }
       toWrite.push(c);
@@ -668,7 +678,7 @@ router.post('/api/tt-reconcile/bulk-import', (req, res) => {
     try { rows = parseCsvContacts(csv); } catch (e) { return res.status(400).json({ error: e.message }); }
     if (!rows.length) return res.status(400).json({ error: 'No valid rows found (need a header row plus rows with company, first, last, title).' });
     if (!fs.existsSync(TARGET_TALENT_MD)) fs.writeFileSync(TARGET_TALENT_MD, TT_HEADER, 'utf8');
-    const existing = parseTargetTalentMd();
+    const existing = heldBookRows();
     const toWrite = [];
     for (const c of rows) if (!findExistingContact(c, [...existing, ...toWrite])) toWrite.push(c);
     const written = appendTTRows(toWrite);

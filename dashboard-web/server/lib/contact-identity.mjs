@@ -1,5 +1,6 @@
 // contact-identity.mjs: the one place that decides whether two rows are the same
 import { normalizeCompany } from '../../../lib/identity.mjs';
+import { INFLUENCE_RANK, DEFAULT_TIER } from '../../../lib/influence-tier.mjs';
 
 // PERSON, exactly as lib/identity.mjs is the one place that decides whether two
 // rows are the same POSTING. Guarded by tests/identity-single-source.test.mjs.
@@ -85,6 +86,57 @@ const rowName = (source, row) => source === 'ta'
   : String(row.name || '').trim();
 const rowCompany = (source, row) => String(source === 'referral' ? row.where : (row.company || '')).trim();
 
+// ONE BUCKET PER CONTACT (decided 2026-10-21). Every person is worked in exactly
+// one of three buckets, each with its own messaging. Highest wins:
+//   Referral  a pre-existing relationship: any live referral row
+//   DM        decision makers: a TA-book row tiered exec, hm or peer
+//   TA        recruiters: a TA-book row tiered ta or agency
+// Derived on read from the rows, never stored, so it cannot drift from them. A
+// person who spans several buckets resolves to the highest; the lower rows are
+// what the migration archives and what `bucketConflicts` reports.
+export const BUCKETS = Object.freeze(['Referral', 'DM', 'TA']);
+const isLive = row => String(row?.status || '').trim() !== 'Archived';
+const taTierRank = row => INFLUENCE_RANK[row?.influenceTier] ?? INFLUENCE_RANK[DEFAULT_TIER];
+
+// The bucket ONE row would put its holder in on its own. Influencer rows are not
+// a contact bucket (they are engagement targets), so they have none.
+export function rowBucket(source, row) {
+  if (source === 'referral') return 'Referral';
+  if (source === 'ta') return taTierRank(row) >= INFLUENCE_RANK.peer ? 'DM' : 'TA';
+  return null;
+}
+
+// Which row's book owns a bucket. DM and TA both live in the TA book.
+export const bucketSource = bucket => (bucket === 'Referral' ? 'referral' : bucket ? 'ta' : null);
+
+// The person's bucket from the rows they hold. LIVE rows decide; a person whose
+// rows are all Archived has no live bucket, so they fall back to the same
+// hierarchy over their archived rows (`live: false`) and the guard ignores them.
+function deriveBucket(entries) {
+  const contact = entries.filter(entry => rowBucket(entry.source, entry.row));
+  const liveRows = contact.filter(entry => isLive(entry.row));
+  const pool = liveRows.length ? liveRows : contact;
+  const best = (source, rank) => pool.filter(entry => entry.source === source)
+    .sort((a, b) => rank(b.row) - rank(a.row) || a.ref.localeCompare(b.ref))[0];
+  const referral = best('referral', () => 0);
+  const ta = best('ta', taTierRank);
+  const owner = referral || ta || null;
+  return {
+    bucket: owner ? rowBucket(owner.source, owner.row) : null,
+    bucketRef: owner ? owner.ref : '',
+    bucketLive: liveRows.length > 0,
+    liveBuckets: [...new Set(liveRows.map(entry => rowBucket(entry.source, entry.row)))]
+      .sort((a, b) => BUCKETS.indexOf(a) - BUCKETS.indexOf(b)),
+  };
+}
+
+// The GUARD: people holding live rows in more than one bucket. Empty is the only
+// healthy answer. Takes resolvePeople output, so a caller can assert it on real
+// books (tests/one-bucket.test.mjs) or report it before a migration.
+export function bucketConflicts(people) {
+  return (people || []).filter(person => (person.liveBuckets || []).length > 1);
+}
+
 export function resolvePeople({ ta = [], referrals = [], influencers = [], pins = {} } = {}) {
   const entries = [
     ...ta.map(row => ({ source: 'ta', row, ref: contactRef('ta', row.id) })),
@@ -160,6 +212,7 @@ export function resolvePeople({ ta = [], referrals = [], influencers = [], pins 
       name: sorted.map(entry => rowName(entry.source, entry.row)).find(Boolean) || '',
       company: companyEntry ? rowCompany(companyEntry.source, companyEntry.row) : '',
       members: Object.fromEntries(sorted.map(entry => [entry.source, entry.row])),
+      ...deriveBucket(sorted),
     };
   }).sort((a, b) => a.id.localeCompare(b.id));
 }

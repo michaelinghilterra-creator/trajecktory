@@ -11,7 +11,7 @@ import { isLinkedInEntry } from './channels.mjs';
 import { readLinkedInMap } from './tt-linkedin.mjs';
 import { outreachCapState, isChannelCapped } from './correspondence-context.mjs';
 import { parseReferralsMd, readReferralCorrespondence } from './referrals.mjs';
-import { resolvePeople, cleanName, contactRef, linkedinKey } from './contact-identity.mjs';
+import { resolvePeople, cleanName, contactRef, linkedinKey, rowBucket, bucketSource } from './contact-identity.mjs';
 import { sameContact } from '../../../lib/contact-match.mjs';
 import { readPins } from './contact-links.mjs';
 import { buildTimeline } from './contact-timeline.mjs';
@@ -376,7 +376,9 @@ function computeDueSequenceContacts({ apps } = {}) {
   const today = _localToday();
   // A cadence started on a fresh twin of a contact who already has history must
   // not come due: it would re-pitch a person already invited or emailed.
-  const siblings = _personSiblings(_bothBooks({ taRows: taContacts }));
+  const dueBooks = _bothBooks({ taRows: taContacts });
+  const siblings = _personSiblings(dueBooks);
+  const referralOwned = _taIdsOwnedByReferral(dueBooks);
   const liMap = readLinkedInMap() ?? {};
 
   const due = [];
@@ -391,6 +393,7 @@ function computeDueSequenceContacts({ apps } = {}) {
     const c = byId.get(id);
     if (!c) continue;
     if (c.status === 'Archived') continue;
+    if (referralOwned.has(c.id)) continue;            // their bucket is Referral
     if (!_inEligible(eligible, c.company)) continue;
     if (_shadowedBySibling(c, siblings.get(c.id), liMap)) continue;
 
@@ -506,6 +509,24 @@ function _personSiblings({ ta, referrals, influencers }) {
       if (sameContact(rows[i], rows[j])) link(rows[i], rows[j]);
     }
   }
+  return out;
+}
+
+// One bucket per contact: TA-book rows whose person holds a live referral row.
+// The referral is the higher bucket (a pre-existing relationship), so those rows
+// are worked from the referral list and must not surface in the TA or DM queues,
+// or the same person gets a cold message on top of a warm one. Fails open: if
+// resolution throws, nothing is hidden.
+function _taIdsOwnedByReferral({ ta, referrals, influencers }) {
+  const out = new Set();
+  let pins = {};
+  try { pins = readPins() || {}; } catch { /* no pins file */ }
+  try {
+    for (const person of resolvePeople({ ta, referrals, influencers, pins })) {
+      if (person.bucket !== 'Referral') continue;
+      for (const ref of person.refs) if (ref.startsWith('ta:')) out.add(Number(ref.slice(3)));
+    }
+  } catch { /* resolution unavailable → hide nothing */ }
   return out;
 }
 
@@ -786,7 +807,9 @@ function computeConnectQueue({ taRows, referralRows, influencers, apps } = {}) {
   const out = [];
   const liMap = readLinkedInMap() ?? {};
   const siblings = _personSiblings({ ta, referrals, influencers: influencerRows });
+  const referralOwned = _taIdsOwnedByReferral({ ta, referrals, influencers: influencerRows });
   const consider = (row, source) => {
+    if (referralOwned.has(row.id)) return;       // their bucket is Referral
     if (!_hasLinkedIn(row)) return;              // no LinkedIn handle → not reachable here
     if (_shadowedBySibling(row, siblings.get(row.id), liMap)) return;
     // LinkedIn-ONLY bucket. A contact who ALSO has a sendable email is high-value
@@ -821,7 +844,9 @@ function computeEmailQueue({ taRows, referralRows, influencers, apps } = {}) {
   const out = [];
   const liMap = readLinkedInMap() ?? {};
   const siblings = _personSiblings({ ta, referrals, influencers: influencerRows });
+  const referralOwned = _taIdsOwnedByReferral({ ta, referrals, influencers: influencerRows });
   const consider = (row, source) => {
+    if (referralOwned.has(row.id)) return;       // their bucket is Referral
     if (!isSendable(row)) return;                // MUST have a sendable email
     if (_shadowedBySibling(row, siblings.get(row.id), liMap)) return;
     // Email-ONLY bucket. A contact who ALSO has a LinkedIn handle is high-value
@@ -871,7 +896,9 @@ function computeBothQueue({ taRows, referralRows, influencers, apps } = {}) {
   const out = [];
   const liMap = readLinkedInMap() ?? {};
   const siblings = _personSiblings({ ta, referrals, influencers: influencerRows });
+  const referralOwned = _taIdsOwnedByReferral({ ta, referrals, influencers: influencerRows });
   const consider = (row, source) => {
+    if (referralOwned.has(row.id)) return;       // their bucket is Referral
     if (!(_hasLinkedIn(row) && isSendable(row))) return;   // must have BOTH channels
     if (_shadowedBySibling(row, siblings.get(row.id), liMap)) return;
     if (BOTH_QUEUE_EXCLUDE_STATUS.has(row.status)) return; // a reply/acceptance pauses the multithread
@@ -984,10 +1011,17 @@ function computeFollowupQueue(opts = {}) {
     r.rank = _followupRank(r);
   }
   const people = resolvePeople({ ta: books.ta, referrals: books.referrals, influencers: books.influencers, pins: opts.pins ?? readPins() });
-  const personByRef = new Map(people.flatMap(person => person.refs.map(ref => [ref, person.id])));
+  const personByRef = new Map(people.flatMap(person => person.refs.map(ref => [ref, person])));
   const deduped = new Map();
   for (const row of rows) {
-    const key = personByRef.get(`${row.source}:${row.id}`) || `${row.source}:${row.id}`;
+    const person = personByRef.get(`${row.source}:${row.id}`);
+    // One bucket per contact: a person is listed once, from the book their bucket
+    // lives in. A cold TA row for someone who is also a referral is not queued, even
+    // when the referral row itself is not due yet, so the warm relationship is never
+    // pitched cold from the lower row.
+    if (person?.bucket && bucketSource(person.bucket) !== row.source) continue;
+    row.bucket = person?.bucket || rowBucket(row.source, row);
+    const key = person?.id || `${row.source}:${row.id}`;
     const prior = deduped.get(key);
     if (!prior || row.rank > prior.rank) deduped.set(key, row);
   }
@@ -1117,7 +1151,9 @@ function computeUnthreadedApps({ apps, taRows } = {}) {
 // to computeContactlessApps instead.
 function computeStaleAppContacts({ staleApps, taRows } = {}) {
   const stale = staleApps ?? computeStaleApps();
-  const { ta } = _bothBooks({ taRows });
+  const books = _bothBooks({ taRows });
+  const { ta } = books;
+  const referralOwned = _taIdsOwnedByReferral(books);
   // company -> the single best contact to route a follow-up through: prefer the
   // richest channel (email + LinkedIn), then the most recently touched. Only TA
   // contacts qualify — they are internal talent AT the target company, so their
@@ -1136,7 +1172,7 @@ function computeStaleAppContacts({ staleApps, taRows } = {}) {
     const cur = byCompany.get(co);
     if (!cur || cand.bucket > cur.bucket || (cand.bucket === cur.bucket && cand.lastTouch > cur.lastTouch)) byCompany.set(co, cand);
   };
-  for (const c of ta)  if ((c.company || '').trim() && c.status !== 'Archived') consider(c.company, 'ta', c);
+  for (const c of ta)  if ((c.company || '').trim() && c.status !== 'Archived' && !referralOwned.has(c.id)) consider(c.company, 'ta', c);
 
   const out = [];
   const seen = new Set();
@@ -1182,6 +1218,7 @@ function computeStaleAppContacts({ staleApps, taRows } = {}) {
 function computeJustConnectedQueue({ taRows, referralRows, influencers, apps } = {}) {
   const books = _bothBooks({ taRows, referralRows, influencers });
   const { ta } = books;
+  const referralOwned = _taIdsOwnedByReferral(books);
   const applied = outreachEligibleCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
   const liMap = readLinkedInMap();
   const baselineId = getNewBaselineId();
@@ -1194,6 +1231,7 @@ function computeJustConnectedQueue({ taRows, referralRows, influencers, apps } =
   for (const row of ta) {
     if (row.linkedinStatus !== 'Connected') continue;            // accepted the invite
     if (row.status === 'Archived') continue;
+    if (referralOwned.has(row.id)) continue;             // their bucket is Referral
     if (!_inEligible(applied, row.company)) continue;   // only live applications
     const connectedOn = liMap[String(row.id)]?.updated || '';
     // Cool-off: with a known connect date, stay quiet until it is old enough. A
@@ -1241,6 +1279,8 @@ function computeContactFollowups(opts = {}) {
   // Only rows whose ref resolves to a person are collapsed; anything unresolved
   // falls back to its own row key and behaves exactly as before.
   let personByRef = new Map();
+  // ref -> the bucket of the person that row belongs to (see resolvePeople).
+  let bucketByRef = new Map();
   // Every trigger below (outreach, stale app, due sequence) can surface a fresh
   // twin of a contact already on file; a started cadence on the twin is enough.
   // Shadow it here, once, so no trigger re-pitches a person who has history.
@@ -1254,6 +1294,7 @@ function computeContactFollowups(opts = {}) {
       pins: opts.pins ?? readPins(),
     });
     personByRef = new Map(people.flatMap(p => p.refs.map(ref => [ref, p.id])));
+    bucketByRef = new Map(people.flatMap(p => p.refs.map(ref => [ref, p.bucket])));
     siblings = _personSiblings(books);
     taById = new Map(books.ta.map(row => [row.id, row]));
     liMap = readLinkedInMap() ?? {};
@@ -1266,6 +1307,11 @@ function computeContactFollowups(opts = {}) {
       if (taRow && _shadowedBySibling(taRow, siblings.get(taRow.id), liMap)) return;
     }
     const rowKey = `${item.source}:${item.id}`;
+    // One bucket per contact: this list is the TA and DM motion, so a person whose
+    // bucket is Referral is worked from the referral list and appears nowhere here.
+    const bucket = bucketByRef.get(rowKey) || rowBucket(item.source, item);
+    if (bucket && bucketSource(bucket) !== item.source) return;
+    item = { ...item, bucket };
     const key = personByRef.get(rowKey) || rowKey;
     const prev = byKey.get(key);
     if (!prev) { byKey.set(key, item); return; }
