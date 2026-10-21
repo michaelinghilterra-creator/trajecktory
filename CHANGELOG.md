@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.21.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.20.2...v5.21.0) (2026-10-21)
+
+
+### Features
+
+* one bucket per contact (Referral &gt; DM &gt; TA) ([#491](https://github.com/michaelinghilterra-creator/trajecktory/issues/491)) ([4c4110f](https://github.com/michaelinghilterra-creator/trajecktory/commit/4c4110ff14deebbdccfdd02cfbeb056ab4f907e0))
+
 ## [5.20.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.20.1...v5.20.2) (2026-10-19)
 
 
