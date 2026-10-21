@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.22.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.21.0...v5.22.0) (2026-10-21)
+
+
+### Features
+
+* add a Find emails button to the contacts table ([#493](https://github.com/michaelinghilterra-creator/trajecktory/issues/493)) ([bb6491d](https://github.com/michaelinghilterra-creator/trajecktory/commit/bb6491d06c91ecffbb97c5ba11c8b9b37afcf3a4))
+
 ## [5.21.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.20.2...v5.21.0) (2026-10-21)
 
 
