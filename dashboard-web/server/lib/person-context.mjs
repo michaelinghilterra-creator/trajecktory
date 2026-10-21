@@ -41,7 +41,7 @@ function readInfluencers() {
 }
 
 // One bucket per contact: the row whose book owns this person's messaging. A draft
-// request that names the lower row of a person (the TA row of someone who is also a
+// call that names the lower row of a person (the TA row of someone who is also a
 // referral) is answered for the row that holds their bucket, so the tone and the
 // thread come from the highest bucket and never from the cold one. Falls back to
 // exactly what was asked for when the person cannot be resolved.

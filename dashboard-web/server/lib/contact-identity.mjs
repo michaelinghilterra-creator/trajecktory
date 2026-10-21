@@ -86,7 +86,7 @@ const rowName = (source, row) => source === 'ta'
   : String(row.name || '').trim();
 const rowCompany = (source, row) => String(source === 'referral' ? row.where : (row.company || '')).trim();
 
-// ONE BUCKET PER CONTACT (Michael, 2026-10-21). Every person is worked in exactly
+// ONE BUCKET PER CONTACT (decided 2026-10-21). Every person is worked in exactly
 // one of three buckets, each with its own messaging. Highest wins:
 //   Referral  a pre-existing relationship: any live referral row
 //   DM        decision makers: a TA-book row tiered exec, hm or peer

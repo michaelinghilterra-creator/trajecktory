@@ -139,20 +139,67 @@ const sourcing = mergeStakeholderAdditions([
 ], { today: '2030-01-15', existingRows: heldContactRows({ ta: [], referrals: books.referrals }) });
 check(sourcing.people.length === 0 && sourcing.matched.length === 1 && sourcing.matched[0].existingSource === 'referral', 'the sourcing merge reports a referral match instead of adding a TA row');
 
-console.log('\n6. The connections import does not file a second live row');
+console.log('\n6. The connections import promotes instead of filing a second live row');
 const active = [{ company: 'Quillon Labs', role: 'Analyst' }];
 const none = { names: new Set(), urls: new Set() };
 const sample = [
   { first: 'Tamsin', last: 'Orde', company: 'Quillon Labs', position: 'VP RevOps', url: li('tamsin-orde-ex') },
-  { first: 'Dune', last: 'Ashby', company: 'Quillon Labs', position: 'Analyst', url: li('dune-ashby-ex') },
-  { first: 'Elm', last: 'Garrow', company: 'Elsewhere Corp', position: 'Director of Revenue Operations', url: li('elm-garrow-ex') },
+  { first: 'Dune', last: 'Ashgrove', company: 'Quillon Labs', position: 'Analyst', url: li('dune-ashgrove-ex') },
+  { first: 'Elm', last: 'Garrow', company: 'Elsewhere Corp', position: 'Senior Director, Zorblax Revenue Operations', url: li('elm-garrow-ex') },
 ];
 const liveTa = books.ta.filter(r => r.status !== 'Archived');
-const held2 = matchConnections({ connections: sample, active, existing: none, taRows: liveTa });
-check(held2.heldInTa.map(c => c.first).join() === 'Tamsin', 'a connection already in the TA book is held back, not filed as a referral');
-check(held2.stage1.map(c => c.first).join() === 'Dune' && held2.stage2.map(c => c.first).join() === 'Elm', 'everyone else is staged as before');
-const archivedOnly = matchConnections({ connections: sample, active, existing: none, taRows: [] });
-check(archivedOnly.heldInTa.length === 0 && archivedOnly.stage1.length === 2, 'with no live TA row nothing is held back');
+const m = matchConnections({ connections: sample, active, existing: none, taRows: liveTa, referralRows: books.referrals });
+check(m.promote.map(x => x.connection.first).join() === 'Tamsin' && m.promote[0].taRows.map(r => r.id).join() === '1', 'a connection already live in the TA book is listed to promote');
+check(m.promote[0].referral?.id === 10, 'the live referral row already on file is the one kept');
+check(m.stage1.map(c => c.first).join() === 'Dune' && m.stage2.map(c => c.first).join() === 'Elm', 'everyone else is staged as before');
+const noTa = matchConnections({ connections: sample, active, existing: none, taRows: [], referralRows: [] });
+check(noTa.promote.length === 0 && noTa.stage1.length === 2, 'with no live TA row nothing is promoted');
+const noRef = matchConnections({ connections: sample, active, existing: none, taRows: liveTa, referralRows: [] });
+check(noRef.promote[0].referral === null, 'with no referral row yet the promotion files one');
+
+console.log('\n7. Promotion on real files: carry-over, idempotence, guard');
+const fs = await import('node:fs');
+const path = await import('node:path');
+const { appendTTRows, parseTargetTalentMd, updateTTLine } = await import('../dashboard-web/server/lib/target-talent.mjs');
+const { appendReferralRows, parseReferralsMd, REFERRAL_HEADER } = await import('../dashboard-web/server/lib/referrals.mjs');
+const { saveConnections, reconcile, promoteToReferral } = await import('../dashboard-web/server/lib/linkedin-referrals.mjs');
+const TT_HEAD = '# Target Talent\n\n| # | Company | Last | First | Salute | Title | City | State | Zip | Phone | Email | LinkedIn | Status | Last Touch | Notes | Website |\n|---|---------|------|-------|--------|-------|------|-------|-----|-------|-------|----------|--------|------------|-------|---------|\n';
+fs.writeFileSync(path.join(tmp, 'target-talent.md'), TT_HEAD);
+fs.writeFileSync(path.join(tmp, 'referrals.md'), REFERRAL_HEADER);
+fs.writeFileSync(path.join(tmp, 'applications.md'), '# Applications Tracker\n\n| # | Date | Company | Role | Score | Status | PDF | Resume | Report | Notes | URL |\n|---|------|---------|------|-------|--------|-----|--------|--------|-------|-----|\n| 1 | 2030-01-02 | Quillon Labs | Analyst | 4.2/5 | Applied | N | N |  |  |  |\n');
+const [a] = appendTTRows([
+  { company: 'Quillon Labs', first: 'Tamsin', last: 'Orde', title: 'VP RevOps', email: 'tamsin.orde@example.test [v:ok:hunter:2030-01-03:90]', linkedin: li('tamsin-orde-ex'), notes: '[tier:exec] intro idea' },
+  { company: 'Quillon Labs', first: 'Imogen', last: 'Vale', title: 'Recruiter', email: 'imogen.vale@example.test', linkedin: li('imogen-vale-ex'), notes: '' },
+]);
+updateTTLine(a.id, { status: 'Sent', lastTouch: '2030-03-05' });
+const [r1] = appendReferralRows([{ name: 'Imogen Vale', how: '1st-degree LinkedIn connection', where: 'Quillon Labs', target: '', status: 'Not Asked', lastTouch: '2030-02-01', notes: 'Recruiter', linkedin: li('imogen-vale-ex'), email: '' }]);
+saveConnections([
+  { first: 'Tamsin', last: 'Orde', url: li('tamsin-orde-ex'), email: '', company: 'Quillon Labs', position: 'VP RevOps', on: '01 Jan 2030' },
+  { first: 'Imogen', last: 'Vale', url: li('imogen-vale-ex'), email: '', company: 'Quillon Labs', position: 'Recruiter', on: '01 Jan 2030' },
+], 'cli');
+
+const before = bucketConflicts(resolvePeople({ ta: parseTargetTalentMd(), referrals: parseReferralsMd(), pins: {} })).length;
+check(before === 1, 'one person starts with a live TA row and a live referral already');
+const first = reconcile({ seedPool: true });
+const taAfter = parseTargetTalentMd(), refAfter = parseReferralsMd();
+const tamsinRef = refAfter.find(r => r.name === 'Tamsin Orde');
+const tamsinTa = taAfter.find(r => r.id === a.id);
+check(first.promoted === 2, 'both connections are promoted');
+check(!!tamsinRef && refAfter.filter(r => r.name === 'Tamsin Orde').length === 1, 'a referral row is filed for the person who had none');
+check(taAfter.filter(r => r.status !== 'Archived').length === 0 && taAfter.length === 2, 'the TA rows are archived, never deleted');
+check(tamsinRef.email === 'tamsin.orde@example.test' && tamsinRef.verified.hadTag && tamsinRef.verified.state === 'ok', 'the TA email is carried over with its verification tag');
+check(tamsinRef.lastTouch === '2030-03-05', 'the later TA last touch is carried over');
+const imogenRef = refAfter.find(r => r.id === r1.id);
+check(imogenRef.email === 'imogen.vale@example.test' && imogenRef.lastTouch === '2030-02-01', 'an existing referral gets the missing email and keeps its own later or equal last touch');
+check(refAfter.filter(r => r.name === 'Imogen Vale').length === 1, 'a referral row already present is not duplicated');
+const marker = `TA #${a.id} moved to Referral #${tamsinRef.id}`;
+const sep = ' · ';
+check(tamsinRef.notes.includes(`${sep}${marker} (one-bucket rule, `) && tamsinTa.notes.includes(`${sep}${marker} (one-bucket rule, `), 'both rows carry the move note with the middle-dot separator');
+check(first.bucketConflicts === 0 && bucketConflicts(resolvePeople({ ta: taAfter, referrals: refAfter, pins: {} })).length === 0, 'the guard reports zero people with two live buckets after the import');
+const snapshot = JSON.stringify([taAfter, refAfter]);
+const second = reconcile({ seedPool: true });
+check(second.promoted === 0 && JSON.stringify([parseTargetTalentMd(), parseReferralsMd()]) === snapshot, 'running the import twice changes nothing');
+check(promoteToReferral({ referral: { ...tamsinRef }, taRows: [tamsinTa], today: '2030-04-01' }).length === 0, 'an already archived TA row is never moved again');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

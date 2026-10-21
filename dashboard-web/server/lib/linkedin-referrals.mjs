@@ -17,8 +17,11 @@ import { DATA_DIR } from '../config.mjs';
 import { ACTIVE_STATUSES } from './statuses.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { parseReferralsMd, appendReferralRows, updateReferralLine } from './referrals.mjs';
-import { parseTargetTalentMd } from './target-talent.mjs';
+import { parseTargetTalentMd, updateTTLine } from './target-talent.mjs';
 import { sameContact } from '../../../lib/contact-match.mjs';
+import { setVerifyTag } from '../../../lib/email-verify.mjs';
+import { resolvePeople, bucketConflicts, linkedinKey, cleanName } from './contact-identity.mjs';
+import { readPins } from './contact-links.mjs';
 import { appendEventsWithEffects, renderLegacyFile } from '../../../lib/legacy-files.mjs';
 import { localToday, logWritesEnabled, withLogRead, withLogWrite } from '../../../lib/log-writes.mjs';
 
@@ -226,17 +229,18 @@ export function linkedinStatus() {
 }
 
 // ── the match ───────────────────────────────────────────────────────────────
-// Returns { stage1, stage2, heldInTa } lists of connections not already in the
-// referral tracker. stage1 = inside an active company; stage2 = senior/director
-// referrer elsewhere.
+// Returns { stage1, stage2, promote }. stage1 = inside an active company; stage2 =
+// senior/director referrer elsewhere. Both are connections with no referral row yet
+// and no live TA row.
 //
-// heldInTa is the one-bucket-per-contact seam. A connection who is ALREADY a live
-// row in the target-talent book would, if filed as a referral, be one person in two
-// live buckets (the referral is the higher bucket, so the TA row would have to be
-// retired, and that touches tracker data, cadences and outreach holds). The import
-// does not make that call: it leaves them out of both stages and reports them here
-// so the move is made deliberately, not as a side effect of a LinkedIn upload.
-export function matchConnections({ connections, active = activeCompanies(), existing = existingReferralKeys(), taRows = liveTaRows() }) {
+// promote is the one-bucket-per-contact seam. A connection who is ALREADY a live row
+// in the target-talent book is one person who would hold a live TA row and a live
+// referral row. Referral is the higher bucket, so they are listed here with the TA
+// row(s) to retire and the referral row to keep (null when none exists yet), and
+// reconcile() moves them (see promoteToReferral). A connection who already has a
+// live referral row AND a live TA row lands here too, so the import also repairs a
+// conflict it did not create.
+export function matchConnections({ connections, active = activeCompanies(), existing = existingReferralKeys(), taRows = liveTaRows(), referralRows = allReferralRows() }) {
   const { map } = activeFormIndex(active);
   const seenInBatch = new Set();
   const dupe = (c) => {
@@ -257,28 +261,97 @@ export function matchConnections({ connections, active = activeCompanies(), exis
     if (existing.names.has(nm) || seenInBatch.has(nm)) return true;
     seenInBatch.add(nm); return false;
   };
-  const stage1 = [], stage2 = [], heldInTa = [];
-  const inTaBook = (c) => taRows.some(row => sameContact({ first: c.first, last: c.last, company: c.company, linkedin: c.url }, row));
+  // Index the TA book once: a per-connection scan of ~1,500 rows over ~7,000
+  // connections would run sameContact ten million times.
+  const taByKey = new Map(), taByName = new Map();
+  const push = (index, key, row) => { if (key) { if (!index.has(key)) index.set(key, []); index.get(key).push(row); } };
+  for (const row of taRows) {
+    push(taByKey, linkedinKey(row.linkedin), row);
+    push(taByName, cleanName(`${row.first ?? ''} ${row.last ?? ''}`), row);
+  }
+  const taMatches = (c) => {
+    const probe = { first: c.first, last: c.last, company: c.company, linkedin: c.url };
+    const pool = new Set([...(taByKey.get(linkedinKey(c.url)) || []), ...(taByName.get(cleanName(`${c.first ?? ''} ${c.last ?? ''}`)) || [])]);
+    return [...pool].filter(row => sameContact(probe, row));
+  };
+  const referralFor = (c) => {
+    const url = canonicalLinkedinUrl(c.url);
+    const nm = norm(`${c.first} ${c.last}`);
+    const hits = referralRows.filter(r => {
+      const ru = canonicalLinkedinUrl((r.linkedin || '').trim());
+      return url ? ru === url : (!ru && norm(r.name) === nm);
+    });
+    return hits.find(r => r.status !== 'Archived') || hits[0] || null;
+  };
+  const stage1 = [], stage2 = [], promote = [];
   for (const c of connections) {
     // Match via the connection's company forms (suffix stripped) too, symmetric
     // with the active index, so a suffix-only difference doesn't miss a Stage-1.
     const hit = companyForms(c.company).map(f => map.get(f)).find(Boolean);
-    if (hit) {
-      if (dupe(c)) continue;
-      if (inTaBook(c)) heldInTa.push({ ...c, target: hit }); else stage1.push({ ...c, target: hit });
+    const senior = (SENIOR.test(c.position) || DIRECTOR.test(c.position)) && FUNC.test(c.position);
+    if (!hit && !senior) continue;
+    const ta = taMatches(c);
+    if (ta.length) {
+      const key = canonicalLinkedinUrl(c.url) || norm(`${c.first} ${c.last}`);
+      if (seenInBatch.has(`promote:${key}`)) continue;
+      seenInBatch.add(`promote:${key}`);
+      promote.push({ connection: hit ? { ...c, target: hit } : c, taRows: ta, referral: referralFor(c), stage: hit ? 1 : 2 });
       continue;
     }
-    const senior = (SENIOR.test(c.position) || DIRECTOR.test(c.position)) && FUNC.test(c.position);
-    if (senior && !dupe(c)) { if (inTaBook(c)) heldInTa.push(c); else stage2.push(c); }
+    if (dupe(c)) continue;
+    if (hit) stage1.push({ ...c, target: hit }); else stage2.push(c);
   }
-  return { stage1, stage2, heldInTa };
+  return { stage1, stage2, promote };
 }
 
 // Live rows of the target-talent book. An archived row holds no bucket, so it does
-// not hold a connection back. Unreadable book: hold nothing back, as before.
+// not take part in a promotion. Unreadable book: promote nothing.
 function liveTaRows() {
   try { return parseTargetTalentMd().filter(row => String(row.status || '').trim() !== 'Archived'); }
   catch { return []; }
+}
+function allReferralRows() {
+  try { return parseReferralsMd(); } catch { return []; }
+}
+
+// Move one person from the TA book to the referral they already are: keep (or file)
+// the referral row, carry over what the TA row knew, and archive the TA row. Nothing
+// is deleted, no message is sent, and no sequence is touched; the person layer joins
+// both rows, so the timeline stays whole. The note on both rows doubles as the
+// idempotence marker, so running the import twice appends nothing the second time.
+// referral is { id, email, lastTouch, notes, status }.
+const MOVED_SEP = ' · ';
+export function promoteToReferral({ referral, taRows, today }) {
+  const moves = [];
+  for (const ta of taRows) {
+    if (String(ta.status || '').trim() === 'Archived') continue;
+    const marker = `TA #${ta.id} moved to Referral #${referral.id}`;
+    const note = `${marker} (one-bucket rule, ${today})`;
+    const updates = {};
+    if (!String(referral.email || '').trim() && String(ta.email || '').trim()) {
+      updates.email = ta.verified?.hadTag ? setVerifyTag(ta.email, ta.verified) : ta.email;
+      referral.email = ta.email;
+    }
+    const taTouch = String(ta.lastTouch || '').trim();
+    const refTouch = String(referral.lastTouch || '').trim();
+    const iso = /^\d{4}-\d{2}-\d{2}/;
+    if (taTouch && (!refTouch || (iso.test(taTouch) && iso.test(refTouch) && taTouch.slice(0, 10) > refTouch.slice(0, 10)))) {
+      updates.lastTouch = taTouch;
+      referral.lastTouch = taTouch;
+    }
+    if (!String(referral.notes || '').includes(marker)) {
+      referral.notes = [String(referral.notes || '').trim(), note].filter(Boolean).join(MOVED_SEP);
+      updates.notes = referral.notes;
+    }
+    if (referral.status === 'Archived') { updates.status = 'Not Asked'; referral.status = 'Not Asked'; }
+    if (Object.keys(updates).length) updateReferralLine(referral.id, updates);
+    const taNotes = String(ta.notes || '').includes(marker)
+      ? ta.notes
+      : [String(ta.notes || '').trim(), note].filter(Boolean).join(MOVED_SEP);
+    updateTTLine(ta.id, { status: 'Archived', notes: taNotes });
+    moves.push({ taId: ta.id, referralId: referral.id });
+  }
+  return moves;
 }
 
 function existingReferralKeys() {
@@ -303,7 +376,7 @@ export function reconcile({ seedPool = false } = {}) {
   const store = loadConnections();
   const connections = store.connections || [];
   const active = activeCompanies();
-  const { stage1, stage2, heldInTa } = matchConnections({ connections, active });
+  const { stage1, stage2, promote } = matchConnections({ connections, active });
   const toRow = (c, target) => ({
     name: `${c.first} ${c.last}`.trim(),
     how: '1st-degree LinkedIn connection',
@@ -321,6 +394,22 @@ export function reconcile({ seedPool = false } = {}) {
   const rows = stage1.map((c) => toRow(c, c.target));
   if (seedPool) rows.push(...stage2.map((c) => toRow(c, null)));
   if (rows.length) appendReferralRows(rows);
+  // One bucket per contact: a connection who is already live in the TA book is
+  // promoted (referral kept or filed, TA row archived), never filed as a second live
+  // row. A pool-only (stage 2) connection with no referral yet is filed only when the
+  // pool is being seeded, the same rule as any other stage 2 connection.
+  const today = localToday();
+  let promoted = 0;
+  for (const item of promote) {
+    let referral = item.referral;
+    if (!referral) {
+      if (item.stage === 2 && !seedPool) continue;
+      const row = toRow(item.connection, item.connection.target);
+      const [created] = appendReferralRows([row]);
+      referral = { id: created.id, email: row.email, lastTouch: '', notes: row.notes, status: 'Not Asked' };
+    }
+    promoted += promoteToReferral({ referral: { ...referral }, taRows: item.taRows, today }).length;
+  }
   const { set: activeSet } = activeFormIndex(active);
   let unarchived = 0;
   for (const row of parseReferralsMd()) {
@@ -334,7 +423,16 @@ export function reconcile({ seedPool = false } = {}) {
     stage1Added: stage1.length,
     stage2Added: seedPool ? stage2.length : 0,
     stage2Available: stage2.length,
-    heldInTa: heldInTa.length,
+    promoted,
+    bucketConflicts: countBucketConflicts(),
     unarchived,
   };
+}
+
+// The guard, run on the real books after an import: people still holding live rows
+// in more than one bucket. -1 means the books could not be read.
+function countBucketConflicts() {
+  try {
+    return bucketConflicts(resolvePeople({ ta: parseTargetTalentMd(), referrals: parseReferralsMd(), pins: readPins() })).length;
+  } catch { return -1; }
 }
