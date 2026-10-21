@@ -40,6 +40,29 @@ function readInfluencers() {
   }
 }
 
+// One bucket per contact: the row whose book owns this person's messaging. A draft
+// request that names the lower row of a person (the TA row of someone who is also a
+// referral) is answered for the row that holds their bucket, so the tone and the
+// thread come from the highest bucket and never from the cold one. Falls back to
+// exactly what was asked for when the person cannot be resolved.
+export function bucketOwner(source, id, opts = {}) {
+  const asked = { source, id, bucket: null };
+  try {
+    const ref = contactRef(source, id);
+    const person = resolvePeople({
+      ta: opts.ta ?? parseTargetTalentMd(),
+      referrals: opts.referrals ?? parseReferralsMd(),
+      influencers: opts.influencers ?? readInfluencers(),
+      pins: opts.pins ?? readPins(),
+    }).find(candidate => candidate.refs.includes(ref));
+    if (!person?.bucketRef) return asked;
+    const [ownerSource, ownerId] = person.bucketRef.split(':');
+    return { source: ownerSource, id: Number(ownerId), bucket: person.bucket };
+  } catch {
+    return asked;
+  }
+}
+
 export function getPersonContext(source, id, opts = {}) {
   try {
     const ta = opts.ta ?? opts.taRows ?? parseTargetTalentMd();

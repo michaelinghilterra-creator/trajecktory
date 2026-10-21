@@ -17,6 +17,8 @@ import { DATA_DIR } from '../config.mjs';
 import { ACTIVE_STATUSES } from './statuses.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { parseReferralsMd, appendReferralRows, updateReferralLine } from './referrals.mjs';
+import { parseTargetTalentMd } from './target-talent.mjs';
+import { sameContact } from '../../../lib/contact-match.mjs';
 import { appendEventsWithEffects, renderLegacyFile } from '../../../lib/legacy-files.mjs';
 import { localToday, logWritesEnabled, withLogRead, withLogWrite } from '../../../lib/log-writes.mjs';
 
@@ -224,10 +226,17 @@ export function linkedinStatus() {
 }
 
 // ── the match ───────────────────────────────────────────────────────────────
-// Returns { stage1, stage2 } lists of connections not already in the referral
-// tracker. stage1 = inside an active company; stage2 = senior/director referrer
-// elsewhere.
-export function matchConnections({ connections, active = activeCompanies(), existing = existingReferralKeys() }) {
+// Returns { stage1, stage2, heldInTa } lists of connections not already in the
+// referral tracker. stage1 = inside an active company; stage2 = senior/director
+// referrer elsewhere.
+//
+// heldInTa is the one-bucket-per-contact seam. A connection who is ALREADY a live
+// row in the target-talent book would, if filed as a referral, be one person in two
+// live buckets (the referral is the higher bucket, so the TA row would have to be
+// retired, and that touches tracker data, cadences and outreach holds). The import
+// does not make that call: it leaves them out of both stages and reports them here
+// so the move is made deliberately, not as a side effect of a LinkedIn upload.
+export function matchConnections({ connections, active = activeCompanies(), existing = existingReferralKeys(), taRows = liveTaRows() }) {
   const { map } = activeFormIndex(active);
   const seenInBatch = new Set();
   const dupe = (c) => {
@@ -248,16 +257,28 @@ export function matchConnections({ connections, active = activeCompanies(), exis
     if (existing.names.has(nm) || seenInBatch.has(nm)) return true;
     seenInBatch.add(nm); return false;
   };
-  const stage1 = [], stage2 = [];
+  const stage1 = [], stage2 = [], heldInTa = [];
+  const inTaBook = (c) => taRows.some(row => sameContact({ first: c.first, last: c.last, company: c.company, linkedin: c.url }, row));
   for (const c of connections) {
     // Match via the connection's company forms (suffix stripped) too, symmetric
     // with the active index, so a suffix-only difference doesn't miss a Stage-1.
     const hit = companyForms(c.company).map(f => map.get(f)).find(Boolean);
-    if (hit) { if (!dupe(c)) stage1.push({ ...c, target: hit }); continue; }
+    if (hit) {
+      if (dupe(c)) continue;
+      if (inTaBook(c)) heldInTa.push({ ...c, target: hit }); else stage1.push({ ...c, target: hit });
+      continue;
+    }
     const senior = (SENIOR.test(c.position) || DIRECTOR.test(c.position)) && FUNC.test(c.position);
-    if (senior && !dupe(c)) stage2.push(c);
+    if (senior && !dupe(c)) { if (inTaBook(c)) heldInTa.push(c); else stage2.push(c); }
   }
-  return { stage1, stage2 };
+  return { stage1, stage2, heldInTa };
+}
+
+// Live rows of the target-talent book. An archived row holds no bucket, so it does
+// not hold a connection back. Unreadable book: hold nothing back, as before.
+function liveTaRows() {
+  try { return parseTargetTalentMd().filter(row => String(row.status || '').trim() !== 'Archived'); }
+  catch { return []; }
 }
 
 function existingReferralKeys() {
@@ -282,7 +303,7 @@ export function reconcile({ seedPool = false } = {}) {
   const store = loadConnections();
   const connections = store.connections || [];
   const active = activeCompanies();
-  const { stage1, stage2 } = matchConnections({ connections, active });
+  const { stage1, stage2, heldInTa } = matchConnections({ connections, active });
   const toRow = (c, target) => ({
     name: `${c.first} ${c.last}`.trim(),
     how: '1st-degree LinkedIn connection',
@@ -313,6 +334,7 @@ export function reconcile({ seedPool = false } = {}) {
     stage1Added: stage1.length,
     stage2Added: seedPool ? stage2.length : 0,
     stage2Available: stage2.length,
+    heldInTa: heldInTa.length,
     unarchived,
   };
 }
