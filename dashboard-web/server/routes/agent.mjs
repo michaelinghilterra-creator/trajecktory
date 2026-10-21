@@ -1142,7 +1142,7 @@ async function runAgent(jobId, mode, target) {
             m.rolesAdded = m.entries.length ? await scanNewCompanies(m.entries) : 0;
             return m;
           } catch (e) {
-            return { added: 0, entries: [], skippedDuplicate: 0, skippedDead: 0, collisions: [], rolesAdded: 0, error: (e && e.message) || String(e) };
+            return { added: 0, entries: [], skippedDuplicate: 0, skippedOwned: 0, skippedDead: 0, collisions: [], rolesAdded: 0, error: (e && e.message) || String(e) };
           }
         };
         portalMerge = await mergeDiscovery(res.result || '');
@@ -1275,6 +1275,7 @@ async function runAgent(jobId, mode, target) {
     if (portalMerge.rolesAdded) wins.push(`${portalMerge.rolesAdded} live role${portalMerge.rolesAdded === 1 ? '' : 's'} added to your pipeline`);
     const skips = [];
     if (portalMerge.skippedDuplicate) skips.push(`${portalMerge.skippedDuplicate} already tracked`);
+    if (portalMerge.skippedOwned) skips.push(`${portalMerge.skippedOwned} owned elsewhere`);
     if (portalMerge.skippedDead) skips.push(`${portalMerge.skippedDead} unreachable board${portalMerge.skippedDead === 1 ? '' : 's'} skipped`);
     if (portalMerge.collisions && portalMerge.collisions.length) skips.push(`${portalMerge.collisions.length} name-collision${portalMerge.collisions.length === 1 ? '' : 's'} left for you to check`);
     let line = wins.join(' · ');
