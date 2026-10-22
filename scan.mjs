@@ -22,13 +22,33 @@ import { pathToFileURL } from 'url';
 import yaml from 'js-yaml';
 import { buildTitleFilter, buildLocationFilter, normalizeUrl, scoreOffer } from './lib/scan-core.mjs';
 import { sanitizeCell } from './lib/sanitize-cell.mjs';
-import { updateCoverage } from './lib/scan-coverage.mjs';
+import { coverageKey, updateCoverage } from './lib/scan-coverage.mjs';
 import { localToday } from './lib/local-date.mjs';
 const parseYaml = yaml.load;
 
 /** The scanner reads only locally tracked companies, never externally owned ones. */
 export function scanCompanies(config) {
   return config?.tracked_companies || [];
+}
+
+export function buildSuccessCoverageOutcome(company, ats, jobs, titleFilter) {
+  let matched = 0;
+  const titleResults = jobs.map((job) => {
+    const titleMatched = titleFilter(job.title);
+    if (titleMatched) matched++;
+    return { job, titleMatched };
+  });
+  return {
+    outcome: {
+      key: coverageKey(company),
+      name: company.name,
+      ats,
+      result: jobs.length > 0 ? 'found' : 'zero',
+      found: jobs.length,
+      matched,
+    },
+    titleResults,
+  };
 }
 
 // ── Config ──────────────────────────────────────────────────────────
@@ -623,7 +643,7 @@ async function main() {
 
   const tasks = targets.map(company => async () => {
     const { type, url, meta } = company._api;
-    const covKey = company.api || company.careers_url || company.name;
+    const covKey = coverageKey(company);
     try {
       let jobs;
       if (type === 'workday') {
@@ -635,14 +655,12 @@ async function main() {
         jobs = PARSERS[type](json, company.name, meta?.subdomain);
       }
       totalFound += jobs.length;
-      coverageOutcomes.push({
-        key: covKey, name: company.name, ats: type,
-        result: jobs.length > 0 ? 'found' : 'zero', found: jobs.length,
-      });
+      const success = buildSuccessCoverageOutcome(company, type, jobs, titleFilter);
+      coverageOutcomes.push(success.outcome);
 
-      for (const job of jobs) {
+      for (const { job, titleMatched } of success.titleResults) {
         const nurl = normalizeUrl(job.url);
-        if (!titleFilter(job.title)) {
+        if (!titleMatched) {
           totalFiltered++;
           // Log once (new URLs only), then dedup so it is not re-logged next scan.
           if (!seenUrls.has(nurl)) {
@@ -702,7 +720,7 @@ async function main() {
   if (!filterCompany) {
     for (const c of skipped) {
       coverageOutcomes.push({
-        key: c.api || c.careers_url || c.name, name: c.name, ats: skipPlatform(c),
+        key: coverageKey(c), name: c.name, ats: skipPlatform(c),
         result: 'skipped_no_api',
       });
     }

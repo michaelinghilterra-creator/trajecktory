@@ -117,6 +117,7 @@ export const SYSTEM_PATHS = [
   'cv-sync-check.mjs',
   'update-system.mjs',
   'scan.mjs',
+  'coverage-cleanup-report.mjs',
   'discover.mjs',
   'gate-pipeline.mjs',
   'verify-actionable.mjs',
