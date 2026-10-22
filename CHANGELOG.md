@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.24.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.23.0...v5.24.0) (2026-10-22)
+
+
+### Features
+
+* scan BambooHR career boards through their public job list ([#497](https://github.com/michaelinghilterra-creator/trajecktory/issues/497)) ([ca59cbb](https://github.com/michaelinghilterra-creator/trajecktory/commit/ca59cbb6de5ebaeeff6fda68f3c6106cac91138c))
+
 ## [5.23.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.22.0...v5.23.0) (2026-10-22)
 
 
