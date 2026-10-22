@@ -12,7 +12,7 @@
  * Run: node tests/scan-parsers.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { detectApi, parseWorkable, parseSmartRecruiters, parseWorkday, insertOffersIntoPipeline, scanCompanies } from '../scan.mjs';
+import { detectApi, parseBamboohr, parseWorkable, parseSmartRecruiters, parseWorkday, insertOffersIntoPipeline, scanCompanies } from '../scan.mjs';
 
 let passed = 0, failed = 0;
 
@@ -164,6 +164,30 @@ console.log('\n7. insertOffersIntoPipeline');
   const created = insertOffersIntoPipeline('', [{ url: 'https://x/1', company: 'X', title: 'Head of RevOps' }]);
   check(/## Pendientes/.test(created) && /- \[ \] https:\/\/x\/1/.test(created), 'creates the Pendientes section when the file has none');
   check(insertOffersIntoPipeline(md, []) === md, 'no offers leaves the text unchanged');
+}
+
+// ── 8. BambooHR ──────────────────────────────────────────────────────────────
+console.log('\n8. BambooHR detection and parsing');
+{
+  const a = detectApi({ careers_url: 'https://examplecorp.bamboohr.com/careers' });
+  check(a?.type === 'bamboohr', 'sub.bamboohr.com/careers is detected as bamboohr');
+  check(a?.url === 'https://examplecorp.bamboohr.com/careers/list', 'list endpoint is built from the subdomain');
+  check(a?.meta?.subdomain === 'examplecorp', 'subdomain is passed through meta for the posting URL');
+  check(detectApi({ careers_url: 'https://www.bamboohr.com/careers' }) === null, 'the vendor own www site is not a board');
+
+  const json = { meta: { totalCount: 2 }, result: [
+    { id: '7', jobOpeningName: 'Revenue Operations Manager', departmentLabel: 'Sales', location: { city: 'Austin', state: 'Texas' }, atsLocation: { city: null, state: null, country: null }, isRemote: null, locationType: '0' },
+    { id: '9', jobOpeningName: 'Data Analyst', departmentLabel: 'Data', location: { city: null, state: null }, atsLocation: { country: 'United States', state: null, city: null }, isRemote: true, locationType: '1' },
+  ] };
+  const offers = parseBamboohr(json, 'Example Corp', 'examplecorp');
+  check(offers.length === 2, 'one offer per result row');
+  check(offers[0].url === 'https://examplecorp.bamboohr.com/careers/7', 'posting URL is built from subdomain and id');
+  check(offers[0].title === 'Revenue Operations Manager' && offers[0].company === 'Example Corp', 'title and company map across');
+  check(offers[0].location === 'Austin, Texas', 'city and state become the location');
+  check(!/remote/i.test(offers[0].remoteHint), 'an on-site role carries no remote signal');
+  check(/remote/i.test(offers[1].remoteHint), 'isRemote surfaces in remoteHint');
+  check(offers[1].location === 'United States', 'falls back to atsLocation when location is empty');
+  check(parseBamboohr({}, 'X', 'x').length === 0 && parseBamboohr(null, 'X', 'x').length === 0, 'an empty or malformed response yields no offers');
 }
 
 console.log(`\n📊 scan parsers: ${passed} passed, ${failed} failed`);
