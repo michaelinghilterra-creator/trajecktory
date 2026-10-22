@@ -5,6 +5,10 @@
 </p>
 
 <p align="center">
+  <img src="docs/demo.gif" alt="A quick tour of trajecktory: the pipeline overview, the roles table, a role evaluation, resume match, interview prep, and follow-ups" width="820">
+</p>
+
+<p align="center">
   <strong>Your entire job search, run from one dashboard.</strong><br>
   Companies use AI to filter you out. trajecktory gives you AI to run the whole search: find the roles worth your time, tailor for each one, work the right people, and never let a thread go cold. All local, all yours.
 </p>

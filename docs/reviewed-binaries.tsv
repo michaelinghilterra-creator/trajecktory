@@ -28,6 +28,7 @@ b16c6561b13f174077c9a19752d892b5d0f5869d	dashboard-web/src/guide/setup-launchpad
 3a62bdd62592286db587f4696bf56e5e0ab22632	dashboard-web/src/guide/stage-track.png	onboarding guide image, captured with capture-guide.mjs over invented data
 3ac86b07b34adcc8d0aadec99597521ff377b002	dashboard-web/src/guide/today.png	onboarding guide image, captured with capture-guide.mjs over invented data
 2859528a233bc52806c521d8fbb643980acc20a9	dashboard-web/src/guide/workflow.png	onboarding guide image, captured with capture-guide.mjs over invented data
+d886fdec9ddbef98cff608fcb5d1c2fc4ef7fc14	docs/demo.gif	README demo GIF, built from the invented-data gallery screenshots
 39c288bdb75cb718391776aabe523254ae814857	docs/og-image.png	social preview image
 6b151acf3edabd4f23087b2efe725a984a013f96	docs/screenshots/01-pipeline-overview.png	README gallery image, captured with capture-readme-gallery.mjs over invented data
 61e864e91927d10032d078a3892fd80bbab8deea	docs/screenshots/02-pipeline-active.png	README gallery image, captured with capture-readme-gallery.mjs over invented data
