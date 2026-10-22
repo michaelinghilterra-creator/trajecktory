@@ -134,6 +134,18 @@ function detectApi(company) {
     };
   }
 
+  // BambooHR: {sub}.bamboohr.com/careers. The public list endpoint returns the whole
+  // board as JSON in one call (it needs an Accept: application/json header, which
+  // fetchJson sends).
+  const bhrMatch = url.match(/^https?:\/\/([a-z0-9-]+)\.bamboohr\.com/i);
+  if (bhrMatch && !/^(www|api)$/i.test(bhrMatch[1])) {
+    return {
+      type: 'bamboohr',
+      url: `https://${bhrMatch[1]}.bamboohr.com/careers/list`,
+      meta: { subdomain: bhrMatch[1] },
+    };
+  }
+
   return null;
 }
 
@@ -238,6 +250,22 @@ function parseWorkable(json, companyName) {
   }));
 }
 
+function parseBamboohr(json, companyName, subdomain) {
+  const jobs = Array.isArray(json?.result) ? json.result : [];
+  return jobs.map(j => ({
+    title: j.jobOpeningName || '',
+    // The list API carries no apply URL; the {subdomain}/careers/{id} public posting URL does.
+    url: `https://${subdomain}.bamboohr.com/careers/${j.id}`,
+    company: companyName,
+    location: [j.location?.city, j.location?.state].filter(Boolean).join(', ')
+      || (typeof j.atsLocation === 'object' && j.atsLocation
+        ? [j.atsLocation.city, j.atsLocation.state, j.atsLocation.country].filter(Boolean).join(', ') : ''),
+    postedAt: null,   // the list endpoint has no posting date
+    // isRemote is BambooHR's explicit flag; locationType '1' also means remote.
+    remoteHint: `${j.isRemote || String(j.locationType) === '1' ? 'remote' : ''} ${j.departmentLabel || ''}`,
+  }));
+}
+
 function parseSmartRecruiters(json, companyName, companyId) {
   const jobs = json.content || [];
   return jobs.map(j => ({
@@ -268,7 +296,7 @@ function isWithinAge(postedAt, maxDays) {
   return ageDays <= maxDays;
 }
 
-const PARSERS = { greenhouse: parseGreenhouse, ashby: parseAshby, lever: parseLever, workable: parseWorkable };
+const PARSERS = { greenhouse: parseGreenhouse, ashby: parseAshby, lever: parseLever, workable: parseWorkable, bamboohr: parseBamboohr };
 
 // ── Fetch with timeout ──────────────────────────────────────────────
 
@@ -276,7 +304,7 @@ async function fetchJson(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(url, { signal: controller.signal, headers: { accept: 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } finally {
@@ -604,7 +632,7 @@ async function main() {
         jobs = await fetchSmartRecruitersJobs(url, meta.companyId, company.name);
       } else {
         const json = await fetchJson(url);
-        jobs = PARSERS[type](json, company.name);
+        jobs = PARSERS[type](json, company.name, meta?.subdomain);
       }
       totalFound += jobs.length;
       coverageOutcomes.push({
@@ -755,6 +783,7 @@ export {
   parseWorkday,
   parseWorkable,
   parseSmartRecruiters,
+  parseBamboohr,
 };
 
 const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

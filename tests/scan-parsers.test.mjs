@@ -12,7 +12,7 @@
  * Run: node tests/scan-parsers.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { detectApi, parseWorkable, parseSmartRecruiters, parseWorkday, insertOffersIntoPipeline, scanCompanies } from '../scan.mjs';
+import { detectApi, parseBamboohr, parseWorkable, parseSmartRecruiters, parseWorkday, insertOffersIntoPipeline, scanCompanies } from '../scan.mjs';
 
 let passed = 0, failed = 0;
 
