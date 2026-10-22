@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.25.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.24.0...v5.25.0) (2026-10-22)
+
+
+### Features
+
+* read ADP Workforce Now job postings through ADP's public posting API ([#500](https://github.com/michaelinghilterra-creator/trajecktory/issues/500)) ([b4d7414](https://github.com/michaelinghilterra-creator/trajecktory/commit/b4d7414ce06a510369aaa6fbaaa9b3be160115b8))
+* record title-matched roles per company and report boards with none in 90 days ([#499](https://github.com/michaelinghilterra-creator/trajecktory/issues/499)) ([2eb20a7](https://github.com/michaelinghilterra-creator/trajecktory/commit/2eb20a7cf1dd79fb2ba35763318a76b62fbb7510))
+
 ## [5.24.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.23.0...v5.24.0) (2026-10-22)
 
 
