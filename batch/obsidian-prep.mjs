@@ -12,6 +12,8 @@ import {
   normalizeCompany,
 } from '../lib/identity.mjs';
 import { loadHandledSet, readPipelineRows, sourceUrlOf } from '../lib/pipeline.mjs';
+import { parsePostingUrl, fetchJdText } from '../lib/ats-jd.mjs';
+import { saveSnapshot } from '../resolve-jds.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const flag = name => '-' + `-${name}`;
@@ -42,9 +44,9 @@ function argumentsFor(argv) {
 function frontmatter(text) {
   const lines = String(text).split(/\r?\n/);
   const boundary = '-'.repeat(3);
-  if (lines[0] !== boundary) return { sourceUrl: '', title: '', company: '', created: '' };
+  if (lines[0] !== boundary) return { sourceUrl: '', title: '', company: '', created: '', body: String(text) };
   const end = lines.indexOf(boundary, 1);
-  if (end < 0) return { sourceUrl: '', title: '', company: '', created: '' };
+  if (end < 0) return { sourceUrl: '', title: '', company: '', created: '', body: String(text) };
   const block = lines.slice(1, end).join('\n');
   const source = block.match(/^source:\s*"?([^"\n]+)"?\s*$/m);
   const title = block.match(/^title:\s*"?([^"\n]+)"?\s*$/m);
@@ -55,6 +57,7 @@ function frontmatter(text) {
     title: title ? title[1].trim() : '',
     company: company ? company[1].trim() : '',
     created: created ? created[1] : '',
+    body: lines.slice(end + 1).join('\n'),
   };
 }
 
@@ -87,9 +90,9 @@ function moveFile(source, destination) {
   }
 }
 
-function main() {
+export async function main(argv = process.argv.slice(2), { fetchImpl = globalThis.fetch } = {}) {
   let options;
-  try { options = argumentsFor(process.argv.slice(2)); }
+  try { options = argumentsFor(argv); }
   catch (error) { console.error(`Error: ${error.message}`); process.exitCode = 1; return; }
   if (!options.source || !options.triaged || !options.dupes) {
     console.error('Error: source, triaged, and dupes are required');
@@ -142,7 +145,7 @@ function main() {
     const key = canonicalUrl(parsed.sourceUrl) || `nourl::${normalizeCompany(title)}`;
     const item = {
       file, bytes, sourceUrl: parsed.sourceUrl, title, company: parsed.company,
-      created: parsed.created, mtimeMs: fs.statSync(file).mtimeMs, key,
+      created: parsed.created, body: parsed.body, mtimeMs: fs.statSync(file).mtimeMs, key,
     };
     if (kept.has(key)) {
       const previous = kept.get(key);
@@ -185,12 +188,38 @@ function main() {
   const deferred = ordered.length - selected.length;
   const survivors = selected.sort((a, b) => path.basename(a.file).localeCompare(path.basename(b.file)));
   const thin = survivors.filter(item => item.bytes < options.thinBytes);
+  let adpRecovered = 0;
+  let adpFailed = 0;
+  if (options.apply) {
+    for (const item of survivors) {
+      const desc = parsePostingUrl(item.sourceUrl);
+      const bodyChars = item.body.replace(/\s/g, '').length;
+      if (desc?.ats !== 'adp' || (bodyChars >= 600 && !/supported browser/i.test(item.body))) continue;
+      try {
+        const fetched = await fetchJdText(desc, { fetchImpl });
+        const selectedSnapshot = saveSnapshot({
+          row: {
+            company: item.company || item.title,
+            title: fetched.title || item.title,
+            url: item.sourceUrl,
+          },
+          desc,
+          text: fetched.text,
+          rootDir: repo,
+        });
+        item.batchUrl = `local:${selectedSnapshot.file}`;
+        adpRecovered++;
+      } catch {
+        adpFailed++;
+      }
+    }
+  }
   const inputRows = ['id\turl\tsource\tnotes'];
   const manifestRows = ['id\tsource_file\tsource_url\tbytes'];
   survivors.forEach((item, index) => {
     const id = index + 1;
     const notes = item.title.replace(/[\t\r\n]/g, ' ');
-    inputRows.push(`${id}\tlocal:${path.resolve(item.file)}\tobsidian\t${notes}`);
+    inputRows.push(`${id}\t${item.batchUrl || `local:${path.resolve(item.file)}`}\tobsidian\t${notes}`);
     manifestRows.push(`${id}\t${path.resolve(item.file)}\t${item.sourceUrl}\t${item.bytes}`);
   });
   if (options.apply) {
@@ -205,6 +234,7 @@ function main() {
   console.log(`scanned: ${sourceFiles.length}`);
   console.log(`survivors: ${survivors.length}`);
   console.log(`deferred: ${deferred}`);
+  if (adpRecovered || adpFailed) console.log(`adp recovered: ${adpRecovered}, adp failed: ${adpFailed}`);
   const reasonCounts = new Map();
   for (const item of quarantined) reasonCounts.set(item.reason, (reasonCounts.get(item.reason) || 0) + 1);
   for (const [reason, count] of [...reasonCounts].sort(([a], [b]) => a.localeCompare(b))) {
@@ -216,4 +246,6 @@ function main() {
   for (const item of thin) console.log(`${path.basename(item.file)}\t${item.bytes}`);
 }
 
-main();
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main().catch(error => { console.error(error); process.exitCode = 1; });
+}
