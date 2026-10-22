@@ -46,6 +46,10 @@ check(parsePostingUrl('https://jobs.lever.co/umbrella/2b4c1d1e-1111-2222-3333-44
   'lever posting URL');
 check(parsePostingUrl('https://hooli.wd5.myworkdayjobs.com/job/US-Remote/VP-RevOps_R1001')?.ats === 'workday',
   'workday /job/ URL');
+check(eq(parsePostingUrl('https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?CID=zorblax&ccID=widget&JobId=900001&rb=LinkedIn'),
+  { ats: 'adp', cid: 'zorblax', ccId: 'widget', id: '900001' }), 'ADP posting URL with mixed-case parameters');
+check(parsePostingUrl('https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=zorblax&ccId=widget') === null,
+  'ADP URL missing jobId returns null');
 
 // ── parsePostingUrl: NOT single-posting URLs → null ──────────────────────────
 check(parsePostingUrl('https://app.talentcloud.example/careers/search') === null, 'unknown SPA search page → null');
@@ -136,6 +140,44 @@ check(threw, 'fetchJdText throws NEEDS_BOARD when a gh_jid has no board hint');
 const ash = await fetchJdText({ ats: 'ashby', slug: 'globex', id: 'uuid-1' },
   { fetchImpl: stub({ 'posting-api/job-board/globex': { jobs: [{ id: 'uuid-1', title: 'Dir Analytics', descriptionHtml: '<p>Own data</p>' }] } }) });
 check(ash.text === 'Own data', 'fetchJdText ashby: finds posting by id on the board');
+
+const adpDescription = '<p>' + 'Build reliable widget systems with cross-functional partners. '.repeat(5) + '</p>';
+let adpRequested = '';
+const adp = await fetchJdText({ ats: 'adp', cid: 'zorblax cid', ccId: 'widget/center', id: '900001' }, {
+  fetchImpl: async (url) => {
+    adpRequested = url;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        requisitionTitle: '  Principal Widget Engineer  ',
+        requisitionDescription: adpDescription,
+        requisitionLocations: [
+          { nameCode: { shortName: 'Moon Base' } },
+          { nameCode: { shortName: 'Remote' } },
+        ],
+      }),
+    };
+  },
+});
+check(adp.title === 'Principal Widget Engineer' && adp.text.endsWith('Location: Moon Base, Remote'),
+  'fetchJdText ADP returns trimmed title, description, and locations');
+check(adpRequested.includes('/900001?cid=zorblax%20cid&ccId=widget%2Fcenter&lang=en_US&locale=en_US'),
+  'fetchJdText ADP encodes identifiers in the public endpoint');
+
+let adpShortThrew = false;
+try {
+  await fetchJdText({ ats: 'adp', cid: 'zorblax', ccId: 'widget', id: '900002' }, {
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ requisitionDescription: '<p>Too short</p>' }),
+    }),
+  });
+} catch (error) {
+  adpShortThrew = error.message === 'adp posting has no description (filled or private)';
+}
+check(adpShortThrew, 'fetchJdText ADP rejects a short description');
 
 // ── computeGating: the retry-limit boundary ───────────────────────────────────
 // 2026-08-06: a handful of postings (unsupported ATS, or a confirmed 404) kept

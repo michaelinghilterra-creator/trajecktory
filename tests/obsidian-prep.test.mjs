@@ -6,6 +6,7 @@ import { makeSandbox } from './helpers/sandbox.mjs';
 import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { formatTrackerLine, TRACKER_HEADER, TRACKER_SEPARATOR } from '../lib/tracker.mjs';
+import { main } from '../batch/obsidian-prep.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const script = path.join(root, 'batch', 'obsidian-prep.mjs');
@@ -125,6 +126,63 @@ test('prep deduplicates pipeline, handled and active reposts before max selectio
     assert.match(input, /Second\.md/);
     assert.doesNotMatch(input, /Third\.md|Fourth\.md/);
     assert.doesNotMatch(fs.readFileSync(script, 'utf8'), /roleSignature/);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('prep recovers thin ADP clips without modifying source notes and falls back on fetch failure', async () => {
+  const tmp = makeSandbox('obsidian-prep-adp');
+  try {
+    const source = path.join(tmp, 'Open Roles');
+    const triaged = path.join(tmp, 'Triaged');
+    const dupes = path.join(tmp, 'Dupes');
+    const repo = path.join(tmp, 'repo');
+    for (const dir of [source, triaged, path.join(repo, 'data'), path.join(repo, 'batch')]) fs.mkdirSync(dir, { recursive: true });
+    const goodUrl = 'https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=zorblax&ccId=widgets&jobId=900001';
+    const failedUrl = 'https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=zorblax&ccId=widgets&jobId=900002';
+    const goodNote = path.join(source, 'Recovered.md');
+    const failedNote = path.join(source, 'Fallback.md');
+    const goodBytes = Buffer.from(obsidian(goodUrl, 'Widget Engineer', 'Please switch to a supported browser', { company: 'Zorblax Widgetry' }));
+    const failedBytes = Buffer.from(obsidian(failedUrl, 'Widget Analyst', 'Please switch to a supported browser', { company: 'Zorblax Widgetry' }));
+    fs.writeFileSync(goodNote, goodBytes);
+    fs.writeFileSync(failedNote, failedBytes);
+
+    const output = [];
+    const originalLog = console.log;
+    console.log = value => output.push(String(value));
+    try {
+      await main([
+        flag('source'), source, flag('triaged'), triaged, flag('dupes'), dupes,
+        flag('repo'), repo, flag('apply'),
+      ], {
+        fetchImpl: async (url) => {
+          if (url.includes('/900002?')) throw new Error('invented failure');
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              requisitionTitle: 'Senior Widget Engineer',
+              requisitionDescription: `<p>${'Design dependable widget platforms for invented customers. '.repeat(5)}</p>`,
+              requisitionLocations: [{ nameCode: { shortName: 'Remote' } }],
+            }),
+          };
+        },
+      });
+    } finally {
+      console.log = originalLog;
+    }
+
+    const snapshots = fs.readdirSync(path.join(repo, 'jds'));
+    assert.equal(snapshots.length, 1);
+    const input = fs.readFileSync(path.join(repo, 'batch', 'batch-input.tsv'), 'utf8');
+    assert.match(input, /local:jds\//);
+    assert.ok(input.includes(`local:${failedNote}`));
+    const manifest = fs.readFileSync(path.join(repo, 'batch', 'obsidian-manifest.tsv'), 'utf8');
+    assert.ok(manifest.includes(goodNote));
+    assert.deepEqual(fs.readFileSync(goodNote), goodBytes);
+    assert.deepEqual(fs.readFileSync(failedNote), failedBytes);
+    assert.ok(output.includes('adp recovered: 1, adp failed: 1'));
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
