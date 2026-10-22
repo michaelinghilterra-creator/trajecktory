@@ -3,13 +3,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeSandbox } from './helpers/sandbox.mjs';
+import { localToday } from '../lib/local-date.mjs';
 
 const sandbox = makeSandbox('debrief-marks-held');
 process.env.TJK_DATA_DIR = sandbox;
 
-const centralToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+// The server dates a held round with the machine's local day, so compare against the same clock
+// (CI runs in UTC, where the Central date lags behind every evening).
+const appToday = () => localToday();
 const daysBack = (n) => {
-  const [y, m, d] = centralToday().split('-').map(Number);
+  const [y, m, d] = appToday().split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d - n)).toISOString().slice(0, 10);
 };
 
@@ -89,7 +92,7 @@ try {
 
   // A round booked for the future cannot be recorded as held in the future.
   r = await send('POST', '/api/interview/debriefs/900002', { stage: 'Phone Screen', fields: { outcome: 'Early notes' } });
-  check(r.status === 200 && r.body.held.held === true && r.body.held.heldOn <= centralToday(), 'a debrief on a round booked in the future is held no later than today');
+  check(r.status === 200 && r.body.held.held === true && r.body.held.heldOn <= appToday(), 'a debrief on a round booked in the future is held no later than today');
 
   // An explicit date wins, and a round that was never scheduled in the app still becomes held.
   await send('PATCH', '/api/applications/900003', { status: 'Phone Screen', company: 'Vantrix Sprocketry', schedule: past(5) });

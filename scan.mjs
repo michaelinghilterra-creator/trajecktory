@@ -26,6 +26,11 @@ import { updateCoverage } from './lib/scan-coverage.mjs';
 import { localToday } from './lib/local-date.mjs';
 const parseYaml = yaml.load;
 
+/** The scanner reads only locally tracked companies, never externally owned ones. */
+export function scanCompanies(config) {
+  return config?.tracked_companies || [];
+}
+
 // ── Config ──────────────────────────────────────────────────────────
 
 const PORTALS_PATH = 'portals.yml';
@@ -522,7 +527,7 @@ async function main() {
   }
 
   const config = parseYaml(readFileSync(PORTALS_PATH, 'utf-8'));
-  const companies = config.tracked_companies || [];
+  const companies = scanCompanies(config);
   const titleFilter = buildTitleFilter(config.title_filter);
   const locationFilter = buildLocationFilter(config.title_filter);  // reads location_policy from title_filter section
 

@@ -17,6 +17,7 @@ import {
   normalizeToken,
   atsSlug,
   companyKeys,
+  indexableCompanies,
   buildCompanyIndex,
   addCompanyToIndex,
   findKnownCompany,
@@ -100,6 +101,35 @@ const withTombstone = buildCompanyIndex([
 ]);
 check(findKnownCompany(withTombstone, { slug: 'zorblaxlegacy' }) !== null,
   'a disabled tombstone still blocks rediscovery of its dead slug');
+
+// owned_elsewhere entries block discovery without becoming scan targets.
+const trackedExample = { name: 'Tracked Widgets', careers_url: 'https://jobs.lever.co/trackedwidgets' };
+const ownedExample = {
+  name: 'Example Co',
+  careers_url: 'https://job-boards.greenhouse.io/exampleco',
+  owner: 'external',
+  since: '2030-01-15',
+};
+const indexable = indexableCompanies({
+  tracked_companies: [trackedExample, null],
+  owned_elsewhere: [ownedExample, null],
+});
+check(indexable.length === 2 && indexable[0] === trackedExample,
+  'indexableCompanies merges tracked and owned lists while skipping null entries');
+check(indexable[1].ownedElsewhere === true && indexable[1].enabled === false,
+  'indexableCompanies flags owned entries as disabled and externally owned');
+
+const ownedIndex = buildCompanyIndex(indexable);
+const ownedBySlug = findKnownCompany(ownedIndex, { slug: 'exampleco' });
+check(ownedBySlug?.matchedOn === 'slug' && ownedBySlug.entry.ownedElsewhere === true,
+  'findKnownCompany finds an owned entry by slug');
+const ownedByName = findKnownCompany(ownedIndex, { slug: 'exampleco-new', name: 'Example Co' });
+check(ownedByName?.matchedOn === 'name' && ownedByName.entry.ownedElsewhere === true,
+  'findKnownCompany finds an owned entry by name');
+
+const withoutOwned = indexableCompanies({ tracked_companies: [trackedExample] });
+check(withoutOwned.length === 1 && withoutOwned[0] === trackedExample,
+  'indexableCompanies accepts a config with no owned_elsewhere key');
 
 // ── Distinct companies sharing a name must stay distinct ────────────────────
 const fetchIndex = buildCompanyIndex([

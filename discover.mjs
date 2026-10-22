@@ -25,7 +25,7 @@
 
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
 import yaml from 'js-yaml';
-import { buildCompanyIndex, addCompanyToIndex, findKnownCompany, buildPortalsEntry, slugToName, insertPortalsEntries } from './lib/portals.mjs';
+import { buildCompanyIndex, addCompanyToIndex, findKnownCompany, buildPortalsEntry, indexableCompanies, slugToName, insertPortalsEntries } from './lib/portals.mjs';
 import { canonicalUrl } from './lib/identity.mjs';
 import { sanitizeCell } from './lib/sanitize-cell.mjs';
 import { buildTitleFilter } from './lib/scan-core.mjs';
@@ -154,8 +154,14 @@ function collectLocalUrls() {
 function claimCompany(index, parsed, companyHint, skipped) {
   const hit = findKnownCompany(index, { slug: parsed.slug, name: companyHint });
   if (!hit) return null;
-  if (hit.matchedOn === 'name') {
-    skipped.push({ slug: parsed.slug, type: parsed.type, hint: companyHint, existing: hit.entry });
+  if (hit.entry.ownedElsewhere || hit.matchedOn === 'name') {
+    skipped.push({
+      slug: parsed.slug,
+      type: parsed.type,
+      hint: companyHint,
+      existing: hit.entry,
+      ownedElsewhere: Boolean(hit.entry.ownedElsewhere),
+    });
   }
   return hit;
 }
@@ -322,7 +328,7 @@ async function main() {
   const bravePool     = buildPool(portals);
   const braveRotation = nextSlice(bravePool, loadCursor(DATA_DIR), DISCOVER_QUERIES_PER_RUN);
   const braveQueries  = braveRotation.queries;
-  const trackedCos    = portals.tracked_companies || [];
+  const trackedCos    = indexableCompanies(portals);
   const companyIndex  = buildCompanyIndex(trackedCos);
   const seenUrls      = loadSeenUrls();
   const skipped       = [];
@@ -412,9 +418,17 @@ async function main() {
   // an ATS migration (correctly skipped — the old board is dead) or two real
   // companies sharing a name (Zorblax pet insurance vs. Zorblax Package), which
   // only a human can tell apart. Print both so the call is visible.
-  if (skipped.length) {
-    console.log(`\n⚠️  ${skipped.length} candidate${skipped.length === 1 ? '' : 's'} matched a tracked company by name but with a different board — not registered:`);
-    for (const s of skipped) {
+  const ownedSkips = skipped.filter(s => s.ownedElsewhere);
+  const collisionSkips = skipped.filter(s => !s.ownedElsewhere);
+  if (ownedSkips.length) {
+    console.log(`\n${ownedSkips.length} candidate${ownedSkips.length === 1 ? '' : 's'} owned elsewhere, not registered:`);
+    for (const s of ownedSkips) {
+      console.log(`   ${s.type}/${s.slug}${s.hint ? ` ("${s.hint}")` : ''} owned elsewhere as "${s.existing.name}"`);
+    }
+  }
+  if (collisionSkips.length) {
+    console.log(`\n⚠️  ${collisionSkips.length} candidate${collisionSkips.length === 1 ? '' : 's'} matched a tracked company by name but with a different board — not registered:`);
+    for (const s of collisionSkips) {
       console.log(`   • ${s.type}/${s.slug}${s.hint ? ` ("${s.hint}")` : ''} → already tracked as "${s.existing.name}" ${s.existing.careers_url || ''}`);
     }
     console.log(`   If any of these is genuinely a different company, add it to portals.yml by hand`);

@@ -804,3 +804,9 @@ tracked_companies:
     api: https://boards-api.greenhouse.io/v1/boards/vacasa/jobs
     enabled: true
 
+# owned_elsewhere:
+#   - name: Example Co
+#     careers_url: https://job-boards.greenhouse.io/exampleco
+#     owner: external
+#     reason: moved to another sourcing tool
+#     since: 2030-01-15

@@ -18,6 +18,7 @@
 import { mkdtempSync, writeFileSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import yaml from 'js-yaml';
 import { makeSandbox } from './helpers/sandbox.mjs';
 import {
   parsePortalAdditions, sanitizeCompanyName, verifyBoardLive, mergePortalAdditions,
@@ -163,6 +164,36 @@ const liveFetch = async () => ({ ok: true, json: async () => ({ jobs: [1] }) });
   ]));
   const r = await mergePortalAdditions(p, companies, { today: '2026-08-10', fetchImpl: liveFetch });
   check(r.added === 1 && r.skippedDuplicate === 1, 'same slug twice in one run adds once, dedupes the second');
+}
+{
+  const dir = makeSandbox('portals-owned');
+  const p = join(dir, 'portals.yml');
+  writeFileSync(p, `tracked_companies:
+  - name: Tracked Widgets
+    careers_url: https://jobs.lever.co/trackedwidgets
+    enabled: true
+owned_elsewhere:
+  - name: Example Co
+    careers_url: https://job-boards.greenhouse.io/exampleco
+    owner: external
+    reason: moved to another sourcing tool
+    since: 2030-01-15
+`, 'utf8');
+  const proposed = [
+    { name: 'Example Alias', ats: 'greenhouse', slug: 'exampleco' },
+    { name: 'Example Co', ats: 'greenhouse', slug: 'exampleco-new' },
+    { name: 'Fresh Widgets', ats: 'lever', slug: 'freshwidgets' },
+  ];
+  const r = await mergePortalAdditions(p, proposed, { today: '2030-01-15', verify: false });
+  const written = yaml.load(readFileSync(p, 'utf8'));
+  check(r.skippedOwned === 2 && r.skippedOwnedNames.length === 2,
+    'owned companies matched by slug and name are counted separately');
+  check(r.added === 1 && r.collisions.length === 0 && r.skippedDuplicate === 0,
+    'owned companies are neither collisions nor duplicates and a new company is added');
+  check(written.tracked_companies.some(c => c.name === 'Fresh Widgets')
+    && !written.tracked_companies.some(c => c.name === 'Example Co')
+    && written.owned_elsewhere.length === 1,
+  'the writer keeps owned companies out of tracked_companies');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

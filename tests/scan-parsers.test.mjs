@@ -12,9 +12,27 @@
  * Run: node tests/scan-parsers.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { detectApi, parseWorkable, parseSmartRecruiters, parseWorkday, insertOffersIntoPipeline } from '../scan.mjs';
+import { detectApi, parseWorkable, parseSmartRecruiters, parseWorkday, insertOffersIntoPipeline, scanCompanies } from '../scan.mjs';
 
 let passed = 0, failed = 0;
+
+console.log('\n0. scanCompanies');
+{
+  const tracked = { name: 'Tracked Widgets', careers_url: 'https://jobs.lever.co/trackedwidgets' };
+  const config = {
+    tracked_companies: [tracked],
+    owned_elsewhere: [{
+      name: 'Example Co',
+      careers_url: 'https://job-boards.greenhouse.io/exampleco',
+      owner: 'external',
+      since: '2030-01-15',
+    }],
+  };
+  const companies = scanCompanies(config);
+  check(companies.length === 1 && companies[0] === tracked,
+    'the scanner company list excludes owned_elsewhere entries');
+}
+
 function check(cond, msg) {
   if (cond) { console.log(`  ✅ ${msg}`); passed++; }
   else { console.log(`  ❌ ${msg}`); failed++; }
