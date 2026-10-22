@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.23.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.22.0...v5.23.0) (2026-10-22)
+
+
+### Features
+
+* owned_elsewhere companies are never re-added to tracked_companies ([#495](https://github.com/michaelinghilterra-creator/trajecktory/issues/495)) ([6a98950](https://github.com/michaelinghilterra-creator/trajecktory/commit/6a98950cb2b157e07200c620bc71507bfb9dad26))
+
 ## [5.22.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.21.0...v5.22.0) (2026-10-21)
 
 
