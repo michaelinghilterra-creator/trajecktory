@@ -12,7 +12,7 @@
  * Run: node tests/scan-parsers.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { detectApi, parseBamboohr, parseWorkable, parseSmartRecruiters, parseWorkday, insertOffersIntoPipeline, scanCompanies } from '../scan.mjs';
+import { buildSuccessCoverageOutcome, detectApi, parseBamboohr, parseWorkable, parseSmartRecruiters, parseWorkday, insertOffersIntoPipeline, scanCompanies } from '../scan.mjs';
 
 let passed = 0, failed = 0;
 
@@ -188,6 +188,25 @@ console.log('\n8. BambooHR detection and parsing');
   check(/remote/i.test(offers[1].remoteHint), 'isRemote surfaces in remoteHint');
   check(offers[1].location === 'United States', 'falls back to atsLocation when location is empty');
   check(parseBamboohr({}, 'X', 'x').length === 0 && parseBamboohr(null, 'X', 'x').length === 0, 'an empty or malformed response yields no offers');
+}
+
+console.log('\n9. coverage outcome title matches');
+{
+  let calls = 0;
+  const titleFilter = (title) => {
+    calls++;
+    return title.includes('Widget');
+  };
+  const company = { name: 'Zorblax Widgetry', api: 'https://example.test/zorblax' };
+  const jobs = [
+    { title: 'Widget Operations Director' },
+    { title: 'Ratchet Operations Director' },
+    { title: 'Widget Analytics Lead' },
+  ];
+  const built = buildSuccessCoverageOutcome(company, 'ashby', jobs, titleFilter);
+  check(built.outcome.matched === 2, 'matched counts only title passing jobs');
+  check(calls === jobs.length, 'the title filter runs exactly once per job');
+  check(built.titleResults.filter((row) => row.titleMatched).length === 2, 'the scan loop receives the same title decisions');
 }
 
 console.log(`\n📊 scan parsers: ${passed} passed, ${failed} failed`);

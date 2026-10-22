@@ -96,5 +96,34 @@ console.log('scan-coverage.test.mjs');
   check(typeof coverage === 'object' && alerts.length === 0, 'null prev + null outcomes is safe');
 }
 
+{
+  const first = updateCoverage({}, [
+    { key: 'https://example.test/zorblax', name: 'Zorblax Widgetry', ats: 'ashby', result: 'found', found: 4, matched: 2 },
+  ], '2030-01-01').coverage['https://example.test/zorblax'];
+  check(first.matched === 2, 'numeric matched is stored on found');
+  check(first.lastMatched === '2030-01-01', 'positive matched stamps lastMatched');
+  check(first.matchSince === '2030-01-01', 'first numeric matched stamps matchSince');
+
+  const second = updateCoverage({ 'https://example.test/zorblax': first }, [
+    { key: 'https://example.test/zorblax', name: 'Zorblax Widgetry', ats: 'ashby', result: 'found', found: 3, matched: 0 },
+  ], '2030-02-01').coverage['https://example.test/zorblax'];
+  check(second.matched === 0, 'zero matched is stored on found');
+  check(second.lastMatched === '2030-01-01', 'zero matched does not change lastMatched');
+  check(second.matchSince === '2030-01-01', 'matchSince is kept after later scans');
+
+  const zero = updateCoverage({}, [
+    { key: 'https://example.test/quennox', name: 'Quennox Ratchet Works', ats: 'lever', result: 'zero', matched: 0 },
+  ], '2030-03-01').coverage['https://example.test/quennox'];
+  check(zero.matched === 0 && zero.matchSince === '2030-03-01', 'numeric matched is stored on zero');
+  check(!('lastMatched' in zero), 'zero matched never creates lastMatched');
+
+  const legacy = updateCoverage({
+    'https://example.test/zorblax': { name: 'Zorblax Widgetry', ats: 'ashby', consecutiveZero: 1, found: 2 },
+  }, [
+    { key: 'https://example.test/zorblax', name: 'Zorblax Widgetry', ats: 'ashby', result: 'error' },
+  ], '2030-04-01').coverage['https://example.test/zorblax'];
+  check(!('matched' in legacy) && !('matchSince' in legacy), 'old records without matching fields still fold as unknown');
+}
+
 console.log(`\n${failed === 0 ? '✅' : '❌'} ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
