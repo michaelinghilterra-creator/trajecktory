@@ -11,6 +11,11 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    # RELEASE_PLEASE_TOKEN lives in the `release` environment, whose deployment
+    # branch policy allows main only. A workflow pushed on any other branch (the
+    # GHeist pattern: plant a ci-sync-* branch, dump secrets to the log) cannot
+    # read it.
+    environment: release
     steps:
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
