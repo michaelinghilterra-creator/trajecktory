@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.26.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.25.0...v5.26.0) (2026-10-26)
+
+
+### Features
+
+* faster dashboard reads and agent-edit --report none ([#503](https://github.com/michaelinghilterra-creator/trajecktory/issues/503)) ([1d935af](https://github.com/michaelinghilterra-creator/trajecktory/commit/1d935afefa07944c2f4e29a40724ddb39b756e57))
+
 ## [5.25.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.24.0...v5.25.0) (2026-10-22)
 
 
