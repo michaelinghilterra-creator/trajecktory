@@ -11,6 +11,7 @@ import { existsSync } from 'fs';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { DATA_DIR, STATIC, OUTPUT_DIR, PORT, HOST } from './config.mjs';
+import { logWritesEnabled, withLogRead } from '../../lib/log-writes.mjs';
 import { router as applicationsRoutes } from './routes/applications.mjs';
 import { router as followupsRoutes } from './routes/followups.mjs';
 import { bumpDataGeneration } from './lib/data-generation.mjs';
@@ -194,6 +195,16 @@ app.use(rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many requests — slow down and retry shortly.' },
 }));
+
+// Every correspondence read opens its own projection cache, so a GET that walks
+// the contact books (follow-ups, metrics, people) rebuilt the voided-id and
+// event-file lookups once per contact. One shared cache for the synchronous part
+// of a read-only request makes that a single lookup. It lives only for that call,
+// so nothing is served stale across requests, and writes never go through it.
+app.use((req, res, next) => {
+  if ((req.method !== 'GET' && req.method !== 'HEAD') || !logWritesEnabled(DATA_DIR)) return next();
+  return withLogRead(DATA_DIR, () => next());
+});
 
 app.use(applicationsRoutes);
 app.use(followupsRoutes);
