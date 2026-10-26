@@ -613,6 +613,12 @@ message: a bad one silently bumps nothing and leaves the changelog empty, with a
 > this repo with Contents + Pull-requests write, and `release.yml` reads
 > `secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN`.
 >
+> The secret lives in the **`release` environment**, not at repo level. That environment's
+> deployment branch policy allows `main` only, so a workflow pushed on any other branch (a
+> stolen-token attack that plants a branch and dumps secrets to the log) cannot read it. When
+> you re-issue the token, set it on the environment:
+> `gh secret set RELEASE_PLEASE_TOKEN --env release`. Do not add it back at repo level.
+>
 > **Do NOT "fix" this by enabling Settings → Actions → "Allow GitHub Actions to create and approve
 > pull requests".** That grants every workflow in the repo standing authority to open and approve
 > PRs, and it does not actually work here: a PR opened by `GITHUB_TOKEN` does not trigger other
