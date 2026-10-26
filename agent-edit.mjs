@@ -6,7 +6,7 @@ import { ALL_STATUSES } from './dashboard-web/server/lib/statuses.mjs';
 import { localToday } from './lib/local-date.mjs';
 
 const HELP = `Usage:
-  node agent-edit.mjs application --id <num> [--company <name>] [--status <status>] [--role <title>] [--note <text>] [--append-note <text>] [--event-date <YYYY-MM-DD>] [--json]
+  node agent-edit.mjs application --id <num> [--company <name>] [--status <status>] [--role <title>] [--report none] [--note <text>] [--append-note <text>] [--event-date <YYYY-MM-DD>] [--json]
   node agent-edit.mjs followup --app <num> --date <YYYY-MM-DD> --company <name> --role <title> --channel <channel> --contact <text> [--note <text>] [--json]`;
 const JSON_REQUESTED = process.argv.includes('--json');
 
@@ -15,7 +15,7 @@ function parseArgs(argv) {
   const command = argv[0];
   if (!['application', 'followup'].includes(command)) throw new Error('First argument must be application or followup');
   const allowed = command === 'application'
-    ? new Set(['--id', '--company', '--status', '--role', '--note', '--append-note', '--event-date'])
+    ? new Set(['--id', '--company', '--status', '--role', '--report', '--note', '--append-note', '--event-date'])
     : new Set(['--app', '--date', '--company', '--role', '--channel', '--contact', '--note']);
   const options = { command, json: false };
   for (let i = 1; i < argv.length; i += 1) {
@@ -60,11 +60,13 @@ function runApplication(options) {
   if (options.status !== undefined && !ALL_STATUSES.includes(options.status)) {
     throw new Error(`--status must be one of: ${ALL_STATUSES.join(', ')}`);
   }
+  if (options.report !== undefined && options.report !== 'none') throw new Error('--report must be none');
   if (options.eventDate !== undefined) validateDate(options.eventDate, '--event-date');
   const id = Number(options.id);
   const updates = {};
   if (options.status !== undefined) updates.status = options.status;
   if (options.role !== undefined) updates.role = options.role;
+  if (options.report !== undefined) updates.report = '\u2014';
   if (options.note !== undefined) updates.notes = options.note;
   if (options.appendNote !== undefined) {
     const rows = parseApplicationsMd();

@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { makeSandbox } from './helpers/sandbox.mjs';
 import { openEventStore, readEvents } from '../lib/event-store.mjs';
 import { importDataFolder } from '../lib/import/import-data-folder.mjs';
-import { TRACKER_HEADER, TRACKER_SEPARATOR, formatTrackerLine } from '../lib/tracker.mjs';
+import { TRACKER_HEADER, TRACKER_SEPARATOR, formatTrackerLine, parseTrackerLine } from '../lib/tracker.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const clockDir = makeSandbox('agent-edit-clock');
@@ -24,9 +24,9 @@ const baseRow = formatTrackerLine({ num: 900001, date: '2030-05-01', company: 'Z
 const tracker = ['# Applications Tracker', '', TRACKER_HEADER, TRACKER_SEPARATOR, baseRow, ''].join('\n');
 const followups = ['# Follow-Ups', '', '| # | app# | date | company | role | channel | contact | notes |', '|---|------|------|---------|------|---------|---------|-------|', '| 4 | 900001 | 2030-05-01 | Zorblax Widgetry | Example Cog Lead | Email | Example Personone | Invented earlier note |', ''].join('\n');
 
-function setup(name, on) {
+function setup(name, on, extraRow = null) {
   const dataDir = makeSandbox(`${name}-${on ? 'on' : 'off'}`);
-  fs.writeFileSync(path.join(dataDir, 'applications.md'), tracker);
+  fs.writeFileSync(path.join(dataDir, 'applications.md'), extraRow ? tracker.replace(`${baseRow}\n`, `${baseRow}\n${extraRow}\n`) : tracker);
   fs.writeFileSync(path.join(dataDir, 'status-events.tsv'), 'app#\tdate\tstatus\tcompany\tlogged\n');
   fs.writeFileSync(path.join(dataDir, 'follow-ups.md'), followups);
   if (on) {
@@ -45,9 +45,9 @@ function run(dataDir, args) {
   });
 }
 
-function compare(name, args, files = ['applications.md', 'status-events.tsv']) {
-  const off = setup(name, false);
-  const on = setup(name, true);
+function compare(name, args, files = ['applications.md', 'status-events.tsv'], extraRow = null) {
+  const off = setup(name, false, extraRow);
+  const on = setup(name, true, extraRow);
   const a = run(off, args);
   const b = run(on, args);
   const same = files.every(file => Buffer.compare(fs.readFileSync(path.join(off, file)), fs.readFileSync(path.join(on, file))) === 0);
@@ -61,6 +61,26 @@ compare('role change', ['application', '--id', '900001', '--role', 'Example Gear
 compare('note replace', ['application', '--id', '900001', '--note', 'Invented replacement note']);
 const appended = compare('note append', ['application', '--id', '900001', '--append-note', 'Invented appended note']);
 check(fs.readFileSync(path.join(appended.on, 'applications.md'), 'utf8').includes('Invented base note. Invented appended note'), 'append-note uses the required separator');
+
+const reportRow = formatTrackerLine({ num: 900002, date: '2030-05-01', company: 'Quennox Ratchet Works', role: 'Example Pawl Engineer', score: '0.22/5', status: 'Evaluated', pdf: '?', resume: null, report: '[900002](reports/900002-example-2030-05-01.md)', notes: 'Invented report note', url: 'https://example.test/900002' });
+const reportCleared = compare('report clear', ['application', '--id', '900002', '--report', 'none'], ['applications.md', 'status-events.tsv'], reportRow);
+const clearedRow = fs.readFileSync(path.join(reportCleared.on, 'applications.md'), 'utf8').split('\n').map(parseTrackerLine).find(row => row?.num === 900002);
+check(clearedRow?.report === '\u2014' && clearedRow.company === 'Quennox Ratchet Works' && clearedRow.role === 'Example Pawl Engineer' && clearedRow.status === 'Evaluated' && clearedRow.notes === 'Invented report note' && clearedRow.url === 'https://example.test/900002', 'report clear changes only the report cell');
+{
+  const dataDir = setup('bad-report', false, reportRow);
+  const result = run(dataDir, ['application', '--id', '900002', '--report', 'reports/x.md']);
+  check(result.status === 1 && /--report must be none/.test(result.stderr), 'a report path is rejected');
+}
+{
+  const reportStore = openEventStore(path.join(reportCleared.on, 'trajecktory.db'));
+  const reportSemantic = readEvents(reportStore).filter(event => event.source === 'dashboard').map(event => {
+    const payload = { ...event.payload };
+    delete payload.legacy_effects;
+    return JSON.stringify(payload);
+  });
+  reportStore.close();
+  check(reportSemantic.every(text => !/Quennox Ratchet Works|Example Pawl Engineer|Invented report note|example\.test|applications\.md/.test(text)), 'report clear semantic payload contains no free text or file path');
+}
 
 {
   const dataDir = setup('missing', false);

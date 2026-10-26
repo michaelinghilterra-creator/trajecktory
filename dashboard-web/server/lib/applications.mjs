@@ -384,6 +384,7 @@ function patchRowInMd(id, updates, hint = {}) {
         ...target.row,
         ...(updates.status !== undefined ? { status: updates.status } : {}),
         ...(updates.role !== undefined ? { role: updates.role } : {}),
+        ...(updates.report !== undefined ? { report: updates.report } : {}),
         ...(updates.notes !== undefined ? { notes: updates.notes } : {}),
       });
       const effects = [{
@@ -463,6 +464,7 @@ function patchRowInMd(id, updates, hint = {}) {
     ...target.row,
     ...(updates.status !== undefined ? { status: updates.status } : {}),
     ...(updates.role !== undefined ? { role: updates.role } : {}),
+    ...(updates.report !== undefined ? { report: updates.report } : {}),
     ...(updates.notes !== undefined ? { notes: updates.notes } : {}),
   });
 
