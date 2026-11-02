@@ -2,6 +2,7 @@
 
 import { patchRowInMd, parseApplicationsMd } from './dashboard-web/server/lib/applications.mjs';
 import { appendFollowupRow } from './dashboard-web/server/lib/followups.mjs';
+import { recordApplyDate } from './dashboard-web/server/lib/sidecars.mjs';
 import { ALL_STATUSES } from './dashboard-web/server/lib/statuses.mjs';
 import { localToday } from './lib/local-date.mjs';
 
@@ -86,6 +87,9 @@ function runApplication(options) {
     process.exitCode = 1;
     return;
   }
+  // The dashboard records the apply date the moment a row goes Applied; the CLI must too, or the
+  // activity series and follow-up cadence never see applications made from an agent session.
+  if (options.status === 'Applied') recordApplyDate(id, options.eventDate, { force: !!options.eventDate });
   const fields = Object.keys(updates).map(field => field === 'notes' ? 'note' : field);
   printResult(options, { ok: true, command: 'application', id, fields }, `Updated application #${id}: ${fields.join(', ')}.`);
 }

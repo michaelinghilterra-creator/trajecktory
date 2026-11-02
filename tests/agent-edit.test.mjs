@@ -57,6 +57,22 @@ function compare(name, args, files = ['applications.md', 'status-events.tsv'], e
 
 console.log('agent-edit.test.mjs');
 compare('status change', ['application', '--id', '900001', '--status', 'Applied', '--event-date', '2030-05-02']);
+for (const on of [false, true]) {
+  const mode = on ? 'on' : 'off';
+  const readDates = dir => {
+    const file = path.join(dir, 'apply-dates.json');
+    return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+  };
+  const dated = setup('apply-date', on);
+  run(dated, ['application', '--id', '900001', '--status', 'Applied', '--event-date', '2030-05-02']);
+  check(readDates(dated)['900001'] === '2030-05-02', `Applied with --event-date records that apply date (${mode})`);
+  const undated = setup('apply-date-today', on);
+  run(undated, ['application', '--id', '900001', '--status', 'Applied']);
+  check(readDates(undated)['900001'] === '2030-05-10', `Applied without a date records today (${mode})`);
+  const other = setup('apply-date-other', on);
+  run(other, ['application', '--id', '900001', '--role', 'Example Gear Director']);
+  check(!('900001' in readDates(other)), `a non-Applied edit records no apply date (${mode})`);
+}
 compare('role change', ['application', '--id', '900001', '--role', 'Example Gear Director']);
 compare('note replace', ['application', '--id', '900001', '--note', 'Invented replacement note']);
 const appended = compare('note append', ['application', '--id', '900001', '--append-note', 'Invented appended note']);
