@@ -21,7 +21,7 @@
  * Exit code: 0 if all active, 1 if any expired or uncertain
  */
 
-import { chromium } from 'playwright';
+import { launchSandboxedChromium } from './lib/sandboxed-chromium.mjs';
 import { readFile } from 'fs/promises';
 import { classifyLiveness, parseWorkdayUrl, checkWorkdayLiveness } from './liveness-core.mjs';
 import { isSafeLivenessUrl } from './lib/safe-url.mjs';
@@ -121,10 +121,7 @@ async function main() {
 
   console.log(`Checking ${urls.length} URL(s)${isolated ? ' (isolated)' : ''}...\n`);
 
-  // Installed Chrome, sandbox on. Playwright's bundled Chromium trails Chrome's
-  // security fixes, and Playwright turns the sandbox off unless asked. Job pages
-  // are untrusted, so a missing Chrome fails loudly instead of falling back.
-  const browser = await chromium.launch({ channel: 'chrome', headless: true, chromiumSandbox: true });
+  const browser = await launchSandboxedChromium();
   const sharedPage = isolated ? null : await browser.newPage();
 
   let active = 0, expired = 0, uncertain = 0;
