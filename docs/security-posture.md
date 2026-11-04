@@ -49,6 +49,7 @@ Change any of these and something real breaks.
 | Redaction of subprocess output before storage | A credential in a git error reaching the browser |
 | Integrity checks on bundled third-party binaries | A bad build machine shipping a bad binary to every user |
 | SSRF guard on the liveness probe (`lib/safe-url.mjs`) | A job URL from a board pointing the server-side probe at loopback / private / cloud-metadata addresses |
+| Liveness probe runs installed Chrome with its sandbox on (`check-liveness.mjs`) | A renderer exploit on a job page escaping a stale bundled Chromium that runs with the sandbox off |
 | Loopback-only Host-header allow-list ahead of routing | DNS rebinding: a rebound hostname that becomes same-origin and slips past the Origin-keyed CORS/token guards |
 | Client-side scheme allow-list on every data-derived link (`window.safeHref`) | A `javascript:` / `data:` URL in a tracker cell becoming a clickable XSS sink (React does not block it) |
 | Delimiter neutralization on scanned job fields (`lib/sanitize-cell.mjs`) | An attacker-controlled title/company/url forging extra pipeline or history rows the batch evaluator then reads |
