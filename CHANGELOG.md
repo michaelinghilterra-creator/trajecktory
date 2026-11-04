@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.26.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.26.0...v5.26.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* launch liveness browsers in sandboxed, installed Chrome ([#506](https://github.com/michaelinghilterra-creator/trajecktory/issues/506)) ([3c1769c](https://github.com/michaelinghilterra-creator/trajecktory/commit/3c1769c2470781158c5e848826d01f179a29642f))
+
 ## [5.26.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.25.0...v5.26.0) (2026-10-26)
 
 
