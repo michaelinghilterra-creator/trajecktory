@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.26.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.26.1...v5.26.2) (2026-11-04)
+
+
+### Bug Fixes
+
+* record an apply date when agent-edit moves a row to Applied ([#508](https://github.com/michaelinghilterra-creator/trajecktory/issues/508)) ([727e398](https://github.com/michaelinghilterra-creator/trajecktory/commit/727e398a444894d2ae4241f90f76199d9d663f90))
+
 ## [5.26.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.26.0...v5.26.1) (2026-11-04)
 
 
