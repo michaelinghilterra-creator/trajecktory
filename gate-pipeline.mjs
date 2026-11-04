@@ -19,7 +19,7 @@
 import { readFileSync, writeFileSync, existsSync, appendFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { chromium } from 'playwright';
+import { launchSandboxedChromium } from './lib/sandboxed-chromium.mjs';
 import yaml from 'js-yaml';
 import { classifyLiveness, parseWorkdayUrl, checkWorkdayLiveness, workdaySiteFromCareersUrl } from './liveness-core.mjs';
 import { isSafeLivenessUrl } from './lib/safe-url.mjs';
@@ -128,7 +128,7 @@ if (pending.length === 0) {
 // after it had already been evaluated and decided, and each round cost a full
 // Sonnet evaluation to reach a conclusion the tracker already held.
 //
-// Running it here, ahead of chromium.launch(), means a decided URL costs neither
+// Running it here, ahead of the browser launch, means a decided URL costs neither
 // a page load nor a token. Ambiguous canonical URLs are never flipped (see the
 // guard in lib/identity.mjs) — they fall through to the normal liveness path,
 // because a wrong suppression hides a real job while a missed one only costs a
@@ -231,7 +231,7 @@ console.log(`Gating ${pending.length} pending URLs (concurrency ${concurrency}).
 if (dryRun) console.log('[dry run — no writes]\n');
 
 // ── Run Playwright liveness in parallel batches ───────────────────────────────
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSandboxedChromium();
 const context = await browser.newContext({
   userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 career-ops/gate-pipeline',
 });
