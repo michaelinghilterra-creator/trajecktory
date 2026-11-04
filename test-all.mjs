@@ -635,6 +635,7 @@ for (const suite of [
   'tests/interview-rules-panel.test.mjs',
   'tests/security.test.mjs',
   'tests/security-review.test.mjs',
+  'tests/sandboxed-chromium.test.mjs',
   'tests/v1-loader.test.mjs',
   'tests/report-research.test.mjs',
   'tests/report-write-gate.test.mjs',
