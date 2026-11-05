@@ -405,8 +405,15 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
       if (sortKey === 'status') { av = STATUS_MAP[a.status]?.stage ?? 99; bv = STATUS_MAP[b.status]?.stage ?? 99; }
       if (sortKey === 'salary')  { av = a.salary || 0; bv = b.salary || 0; }
       if (sortKey === 'repeat')  { av = a.relatedRoles ? a.relatedRoles.length : 0; bv = b.relatedRoles ? b.relatedRoles.length : 0; }
-      if (av < bv) return sortDir === 'asc' ? -1 : 1;
-      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      if (typeof av === 'string' && typeof bv === 'string') {
+        // Plain < compares code points, so every capital sorts before every lowercase
+        // letter. Compare case-insensitively so "zorblax" files between "Zephyrix" and "Zorbulon".
+        const c = av.localeCompare(bv, undefined, { sensitivity: 'base' });
+        if (c) return sortDir === 'asc' ? c : -c;
+      } else {
+        if (av < bv) return sortDir === 'asc' ? -1 : 1;
+        if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      }
       return (b.score || 0) - (a.score || 0);
     });
     return arr;
