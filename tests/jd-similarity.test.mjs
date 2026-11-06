@@ -4,7 +4,7 @@ import assert from 'node:assert';
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { makeSandbox } from './helpers/sandbox.mjs';
-import { formatTrackerLine, TRACKER_HEADER, TRACKER_SEPARATOR } from '../lib/tracker.mjs';
+import { formatTrackerLine, parseTrackerLine, TRACKER_HEADER, TRACKER_SEPARATOR } from '../lib/tracker.mjs';
 import {
   MIN_JD_WORDS,
   buildSimilarityIndex,
@@ -14,6 +14,7 @@ import {
   jdSimilarity,
   similarRepostFor,
   snapshotBody,
+  snapshotTextForRow,
 } from '../lib/jd-similarity.mjs';
 
 let passed = 0, failed = 0;
@@ -153,6 +154,10 @@ const companies = new Set(['acmeexample', 'globexsample']);
 const index = buildSimilarityIndex({ appsPath, rootDir: root, companies });
 check(() => assert.deepEqual(index.get('acmeexample').map((entry) => entry.status), ['Passed', 'Applied']),
   'the index includes rows across tracker statuses');
+check(() => assert.match(snapshotTextForRow(parseTrackerLine(rows[0]), root), /Invented Role/),
+  'snapshotTextForRow reads the report snapshot');
+check(() => assert.match(snapshotTextForRow({ num: 900001, report: null }, root), /Invented Role/),
+  'snapshotTextForRow falls back to the numbered snapshot');
 
 const query = {
   company: 'Acme Example',
@@ -166,6 +171,10 @@ check(() => {
   assert.equal(hit.num, 900001);
   assert.equal(hit.status, 'Passed');
 }, 'a paraphrased repost with a different URL matches the Passed row');
+check(() => assert.equal(findSimilarPosting(index, { ...query, beforeNum: 900001 }), null),
+  'beforeNum equal to the matching row skips it');
+check(() => assert.equal(findSimilarPosting(index, { ...query, beforeNum: 900002 })?.num, 900001),
+  'beforeNum above the matching row includes it');
 check(() => assert.equal(findSimilarPosting(index, { ...query, role: 'Network Steward' }), null),
   'the same text under a different role does not match');
 check(() => assert.equal(findSimilarPosting(index, { ...query, company: 'Umbra Fiction' }), null),
@@ -191,6 +200,18 @@ check(() => {
   assert.equal(hit.company, 'Acme Example');
   assert.equal(hit.role, 'Principal Widget Architect');
 }, 'text-only lookup finds the Passed row and returns its company and role');
+check(() => assert.equal(findSimilarText(allCompaniesIndex, {
+  text: jdBody(6),
+  url: 'https://boards.example.test/acme/900099',
+  rootDir: root,
+  beforeNum: 900001,
+}), null), 'text-only beforeNum skips matching rows at or above the boundary');
+check(() => assert.equal(findSimilarText(allCompaniesIndex, {
+  text: jdBody(6),
+  url: 'https://boards.example.test/acme/900099',
+  rootDir: root,
+  beforeNum: 900002,
+})?.num, 900001), 'text-only beforeNum includes earlier matching rows');
 check(() => assert.equal(findSimilarText(allCompaniesIndex, {
   text: Array(MIN_JD_WORDS).fill('satellite').join(' '),
   rootDir: root,

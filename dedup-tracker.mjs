@@ -178,8 +178,12 @@ for (const [, cluster] of groups) {
       continue;
     }
 
-    // Keep the one with highest score
-    cluster.sort((a, b) => parseScore(b.score) - parseScore(a.score));
+    // Keep the most advanced row so a higher score cannot displace the row
+    // that carries the application record. Score and row number break ties.
+    cluster.sort((a, b) =>
+      (STATUS_RANK[b.status.toLowerCase()] || 0) - (STATUS_RANK[a.status.toLowerCase()] || 0) ||
+      parseScore(b.score) - parseScore(a.score) ||
+      a.num - b.num);
     const keeper = cluster[0];
 
     // Check if any removed entry has more advanced status

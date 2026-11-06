@@ -23,14 +23,14 @@ function check(fn, message) {
   }
 }
 
-function makeRow({ num, score, url, report = null }) {
+function makeRow({ num, score, url, report = null, status = 'Evaluated' }) {
   return formatTrackerLine({
     num,
     date: '2030-04-01',
     company: 'Acme Example',
     role: 'Invented Systems Engineer',
     score: `${score}/5`,
-    status: 'Evaluated',
+    status,
     pdf: 'No',
     resume: null,
     report,
@@ -129,6 +129,22 @@ const postingUrl = 'https://job-boards.greenhouse.io/acmeexample/jobs/900101';
   check(() => assert.strictEqual(applied.status, 0), 'missing snapshot control succeeds');
   check(() => assert.strictEqual(rows.length, 2), 'missing snapshot is not clustered or removed');
   check(() => assert.deepStrictEqual(rows.map(row => row.num).sort(), [900001, 900002]), 'missing snapshot control keeps both ids');
+}
+
+{
+  const sharedUrl = 'https://job-boards.greenhouse.io/acmeexample/jobs/900111';
+  const root = setup('dedup-advanced-status-keeper', [
+    makeRow({ num: 900011, score: 3.1, status: 'Applied', url: sharedUrl }),
+    makeRow({ num: 900012, score: 4.5, status: 'Passed', url: sharedUrl }),
+  ]);
+  check(() => assert.strictEqual(rowsIn(root).length, 2), 'status fixture starts with exactly two rows');
+  const applied = run(root, ['-'.repeat(2) + 'apply']);
+  const rows = rowsIn(root);
+  check(() => assert.strictEqual(applied.status, 0), 'status-aware apply run succeeds');
+  check(() => assert.strictEqual(rows.length, 1), 'status-aware apply changes the row count from two to one');
+  check(() => assert.strictEqual(rows[0].num, 900011), 'status-aware apply keeps the Applied row number');
+  check(() => assert.strictEqual(rows[0].status, 'Applied'), 'status-aware apply keeps the Applied status');
+  check(() => assert.strictEqual(rows[0].score, '3.1/5'), 'status-aware apply keeps the Applied row score');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

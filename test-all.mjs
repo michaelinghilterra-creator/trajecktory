@@ -774,6 +774,7 @@ for (const suite of [
   'tests/jd-fingerprint.test.mjs',
   'tests/jd-similarity.test.mjs',
   'tests/dedup-local-snapshot.test.mjs',
+  'tests/tag-duplicate-reposts.test.mjs',
   'tests/self-dup-check.test.mjs',
   'tests/gate-similar-repost.test.mjs',
   'tests/workday-url.test.mjs',

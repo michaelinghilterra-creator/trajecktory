@@ -113,6 +113,7 @@ export const SYSTEM_PATHS = [
   // was frozen at install time and no fix to it ever reached an updated install.
   'scripts/',
   'dedup-tracker.mjs',
+  'tag-duplicate-reposts.mjs',
   'normalize-statuses.mjs',
   'cv-sync-check.mjs',
   'update-system.mjs',
