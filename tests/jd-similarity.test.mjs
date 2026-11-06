@@ -11,6 +11,7 @@ import {
   findSimilarPosting,
   jdShingles,
   jdSimilarity,
+  similarRepostFor,
   snapshotBody,
 } from '../lib/jd-similarity.mjs';
 
@@ -172,6 +173,30 @@ check(() => assert.equal(findSimilarPosting(index, { ...query, url: fixtures[0].
   'a candidate with an identical canonical URL is skipped');
 check(() => assert.equal(buildSimilarityIndex({ appsPath, rootDir: root, companies: new Set() }).size, 0),
   'an empty companies set returns an empty Map');
+
+console.log('\n4. similar repost helper');
+writeFileSync(join(root, 'jds', 'pending.md'),
+  snapshot('https://boards.example.test/acme/900099', jdBody(6)), 'utf8');
+const pending = {
+  company: 'Acme Example',
+  role: 'Principal Widget Architect',
+  text: jdBody(6),
+  url: 'https://boards.example.test/acme/900099',
+  local: 'local:jds/pending.md',
+};
+check(() => {
+  const hit = similarRepostFor(index, pending, root);
+  assert.equal(hit.num, 900001);
+  assert.equal(hit.status, 'Passed');
+  assert.equal(typeof hit.similarity, 'number');
+  assert.ok(hit.similarity >= 0.6);
+}, 'a pending paraphrased snapshot matches the Passed row');
+check(() => assert.equal(similarRepostFor(index, { ...pending, local: '' }, root), null),
+  'a pending entry without a local snapshot returns null');
+check(() => assert.equal(similarRepostFor(index, { ...pending, local: 'local:jds/../secret.md' }, root), null),
+  'a pending snapshot path outside jds returns null');
+check(() => assert.equal(similarRepostFor(index, { ...pending, role: 'Network Steward' }, root), null),
+  'a pending entry with a different role returns null');
 
 rmSync(root, { recursive: true, force: true });
 

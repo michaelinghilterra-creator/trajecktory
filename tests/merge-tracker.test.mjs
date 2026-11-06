@@ -544,6 +544,50 @@ console.log('\n17. New rows record their URL from the start');
 check(cols(D1.rowsFor('Fabrikam')[0])[10].startsWith('https://jobs.example.com/fabrikam/'),
   `new row carries the posting url: got "${cols(D1.rowsFor('Fabrikam')[0])[10]}"`);
 
+const localUrlUpdate = runMerge(
+  ['| 900001 | 2030-01-01 | Acme Example | Principal Widget Architect | 3.01/5 | Evaluated | ? | - | [900001](reports/900001-acme-example-2030-01-01.md) | Seed | local:jds/900001-invented.md |'],
+  {
+    '900002-acme-example.tsv': tsv(['900002', '2031-02-02', 'Acme Example', 'Principal Widget Architect',
+      'Evaluated', '4.51/5', '?', '[900002](reports/900002-acme-example-2031-02-02.md)', 'Resolved source update']),
+  },
+  {
+    'jds/900001-invented.md': '# Invented Role\nSource: https://boards.greenhouse.io/acmeexample/jobs/900101\n',
+    'reports/900001-acme-example-2030-01-01.md': rpt('local:jds/900001-invented.md'),
+    'reports/900002-acme-example-2031-02-02.md':
+      rpt('https://job-boards.greenhouse.io/acmeexample/jobs/900101'),
+  },
+);
+
+console.log('\n20. A local snapshot URL resolves before merge identity matching');
+const localRowsBefore = 1;
+check(localRowsBefore === 1, `the fixture starts with ${localRowsBefore} row`);
+check(localUrlUpdate.rowsFor('Acme Example').length === localRowsBefore,
+  `the existing row is updated and the row count stays ${localUrlUpdate.rowsFor('Acme Example').length}`);
+check(cols(localUrlUpdate.rowsFor('Acme Example')[0])[0] === '900001',
+  'the existing entry number is preserved');
+check(localUrlUpdate.rowsFor('Acme Example')[0].includes('4.51/5'),
+  'the higher score is applied to the resolved existing row');
+
+const localUrlDifferentPosting = runMerge(
+  ['| 900001 | 2030-01-01 | Acme Example | Principal Widget Architect | 3.01/5 | Evaluated | ? | - | [900001](reports/900001-acme-example-2030-01-01.md) | Seed | local:jds/900001-invented.md |'],
+  {
+    '900003-acme-example.tsv': tsv(['900003', '2032-03-03', 'Acme Example', 'Principal Widget Architect',
+      'Evaluated', '4.61/5', '?', '[900003](reports/900003-acme-example-2032-03-03.md)', 'Different posting']),
+  },
+  {
+    'jds/900001-invented.md': '# Invented Role\nSource: https://boards.greenhouse.io/acmeexample/jobs/900101\n',
+    'reports/900001-acme-example-2030-01-01.md': rpt('local:jds/900001-invented.md'),
+    'reports/900003-acme-example-2032-03-03.md':
+      rpt('https://job-boards.greenhouse.io/acmeexample/jobs/900102'),
+  },
+);
+
+console.log('\n21. A different resolved posting id still vetoes the role match');
+const differentRowsBefore = 1;
+check(differentRowsBefore === 1, `the negative fixture starts with ${differentRowsBefore} row`);
+check(localUrlDifferentPosting.rowsFor('Acme Example').length === differentRowsBefore + 1,
+  `the different posting is added and the row count becomes ${localUrlDifferentPosting.rowsFor('Acme Example').length}`);
+
 const reinstated = runMerge([], {
   '900270-reinstated.tsv': tsv(['900270', '2030-07-22', 'ReinstatedCo', 'Director, Invented Systems',
     'Evaluated', '4.01/5', '?', '[900270](reports/900270-reinstated-2030-07-22.md)',
