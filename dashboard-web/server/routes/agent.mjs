@@ -19,6 +19,7 @@ import { issueJd } from '../../../next-jd.mjs';
 import { validateReportMarkdown } from '../v1-loader.mjs';
 import { localToday } from '../../../lib/local-date.mjs';
 import { agentTail } from '../lib/agent-summary.mjs';
+import { checkSelfDuplicate } from '../../../lib/self-dup-check.mjs';
 
 export const router = express.Router();
 
@@ -1351,7 +1352,18 @@ router.post('/api/agent/:mode', (req, res) => {
         return res.status(400).json({ error: 'Provide a valid http(s) URL.' });
       }
       target = { url };
-    } else {
+    }
+    // The batch gate already blocks repeats because re-rating one posting creates a conflicting score.
+    if (req.body?.force !== true) {
+      const dup = checkSelfDuplicate({ url, jd }, { appsPath: APPS_MD, rootDir: ROOT_DIR });
+      if (dup) {
+        return res.status(409).json({
+          error: dup.message,
+          duplicate: { kind: dup.kind, num: dup.num, status: dup.status },
+        });
+      }
+    }
+    if (!url) {
       try {
         const company = String(req.body?.company || '').trim();
         const title = String(req.body?.title || '').trim();

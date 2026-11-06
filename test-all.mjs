@@ -773,6 +773,7 @@ for (const suite of [
   'tests/prior-roles.test.mjs',
   'tests/jd-fingerprint.test.mjs',
   'tests/jd-similarity.test.mjs',
+  'tests/self-dup-check.test.mjs',
   'tests/gate-similar-repost.test.mjs',
   'tests/workday-url.test.mjs',
   'tests/workday-repair.test.mjs',

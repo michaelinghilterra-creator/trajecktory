@@ -9,6 +9,7 @@ import {
   MIN_JD_WORDS,
   buildSimilarityIndex,
   findSimilarPosting,
+  findSimilarText,
   jdShingles,
   jdSimilarity,
   similarRepostFor,
@@ -173,6 +174,33 @@ check(() => assert.equal(findSimilarPosting(index, { ...query, url: fixtures[0].
   'a candidate with an identical canonical URL is skipped');
 check(() => assert.equal(buildSimilarityIndex({ appsPath, rootDir: root, companies: new Set() }).size, 0),
   'an empty companies set returns an empty Map');
+check(() => assert.equal(buildSimilarityIndex({ appsPath, rootDir: root }).size, 0),
+  'a non-Set companies value returns an empty Map');
+
+const allCompaniesIndex = buildSimilarityIndex({ appsPath, rootDir: root, allCompanies: true });
+check(() => assert.deepEqual([...allCompaniesIndex.keys()], ['acmeexample', 'globexsample']),
+  'allCompanies indexes every fixture company');
+check(() => {
+  const hit = findSimilarText(allCompaniesIndex, {
+    text: jdBody(6),
+    url: 'https://boards.example.test/acme/900099',
+    rootDir: root,
+  });
+  assert.equal(hit.num, 900001);
+  assert.equal(hit.status, 'Passed');
+  assert.equal(hit.company, 'Acme Example');
+  assert.equal(hit.role, 'Principal Widget Architect');
+}, 'text-only lookup finds the Passed row and returns its company and role');
+check(() => assert.equal(findSimilarText(allCompaniesIndex, {
+  text: Array(MIN_JD_WORDS).fill('satellite').join(' '),
+  rootDir: root,
+}), null),
+  'text-only lookup returns null for unrelated text');
+check(() => assert.equal(findSimilarText(allCompaniesIndex, {
+  text: original,
+  url: fixtures[0].url,
+  rootDir: root,
+})?.num, 900003), 'text-only lookup skips a candidate with an identical canonical URL');
 
 console.log('\n4. similar repost helper');
 writeFileSync(join(root, 'jds', 'pending.md'),
@@ -197,6 +225,18 @@ check(() => assert.equal(similarRepostFor(index, { ...pending, local: 'local:jds
   'a pending snapshot path outside jds returns null');
 check(() => assert.equal(similarRepostFor(index, { ...pending, role: 'Network Steward' }, root), null),
   'a pending entry with a different role returns null');
+
+console.log('\n5. snapshot cache');
+const snapCache = new Map();
+const cachedIndex = buildSimilarityIndex({ appsPath, rootDir: root, companies, cache: snapCache });
+check(() => assert.ok(snapCache.size >= 3), 'a build fills the cache with one entry per row');
+const sizeAfterFirst = snapCache.size;
+const cachedAgain = buildSimilarityIndex({ appsPath, rootDir: root, companies, cache: snapCache });
+check(() => assert.equal(snapCache.size, sizeAfterFirst), 'a second build adds no cache entries');
+check(() => assert.deepEqual(
+  cachedAgain.get('acmeexample').map((entry) => entry.num),
+  cachedIndex.get('acmeexample').map((entry) => entry.num)),
+'a cached build returns the same rows');
 
 rmSync(root, { recursive: true, force: true });
 
