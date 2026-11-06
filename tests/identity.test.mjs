@@ -22,6 +22,7 @@ import { makeSandbox } from './helpers/sandbox.mjs';
 import {
   canonicalUrl, normalizeCompany, sameEmployer, sameRole, roleSignature,
   companiesMatchForOutreach,
+  sourceUrlFromSnapshot, canonicalPostingUrl,
   urlFromReport, buildDecidedIndex, findDecided,
   buildActiveRoleIndex, findActiveRepost,
 } from '../lib/identity.mjs';
@@ -312,6 +313,34 @@ check(findActiveRepost(actIdx, 'https://boards.greenhouse.io/contoso/jobs/2', { 
   'a repost of a merely-EVALUATED (not active) role is NOT suppressed');
 check(findActiveRepost(actIdx, 'https://job-boards.greenhouse.io/globex/jobs/6107003004', { company: 'Globex', role: 'Widget Operations Manager' }) === null,
   'the SAME url is left to findDecided, not double-suppressed here');
+
+console.log('\n6. snapshot source identity');
+const snapshotRoot = mkdtempSync(join(tmpdir(), 'identity-snapshot-'));
+mkdirSync(join(snapshotRoot, 'jds'), { recursive: true });
+const snapshotRef = 'local:jds/x.md';
+const snapshotUrl = 'https://boards.example.test/acme/jobs/900101';
+writeFileSync(join(snapshotRoot, 'jds', 'x.md'), `# Title - Acme Example\nSource: ${snapshotUrl}\n`, 'utf8');
+check(sourceUrlFromSnapshot(snapshotRef, snapshotRoot) === snapshotUrl,
+  'Source header resolves a snapshot URL');
+
+for (const [label, name] of [
+  ['Source URL:', 'Source URL header'],
+  ['**Source URL:**', 'bold Source URL header'],
+  ['URL:', 'URL header'],
+]) {
+  writeFileSync(join(snapshotRoot, 'jds', 'x.md'), `${label} ${snapshotUrl}\n`, 'utf8');
+  check(sourceUrlFromSnapshot(snapshotRef, snapshotRoot) === snapshotUrl, `${name} still resolves`);
+}
+
+writeFileSync(join(snapshotRoot, 'jds', 'x.md'), `# Title\nRead more at ${snapshotUrl}\n`, 'utf8');
+check(sourceUrlFromSnapshot(snapshotRef, snapshotRoot) === null,
+  'a bare body URL does not resolve snapshot identity');
+
+const greenhouseUrl = 'https://job-boards.greenhouse.io/acmeexample/jobs/900101';
+writeFileSync(join(snapshotRoot, 'jds', 'x.md'), `# Title\nSource: ${greenhouseUrl}\n`, 'utf8');
+check(canonicalPostingUrl(snapshotRef, snapshotRoot) === canonicalUrl(greenhouseUrl),
+  'snapshot canonical identity matches its Greenhouse source URL');
+rmSync(snapshotRoot, { recursive: true, force: true });
 
 // ── sameEmployer ──────────────────────────────────────────────────────────────
 check(sameEmployer('zorblaxwidgetry', 'zorblaxwidgetry'), 'equal company keys are the same employer');

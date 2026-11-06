@@ -772,6 +772,7 @@ for (const suite of [
   'tests/resync-scope.test.mjs',
   'tests/prior-roles.test.mjs',
   'tests/jd-fingerprint.test.mjs',
+  'tests/jd-similarity.test.mjs',
   'tests/workday-url.test.mjs',
   'tests/workday-repair.test.mjs',
   'tests/test-registration.test.mjs',
