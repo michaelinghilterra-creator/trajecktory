@@ -37,7 +37,7 @@ import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync } from
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
-import { canonicalUrl, normalizeCompany, sameRole, urlForRow } from './lib/identity.mjs';
+import { canonicalPostingUrl, buildDecidedIndex, normalizeCompany, sameRole, urlForRow } from './lib/identity.mjs';
 import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
@@ -115,6 +115,7 @@ if (!existsSync(APPS_FILE)) {
   process.exit(0);
 }
 const content = readFileSync(APPS_FILE, 'utf-8');
+const decided = buildDecidedIndex({ appsPath: APPS_FILE, rootDir: CAREER_OPS });
 const lines = content.split('\n');
 
 // Parse all entries
@@ -140,7 +141,10 @@ let unresolved = 0;
 for (const entry of entries) {
   const raw = urlForRow(entry, CAREER_OPS);
   if (!raw) { unresolved++; continue; }
-  const key = `${normalizeCompany(entry.company)} ${canonicalUrl(raw)}`;
+  const postingUrl = canonicalPostingUrl(raw, CAREER_OPS);
+  // A shared custom-domain path or an unresolvable snapshot is not an identity.
+  if (!postingUrl || decided.ambiguous.has(postingUrl)) { unresolved++; continue; }
+  const key = `${normalizeCompany(entry.company)} ${postingUrl}`;
   if (!groups.has(key)) groups.set(key, []);
   groups.get(key).push(entry);
 }

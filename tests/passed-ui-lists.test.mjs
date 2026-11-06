@@ -43,8 +43,9 @@ check(passedReasonLabel('skip') === 'skipped', 'skip reads "skipped"');
 check(passedReasonLabel('posting_closed') === 'posting closed', 'posting_closed reads "posting closed"');
 check(passedReasonLabel('withdrew') === 'withdrew', 'withdrew reads "withdrew"');
 check(passedReasonLabel('low_score') === 'low score', 'low_score reads "low score"');
+check(passedReasonLabel('duplicate') === 'duplicate', 'duplicate reads "duplicate"');
 check(passedReasonLabel(null) === 'discarded' && passedReasonLabel('nope') === 'discarded', 'a missing or unknown reason reads "discarded"');
-check(Object.keys(PASSED_REASON_LABEL).length === 6, 'every Passed reason has a label (matches PASSED_REASONS in lib/passed.mjs)');
+check(Object.keys(PASSED_REASON_LABEL).length === 7, 'every Passed reason has a label (matches PASSED_REASONS in lib/passed.mjs)');
 
 const { PASSED_REASONS } = await import('../lib/passed.mjs');
 check(PASSED_REASONS.every((r) => r in PASSED_REASON_LABEL), 'the label table covers every reason lib/passed.mjs defines');

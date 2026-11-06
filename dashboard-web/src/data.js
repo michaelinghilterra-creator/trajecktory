@@ -92,7 +92,7 @@ window.oldStatus = (app) => (app && app.status === "Passed" ? (window.PASSED_OLD
 window.STATUSES = ["Evaluated","Applied",...window.INTERVIEW_STAGES,"Offer","Rejected","Passed","No Response"];
 // Plain words for a Passed row's reason, shown beside the Passed badge. Unknown or missing reads as Discarded,
 // the same default oldLabel() uses.
-window.PASSED_REASON_LABEL = { not_a_fit: "not a fit", skip: "skipped", posting_closed: "posting closed", withdrew: "withdrew", low_score: "low score", discarded: "discarded" };
+window.PASSED_REASON_LABEL = { not_a_fit: "not a fit", skip: "skipped", posting_closed: "posting closed", withdrew: "withdrew", low_score: "low score", discarded: "discarded", duplicate: "duplicate" };
 window.passedReasonLabel = (reason) => window.PASSED_REASON_LABEL[reason] || "discarded";
 // The SINGLE source of the archetype list for the browser — the Sankey, the
 // Archetype list for pipeline filters, chart axes, and tracker grouping.
