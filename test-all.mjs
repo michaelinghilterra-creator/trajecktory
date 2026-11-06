@@ -648,6 +648,8 @@ for (const suite of [
   'tests/posts-composer.test.mjs',
   'tests/x-channel-standdown.test.mjs',
   'tests/referrals.test.mjs',
+  'tests/data-generation-writes.test.mjs',
+  'tests/referral-link-index.test.mjs',
   'tests/referral-conversion.test.mjs',
   'tests/contacts-characterization.test.mjs',
   'tests/contact-identity.test.mjs',

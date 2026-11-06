@@ -9,6 +9,14 @@ import { logWritesEnabled, withLogRead } from '../../../lib/log-writes.mjs';
 // server (CLI scripts) do not bump it; caches also cap their age for that reason.
 let generation = 0;
 
+// Google health probes a token and writes no data the caches read. Every page load calls it.
+export const NON_DATA_GETS = new Set(['/api/google/health']);
+
+export function requestWritesData(method, path, { mutatingMethods, sideEffectGets, nonDataPosts, nonDataGets }) {
+  return (mutatingMethods.has(method) && !nonDataPosts.has(path))
+    || (method === 'GET' && sideEffectGets.has(path) && !nonDataGets.has(path));
+}
+
 export function dataGeneration() {
   return generation;
 }
