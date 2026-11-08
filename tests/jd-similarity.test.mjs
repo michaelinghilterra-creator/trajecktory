@@ -85,6 +85,12 @@ const secondHeaders = `# Alternate Heading\nSource: https://boards.example.test/
 check(() => assert.equal(jdSimilarity(firstHeaders, secondHeaders), 1),
   'metadata headers do not affect similarity');
 
+const hostile = '<'.repeat(200000) + ' ' + original;
+const hostileStart = Date.now();
+const hostileShingles = jdShingles(hostile);
+check(() => assert.ok(Date.now() - hostileStart < 2000 && hostileShingles instanceof Set),
+  'a text full of unclosed angle brackets is tokenized in linear time');
+
 console.log('\n2. snapshotBody');
 const root = makeSandbox('jd-similarity');
 mkdirSync(join(root, 'jds'), { recursive: true });
