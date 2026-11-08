@@ -165,6 +165,14 @@ scoring:
     0: 2.0   # not a version of the target role at all; sits below auto-discard
     1: 2.0
     2: 3.0   # a real role with a real build lean; stays visible for a human call
+  # The model rates location and code sets the cap. A rating of 1 or below means
+  # the role requires presence in a place you will not work. A present but empty
+  # map switches this policy off. WARNING: lowering a cap below a pre-filter
+  # threshold converts kept roles into discards.
+  location_ceilings:
+    0: 1.5
+    0.5: 1.5
+    1: 1.5
   redFlagPenalty: 1.5
   # The lowest title you would accept. Any JD title at or above this rung is a FULL
   # level match and its `level` dimension is floored to its max -- an in-scope title

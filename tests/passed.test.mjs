@@ -22,6 +22,10 @@ let threw = false;
 try { withPassedReason('x', 'bogus'); } catch { threw = true; }
 check(threw, 'an unknown reason is refused when writing');
 check(withPassedReason(withPassedReason('a | b', 'skip'), 'skip') === '[passed: skip] a | b', 'writing twice is idempotent');
+check(PASSED_REASONS.includes('duplicate'), 'duplicate is a known Passed reason');
+check(withPassedReason('x', 'duplicate') === '[passed: duplicate] x', 'duplicate tag goes to the front');
+check(passedReasonOf('[passed: duplicate] x') === 'duplicate', 'reads the duplicate reason');
+check(oldLabel('Passed', '[passed: duplicate]') === 'Discarded', 'duplicate reads as the old Discarded label');
 
 // Round trip: every old label survives a trip through Passed.
 for (const old of ['Not a Fit', 'SKIP', 'Discarded', 'Closed']) {

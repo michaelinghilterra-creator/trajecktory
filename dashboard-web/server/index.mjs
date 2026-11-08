@@ -14,7 +14,7 @@ import { DATA_DIR, STATIC, OUTPUT_DIR, PORT, HOST } from './config.mjs';
 import { logWritesEnabled, withLogRead } from '../../lib/log-writes.mjs';
 import { router as applicationsRoutes } from './routes/applications.mjs';
 import { router as followupsRoutes } from './routes/followups.mjs';
-import { bumpDataGeneration } from './lib/data-generation.mjs';
+import { bumpDataGeneration, NON_DATA_GETS, requestWritesData } from './lib/data-generation.mjs';
 import { router as applyRoutes, applyJobs } from './routes/apply.mjs';
 import { router as workflowRoutes, workflowJobs } from './routes/workflow.mjs';
 import { router as agentRoutes, agentJobs } from './routes/agent.mjs';
@@ -148,8 +148,12 @@ app.use((req, res, next) => {
 // POSTs that write nothing a read-side cache depends on; every page load sends the first.
 const NON_DATA_POSTS = new Set(['/api/system/update-check', '/api/setup/activation/event', '/api/setup/preflight']);
 app.use((req, res, next) => {
-  const writes = (MUTATING_METHODS.has(req.method) && !NON_DATA_POSTS.has(req.path))
-    || (req.method === 'GET' && SIDE_EFFECT_GETS.has(req.path));
+  const writes = requestWritesData(req.method, req.path, {
+    mutatingMethods: MUTATING_METHODS,
+    sideEffectGets: SIDE_EFFECT_GETS,
+    nonDataPosts: NON_DATA_POSTS,
+    nonDataGets: NON_DATA_GETS,
+  });
   if (writes) {
     res.on('finish', bumpDataGeneration);
   }

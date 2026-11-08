@@ -648,6 +648,8 @@ for (const suite of [
   'tests/posts-composer.test.mjs',
   'tests/x-channel-standdown.test.mjs',
   'tests/referrals.test.mjs',
+  'tests/data-generation-writes.test.mjs',
+  'tests/referral-link-index.test.mjs',
   'tests/referral-conversion.test.mjs',
   'tests/contacts-characterization.test.mjs',
   'tests/contact-identity.test.mjs',
@@ -765,6 +767,7 @@ for (const suite of [
   'tests/level-nonmanagement.test.mjs',
   'tests/gate-local-snapshot.test.mjs',
   'tests/ceiling-basis.test.mjs',
+  'tests/location-ceiling.test.mjs',
   'tests/buffer-sync-status.test.mjs',
   // Registered 2026-10-09 after the guard below found them missing: a suite not named
   // here never runs, and its absence looks exactly like a passing run.
@@ -772,6 +775,11 @@ for (const suite of [
   'tests/resync-scope.test.mjs',
   'tests/prior-roles.test.mjs',
   'tests/jd-fingerprint.test.mjs',
+  'tests/jd-similarity.test.mjs',
+  'tests/dedup-local-snapshot.test.mjs',
+  'tests/tag-duplicate-reposts.test.mjs',
+  'tests/self-dup-check.test.mjs',
+  'tests/gate-similar-repost.test.mjs',
   'tests/workday-url.test.mjs',
   'tests/workday-repair.test.mjs',
   'tests/test-registration.test.mjs',

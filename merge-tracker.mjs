@@ -32,7 +32,7 @@ import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs'
 // "is this the same job?" ended up answered differently here than everywhere
 // else. It also imported normalizeUrl from scan-core, a re-export of
 // canonicalUrl, so the same function went by two names inside one file.
-import { canonicalUrl, normalizeCompany, sameRole, urlFromReport, urlForRow, buildDecidedIndex } from './lib/identity.mjs';
+import { canonicalUrl, normalizeCompany, sameRole, urlFromReport, urlForRow, buildDecidedIndex, canonicalPostingUrl } from './lib/identity.mjs';
 import { markDone, sourceUrlOf } from './lib/pipeline.mjs';
 import { localToday, logWritesEnabled, openDataStore, writeTableText } from './lib/log-writes.mjs';
 // next-jd.mjs (persistent JD counter) can be one update cycle behind on installs
@@ -465,7 +465,7 @@ const decided = buildDecidedIndex({ appsPath: APPS_FILE, rootDir: CAREER_OPS });
 // identity. Null means "fall back to the weaker signals", never "no match".
 function canonKey(rawUrl) {
   if (!rawUrl) return null;
-  const key = canonicalUrl(rawUrl);
+  const key = canonicalPostingUrl(rawUrl, CAREER_OPS);
   if (!key || decided.ambiguous.has(key)) return null;
   return key;
 }

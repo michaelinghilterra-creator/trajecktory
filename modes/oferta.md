@@ -26,7 +26,7 @@ The report file is **JSON frontmatter + a narrative markdown body**, not freefor
                    This DECLARES which blocker caused the cap. Do not leave the code to
                    infer it from your prose: a location cap whose reason mentions "base
                    pay" was once silently replaced by a comp recomputation, discarding a
-                   real blocker. Only "comp" causes the number to be recomputed.>,
+                   real blocker. Comp, build depth, and location caps are computed.>,
   "ceilingReason": <one short sentence naming the blocker, for a human reader>,
   "domain": "...",
   "summary":          { ... },     // Block A → see "summary" in schema
@@ -118,9 +118,13 @@ Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a
   leadership, and no adjacent experience that closes the gap.
 - **Do not lower `fit` to express build depth.** `fit` is about requirements the candidate
   does meet. Distorting it hides which half of the match actually failed.
+- **Location trip.** Rate `location` against the user's policy. Use 1 or below when the
+  role requires presence in a hard-no city or a region the user cannot work. Set
+  `ceilingBasis` to `"location"` and give one line in `ceilingReason`. Do not agonize over
+  the cap number: code computes it from `scoring.location_ceilings` in `config/profile.yml`.
 - **Hard blockers → `scoreCeiling`, not a faked rating.** When a blocker must keep the
-  score low no matter how well the rest fits (a location the user will not work, a visa
-  they cannot get, a hard requirement they plainly lack), set `scoreCeiling` (e.g. `1.5`).
+  score low no matter how well the rest fits (a visa they cannot get, a hard requirement
+  they plainly lack), set `scoreCeiling` (e.g. `1.5`).
   This replaces the old "cap the Global score" rule. Do not distort the dimension ratings
   to force a low number. Two comp/level cases belong here:
   - **Stated pay below the hard floor.** `comp.walkaway` is the user's
