@@ -142,6 +142,16 @@ console.log('get-coalesce.test.mjs');
   check(other.calls.length === 2, 'follow-up reads are never reused after they land');
 }
 
+{
+  const { window, calls } = harness();
+  const first = window.tjkGetJson('/api/setup/models');
+  calls[0].resolve(response({ hasKey: true }));
+  await first;
+  window.tjkMutate('/api/system/update-check', { method: 'POST' });
+  window.tjkGetJson('/api/setup/models');
+  check(calls.filter(call => call.url === '/api/setup/models').length === 1, 'a non-data POST does not clear the shared models read');
+}
+
 const shared = readFileSync(join(ROOT, 'dashboard-web', 'src', 'shared.jsx'), 'utf8');
 const launchpad = readFileSync(join(ROOT, 'dashboard-web', 'src', 'launchpad.jsx'), 'utf8');
 const pipeline = readFileSync(join(ROOT, 'dashboard-web', 'src', 'pipeline.jsx'), 'utf8');

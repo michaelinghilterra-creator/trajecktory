@@ -259,9 +259,12 @@ const tjkInFlightGets = new Map();
 // startup check and the first component read make one request. Other reads are shared only while in flight.
 const TJK_SHORT_LIVED_GETS = new Set(['/api/setup/models']);
 const TJK_SHORT_LIVED_MS = 2500;
+// POSTs the server already treats as not changing data (NON_DATA_POSTS in server/index.mjs). The page fires
+// update-check on every load, and clearing the shared reads for it would undo the sharing.
+const TJK_NON_DATA_POSTS = new Set(['/api/system/update-check', '/api/setup/activation/event', '/api/setup/preflight']);
 
 window.tjkMutate = async function tjkMutate(url, options) {
-  tjkInFlightGets.clear();
+  if (!TJK_NON_DATA_POSTS.has(String(url))) tjkInFlightGets.clear();
   let res = await fetch(url, options);
   if (res && res.status === 403) {
     try { await fetch('/', { headers: { Accept: 'text/html' }, cache: 'no-store' }); } catch (e) { /* ignore */ }
