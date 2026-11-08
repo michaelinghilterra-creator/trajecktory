@@ -179,6 +179,11 @@ scoring:
   # is never a "downlevel". Ambiguous senior-IC titles (Lead, Principal, Staff) are
   # left to the evaluator's judgment rather than auto-floored.
   minimum_level: "Manager"
+  # A JD title below minimum_level such as Analyst, Coordinator, Specialist,
+  # Representative, or "individual contributor" caps the score here. Set this
+  # to null to switch it off. Lowering it below a pre-filter threshold converts
+  # kept roles into discards.
+  sub_manager_ceiling: 2.0
   # Titles where a level word is a MODIFIER of a function rather than a statement of
   # seniority. "Product Manager" contains the whole word "Manager", so without this
   # list it satisfies minimum_level and gets floored to a perfect level match -- which
