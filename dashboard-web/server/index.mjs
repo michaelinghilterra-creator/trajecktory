@@ -15,6 +15,7 @@ import { logWritesEnabled, withLogRead } from '../../lib/log-writes.mjs';
 import { router as applicationsRoutes } from './routes/applications.mjs';
 import { router as followupsRoutes } from './routes/followups.mjs';
 import { bumpDataGeneration, NON_DATA_GETS, requestWritesData } from './lib/data-generation.mjs';
+import { prewarm } from './lib/prewarm.mjs';
 import { router as applyRoutes, applyJobs } from './routes/apply.mjs';
 import { router as workflowRoutes, workflowJobs } from './routes/workflow.mjs';
 import { router as agentRoutes, agentJobs } from './routes/agent.mjs';
@@ -332,5 +333,6 @@ app.listen(PORT, HOST, () => {
   }
   console.log(`  Auth token for CLI/curl (x-tjk-token header): ${AUTH_TOKEN}`);
   openDashboardWindow(`http://localhost:${PORT}`);
+  if (!process.env.TJK_NO_PREWARM) setTimeout(() => { prewarm({ port: PORT, token: AUTH_TOKEN }).catch(() => {}); }, 100);
 });
 
