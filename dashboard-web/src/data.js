@@ -254,7 +254,10 @@ window.kbdActivate = (fn) => (e) => {
 // save lands without a manual reload and without losing the in-progress edit. A
 // 403 is rejected by the auth middleware before any handler runs, so the retry
 // never double-writes. Non-403 responses pass straight through unchanged.
+const tjkInFlightGets = new Map();
+
 window.tjkMutate = async function tjkMutate(url, options) {
+  tjkInFlightGets.clear();
   let res = await fetch(url, options);
   if (res && res.status === 403) {
     try { await fetch('/', { headers: { Accept: 'text/html' }, cache: 'no-store' }); } catch (e) { /* ignore */ }
@@ -268,6 +271,25 @@ window.tjkMutate = async function tjkMutate(url, options) {
     }).catch(() => {});
   }
   return res;
+};
+
+window.tjkGetJson = function tjkGetJson(url, options) {
+  if (options?.method && String(options.method).toUpperCase() !== 'GET') {
+    return fetch(url, options).then(response => response.json());
+  }
+  const key = String(url);
+  let request = tjkInFlightGets.get(key);
+  if (!request) {
+    request = fetch(url, options).then(response => response.json());
+    tjkInFlightGets.set(key, request);
+    const clear = () => {
+      if (tjkInFlightGets.get(key) === request) tjkInFlightGets.delete(key);
+    };
+    request.then(clear, clear);
+  }
+  return request.then(data => typeof structuredClone === 'function'
+    ? structuredClone(data)
+    : JSON.parse(JSON.stringify(data)));
 };
 
 // E-5: Rejected and No Response need evidence or the person's confirmation. Before saving one, ask the

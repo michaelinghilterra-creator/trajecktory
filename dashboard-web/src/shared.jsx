@@ -261,8 +261,7 @@ window.tjkGradeDraft = async function tjkGradeDraft({ body, subject, surfaceId, 
 // Draft grading is deliberately opt-in. Keep the synchronous default false so
 // no draft surface can start a review before the startup setting arrives.
 window.tjkDraftGrading = false;
-fetch('/api/setup/models')
-  .then(response => response.json())
+window.tjkGetJson('/api/setup/models')
   .then(state => { window.tjkDraftGrading = state.draftGrading === true; })
   .catch(() => { window.tjkDraftGrading = false; });
 
@@ -726,7 +725,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // billing toggle). Re-check on focus and on 'trj:models-changed' so saving a key or
   // flipping billing flips this without a reload.
   useEffect(() => {
-    const check = () => fetch('/api/setup/models').then(r => r.json())
+    const check = () => window.tjkGetJson('/api/setup/models')
       .then(d => setHasKey(!!d.hasKey)).catch(() => {});
     check();
     window.addEventListener('focus', check);
@@ -928,7 +927,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // unknown) rather than spending silently — no paid run starts without a look.
   function openSpendGate(step) {
     Promise.all([
-      fetch('/api/setup/models').then(r => r.json()),
+      window.tjkGetJson('/api/setup/models'),
       fetch('/api/agent/roll-config').then(r => r.json()).catch(() => ({})),
       // Fetch the queue depth FRESH here rather than trust the pendingCount state,
       // which can lag a scan/reconcile and would make the gate say "nothing queued"

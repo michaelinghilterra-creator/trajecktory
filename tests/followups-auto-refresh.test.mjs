@@ -47,7 +47,7 @@ const quietEnd = source.indexOf('const onVisible');
 const quietText = source.slice(quietStart, quietEnd);
 
 check(
-  quietText.includes("fetch('/api/followups/stale')") && !quietText.includes('setLoading('),
+  quietText.includes("window.tjkGetJson('/api/followups/stale')") && !quietText.includes('setLoading('),
   'quiet function contains fetch and does not contain setLoading',
 );
 

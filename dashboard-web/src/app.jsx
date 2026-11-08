@@ -287,8 +287,7 @@ function App() {
   // the badge matches the queue. Refetched on every tab change so it stops going
   // stale after you act. Falls back to the raw list only on an old payload.
   useEffect(() => {
-    fetch('/api/followups/stale')
-      .then(r => r.json())
+    window.tjkGetJson('/api/followups/stale')
       .then(data => setFollowupCount(data.actionableCount ?? (data.contactFollowups ?? data.warm ?? data.items)?.length ?? 0))
       .catch(() => {}); // non-critical — badge just stays at 0
   }, [tab]);
