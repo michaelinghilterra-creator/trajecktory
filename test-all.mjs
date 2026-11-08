@@ -767,6 +767,7 @@ for (const suite of [
   'tests/level-nonmanagement.test.mjs',
   'tests/gate-local-snapshot.test.mjs',
   'tests/ceiling-basis.test.mjs',
+  'tests/location-ceiling.test.mjs',
   'tests/buffer-sync-status.test.mjs',
   // Registered 2026-10-09 after the guard below found them missing: a suite not named
   // here never runs, and its absence looks exactly like a passing run.
