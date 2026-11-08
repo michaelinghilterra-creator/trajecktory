@@ -37,7 +37,7 @@ check(setupRoute.includes("router.get('/api/setup/models'") && setupRoute.includ
 
 const shared = read('dashboard-web/src/shared.jsx');
 check(shared.includes('window.tjkDraftGrading = false')
-  && shared.includes("fetch('/api/setup/models')")
+  && shared.includes("window.tjkGetJson('/api/setup/models')")
   && shared.includes('window.tjkDraftGrading = state.draftGrading === true'),
   'shared startup wiring defaults grading off and loads draftGrading from the models endpoint');
 

@@ -318,8 +318,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
 
   const load = () => {
     setLoading(true);
-    fetch('/api/followups/stale')
-      .then(r => r.json())
+    window.tjkGetJson('/api/followups/stale')
       .then(d => {
         if (Array.isArray(d.hand_edited?.files)) {
           window.dispatchEvent(new CustomEvent('tjk:hand-edited', { detail: { files: d.hand_edited.files } }));
@@ -338,7 +337,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   useEffectF(() => {
     const quiet = () => {
       lastLoadedRef.current = Date.now();
-      fetch('/api/followups/stale').then(r => r.json()).then(d => { if (d && !d.error) setData(d); }).catch(() => {});
+      window.tjkGetJson('/api/followups/stale').then(d => { if (d && !d.error) setData(d); }).catch(() => {});
     };
     const onVisible = () => {
       if (document.visibilityState === 'visible' && Date.now() - lastLoadedRef.current > 5 * 60 * 1000) quiet();
@@ -1044,8 +1043,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
   const peopleGenerationRef = useRefF(0);
 
   const load = () => {
-    fetch('/api/followups/stale')
-      .then(r => r.json())
+    window.tjkGetJson('/api/followups/stale')
       .then(d => {
         const pool = [...(d.warm || []), ...(d.cold || []), ...(d.items || [])];
         setItem(pool.find(x => x.id === appId && (x.source || 'app') === 'app') || null);

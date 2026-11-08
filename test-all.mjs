@@ -678,6 +678,7 @@ for (const suite of [
   'tests/cover-letter-rubric.test.mjs',
   'tests/draft-grader.test.mjs',
   'tests/draft-badge-wiring.test.mjs',
+  'tests/get-coalesce.test.mjs',
   'tests/draft-grading-flag.test.mjs',
   'tests/project-file-sentinel.test.mjs',
   'tests/finish-draft.test.mjs',

@@ -512,7 +512,7 @@ function ModelsCostPanel() {
   const [msg, setMsg] = useState('');
 
   useEffect(() => {
-    fetch('/api/setup/models').then(r => r.json()).then(setState).catch(() => setMsg('Could not load model settings.'));
+    window.tjkGetJson('/api/setup/models').then(setState).catch(() => setMsg('Could not load model settings.'));
     fetch('/api/agent/cost-history').then(r => r.json()).then(d => setHistory(Array.isArray(d) ? d : [])).catch(() => {});
     fetch('/api/agent/cost-history?groupBy=day').then(r => r.json())
       .then(d => setRollup(d && Array.isArray(d.days) ? d : null)).catch(() => {});
