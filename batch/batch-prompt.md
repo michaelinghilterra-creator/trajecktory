@@ -31,6 +31,8 @@ The `.md` report file you produce is **JSON frontmatter + a narrative markdown b
   "batchId": "{{ID}}",
   "score": <DERIVED by compute-scores.mjs; leave a placeholder, do NOT author it>,
   "scoreCeiling": <optional 0-5 hard cap; set ONLY for a blocker that must keep the score low>,
+  "northStarArchetype": "<exact archetype name from the profile, or none>",
+  "northStarMatch": "strong" | "partial" | "none",
   "domain": "...",
   "summary":          { ... },     // Bloque A
   "recommendation":   "...",
@@ -220,6 +222,8 @@ dimension 0–5 WITH its evidence in `globalScore[]` as **keyed** entries:
   { "key": "redFlags",  "dim": "Red Flags",            "val": <0-5>, "max": 5, "evidence": "..." }
 ]
 ```
+
+- Choose `northStarArchetype` from the profile list by its exact name. Use `strong` when the title and scope are the target role, `partial` for adjacent scope or a different function at the right level, and `none` when no archetype fits. Code derives the north star rating from this choice. Still fill the `northStar` entry in `globalScore` with your best 0-5 estimate and one line of evidence, but the classification is what counts.
 
 - **`redFlags` is cleanliness on 0–5 (5 = clean, 0 = severe), NOT a negative number.**
 - **`buildDepth` is rated but NOT scored.** Add `"note": "recorded, not scored"`.
