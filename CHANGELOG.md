@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.27.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.26.2...v5.27.0) (2026-11-08)
+
+
+### Features
+
+* skip duplicate postings, derive score caps in code, and speed up the dashboard ([#510](https://github.com/michaelinghilterra-creator/trajecktory/issues/510)) ([99e0c85](https://github.com/michaelinghilterra-creator/trajecktory/commit/99e0c8562bcd3d67b06c66b11416bb21ad2d9eeb))
+
 ## [5.26.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.26.1...v5.26.2) (2026-11-04)
 
 
