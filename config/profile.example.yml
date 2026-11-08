@@ -142,6 +142,19 @@ scoring:
     # report without it are still scored by the same headline formula. It is a
     # binary blocker, so it expresses itself through scoreCeiling instead.
     buildDepth: 0
+  # The model names the matching archetype and how strongly. Code maps that choice
+  # using each archetype's fit tier in target_roles.archetypes. Retune numbers here.
+  north_star_ratings:
+    primary:
+      strong: 5
+      partial: 4
+    secondary:
+      strong: 3
+      partial: 2
+    adjacent:
+      strong: 2
+      partial: 1
+    none: 1
   # With comp at 0 the four remaining weights renormalize to fit 0.41,
   # northStar 0.29, level 0.18, location 0.12.
   # Most points subtracted when red flags are severe. The model rates red-flag
@@ -165,12 +178,25 @@ scoring:
     0: 2.0   # not a version of the target role at all; sits below auto-discard
     1: 2.0
     2: 3.0   # a real role with a real build lean; stays visible for a human call
+  # The model rates location and code sets the cap. A rating of 1 or below means
+  # the role requires presence in a place you will not work. A present but empty
+  # map switches this policy off. WARNING: lowering a cap below a pre-filter
+  # threshold converts kept roles into discards.
+  location_ceilings:
+    0: 1.5
+    0.5: 1.5
+    1: 1.5
   redFlagPenalty: 1.5
   # The lowest title you would accept. Any JD title at or above this rung is a FULL
   # level match and its `level` dimension is floored to its max -- an in-scope title
   # is never a "downlevel". Ambiguous senior-IC titles (Lead, Principal, Staff) are
   # left to the evaluator's judgment rather than auto-floored.
   minimum_level: "Manager"
+  # A JD title below minimum_level such as Analyst, Coordinator, Specialist,
+  # Representative, or "individual contributor" caps the score here. Set this
+  # to null to switch it off. Lowering it below a pre-filter threshold converts
+  # kept roles into discards.
+  sub_manager_ceiling: 2.0
   # Titles where a level word is a MODIFIER of a function rather than a statement of
   # seniority. "Product Manager" contains the whole word "Manager", so without this
   # list it satisfies minimum_level and gets floored to a perfect level match -- which

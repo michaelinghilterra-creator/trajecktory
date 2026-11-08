@@ -285,14 +285,39 @@ function writeReferralCorrespondence(id, messages) {
 // referral's reply was logged to the twin while the card read the referral's own
 // file, and the reply was invisible on the card that prompted it.
 const _normName = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const referralLinkIndexes = new WeakMap();
+
+function referralLinkIndex(taRows) {
+  const cached = referralLinkIndexes.get(taRows);
+  if (cached && cached.length === taRows.length) return cached;
+
+  const byId = new Map();
+  const byLinkedin = new Map();
+  const byName = new Map();
+  for (const row of taRows) {
+    if (!byId.has(row.id)) byId.set(row.id, row);
+    const linkedin = linkedinKey(row.linkedin);
+    if (linkedin && !byLinkedin.has(linkedin)) byLinkedin.set(linkedin, row);
+    const name = _normName(`${row.first} ${row.last}`);
+    if (!byName.has(name)) byName.set(name, []);
+    byName.get(name).push(row);
+  }
+
+  // Length changes rebuild the index. Same-length mutations are not detected.
+  const index = { length: taRows.length, byId, byLinkedin, byName };
+  referralLinkIndexes.set(taRows, index);
+  return index;
+}
+
 export function resolveReferralLink(refRow, taRows = []) {
+  const { byId, byLinkedin, byName } = referralLinkIndex(taRows);
   const taRef = (refRow.notes || '').match(/TA Outreach #(\d+)/i);
-  if (taRef) { const c = taRows.find(r => r.id === parseInt(taRef[1], 10)); if (c) return { source: 'ta', contact: c }; }
+  if (taRef) { const c = byId.get(parseInt(taRef[1], 10)); if (c) return { source: 'ta', contact: c }; }
   const s = linkedinKey(refRow.linkedin);
-  if (s) { const ta = taRows.find(r => linkedinKey(r.linkedin) === s); if (ta) return { source: 'ta', contact: ta }; }
+  if (s) { const ta = byLinkedin.get(s); if (ta) return { source: 'ta', contact: ta }; }
   const nn = _normName(refRow.name), nc = _normName(refRow.where);
   if (nn && nn.length >= 4) {
-    const ta = taRows.find(r => _normName(`${r.first} ${r.last}`) === nn && (!nc || _normName(r.company) === nc));
+    const ta = (byName.get(nn) || []).find(r => !nc || _normName(r.company) === nc);
     if (ta) return { source: 'ta', contact: ta };
   }
   return null;

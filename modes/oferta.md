@@ -21,12 +21,14 @@ The report file is **JSON frontmatter + a narrative markdown body**, not freefor
   "url": "...",
   "score": <DERIVED, do NOT author this; compute-scores.mjs computes it from globalScore>,
   "scoreCeiling": <optional 0-5 hard cap; set ONLY when a blocker must keep the score low>,
+  "northStarArchetype": "<exact archetype name from the profile, or none>",
+  "northStarMatch": "strong" | "partial" | "none",
   "ceilingBasis": <REQUIRED whenever scoreCeiling is set. One of: "comp" | "location" |
                    "level" | "buildDepth" | "requirement" | "visa" | "other".
                    This DECLARES which blocker caused the cap. Do not leave the code to
                    infer it from your prose: a location cap whose reason mentions "base
                    pay" was once silently replaced by a comp recomputation, discarding a
-                   real blocker. Only "comp" causes the number to be recomputed.>,
+                   real blocker. Comp, build depth, location, and level caps are computed.>,
   "ceilingReason": <one short sentence naming the blocker, for a human reader>,
   "domain": "...",
   "summary":          { ... },     // Block A → see "summary" in schema
@@ -84,6 +86,8 @@ Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a
 ]
 ```
 
+- Choose `northStarArchetype` from the profile list by its exact name. Use `strong` when the title and scope are the target role, `partial` for adjacent scope or a different function at the right level, and `none` when no archetype fits. Code derives the north star rating from this choice. Still fill the `northStar` entry in `globalScore` with your best 0-5 estimate and one line of evidence, but the classification is what counts.
+
 - Each dimension maps to a block you already reason through: **fit** ← Block B (CV match),
   **northStar** ← archetype / target fit (Step 0 + profile), **level** ← Block C,
   **comp** ← Block D, **location** ← remote/logistics vs the user's stated policy,
@@ -118,9 +122,13 @@ Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a
   leadership, and no adjacent experience that closes the gap.
 - **Do not lower `fit` to express build depth.** `fit` is about requirements the candidate
   does meet. Distorting it hides which half of the match actually failed.
+- **Location trip.** Rate `location` against the user's policy. Use 1 or below when the
+  role requires presence in a hard-no city or a region the user cannot work. Set
+  `ceilingBasis` to `"location"` and give one line in `ceilingReason`. Do not agonize over
+  the cap number: code computes it from `scoring.location_ceilings` in `config/profile.yml`.
 - **Hard blockers → `scoreCeiling`, not a faked rating.** When a blocker must keep the
-  score low no matter how well the rest fits (a location the user will not work, a visa
-  they cannot get, a hard requirement they plainly lack), set `scoreCeiling` (e.g. `1.5`).
+  score low no matter how well the rest fits (a visa they cannot get, a hard requirement
+  they plainly lack), set `scoreCeiling` (e.g. `1.5`).
   This replaces the old "cap the Global score" rule. Do not distort the dimension ratings
   to force a low number. Two comp/level cases belong here:
   - **Stated pay below the hard floor.** `comp.walkaway` is the user's
@@ -133,6 +141,11 @@ Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a
     evidence the job is bigger than its title (a wider multi-level band, heavy variable
     comp, or a genuinely more senior role), not a bonus. If the role really sits two rungs
     up, that is a ceiling, the same as any requirement they plainly lack.
+  - **Title regression to a sub-Manager individual-contributor title.** For Analyst,
+    Coordinator, Specialist, Representative, or "individual contributor" titles, rate
+    `level` honestly and you may set `ceilingBasis` to `"level"`. Do not author the cap:
+    code computes it from the title and `scoring.sub_manager_ceiling`. **Manager and above
+    is in scope and never capped by this rule.**
   - **Build depth trip.** Rate `buildDepth` honestly against the 0-5 anchors above and set
     `ceilingBasis` to `"buildDepth"`. **Do not author the number.** `compute-scores.mjs`
     computes the cap from `scoring.build_depth_ceilings` in `config/profile.yml`, the same

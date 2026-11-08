@@ -139,7 +139,9 @@ check(rsm2.score === 4.1 && !rsm2.scoreBasis.levelFloor, 'the floor is idempoten
 
 // Below Manager: an Analyst title is NOT floored; the model rating stands.
 const ran = deriveReportScore(leveledReport('Analyst', 3), { weights: BALANCED });
-check(ran.ok && ran.score === 3.8 && !ran.scoreBasis.levelFloor, `a below-Manager title keeps the model level rating (got ${ran.score}, want 3.8)`);
+const ranLevel = ran.ok ? JSON.parse(ran.newMd.split('---')[1]).globalScore.find((d) => d.key === 'level') : null;
+check(ran.ok && !ran.scoreBasis.levelFloor && ranLevel && ranLevel.val === 3, 'a below-Manager title keeps the model level rating (no floor)');
+check(ran.ok && ran.score === 2 && ran.scoreBasis.ceilingApplied === true, `a below-Manager title is capped at 2.0 by the derived sub-Manager ceiling (got ${ran.score}, was 3.8 before the cap was derived)`);
 
 // Contamination guard: "Lead (reports to Director…)" must NOT be read as a Director.
 const rlead = deriveReportScore(leveledReport('Lead (reports to Director of Widget Operations)', 3), { weights: BALANCED });

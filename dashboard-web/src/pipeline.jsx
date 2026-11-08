@@ -405,8 +405,15 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
       if (sortKey === 'status') { av = STATUS_MAP[a.status]?.stage ?? 99; bv = STATUS_MAP[b.status]?.stage ?? 99; }
       if (sortKey === 'salary')  { av = a.salary || 0; bv = b.salary || 0; }
       if (sortKey === 'repeat')  { av = a.relatedRoles ? a.relatedRoles.length : 0; bv = b.relatedRoles ? b.relatedRoles.length : 0; }
-      if (av < bv) return sortDir === 'asc' ? -1 : 1;
-      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      if (typeof av === 'string' && typeof bv === 'string') {
+        // Plain < compares code points, so every capital sorts before every lowercase
+        // letter. Compare case-insensitively so "zorblax" files between "Zephyrix" and "Zorbulon".
+        const c = av.localeCompare(bv, undefined, { sensitivity: 'base' });
+        if (c) return sortDir === 'asc' ? c : -c;
+      } else {
+        if (av < bv) return sortDir === 'asc' ? -1 : 1;
+        if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      }
       return (b.score || 0) - (a.score || 0);
     });
     return arr;
@@ -714,7 +721,7 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
   const [core, setCore] = useStateP(null);
   useEffectP(() => {
     let alive = true;
-    fetch('/api/metrics/core').then(r => r.json()).then(d => { if (alive && !d.error) { window.METRICS_VERSION = d.version; setCore(d); } }).catch(() => {});
+    window.tjkGetJson('/api/metrics/core').then(d => { if (alive && !d.error) { window.METRICS_VERSION = d.version; setCore(d); } }).catch(() => {});
     return () => { alive = false; };
   }, [ratePool]);
 
@@ -2029,9 +2036,8 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
   // focus, and after any scan/evaluation that changes `apps`.
   const [inbox, setInbox] = useStateP(null);
   const loadInbox = useCallbackP(() => {
-    fetch('/api/pipeline/inbox').then(r => r.json()).then(setInbox).catch(() => {});
+    window.tjkGetJson('/api/pipeline/inbox').then(setInbox).catch(() => {});
   }, []);
-  useEffectP(() => { loadInbox(); }, [loadInbox]);
   useEffectP(() => { loadInbox(); }, [apps, loadInbox]);
   useEffectP(() => {
     let last = 0;
@@ -2047,8 +2053,7 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
   const [staleMeta, setStaleMeta] = useStateP(new Map());
   useEffectP(() => {
     let cancelled = false;
-    fetch('/api/followups/stale')
-      .then(r => r.json())
+    window.tjkGetJson('/api/followups/stale')
       .then(d => {
         if (cancelled) return;
         const ids = new Set();

@@ -31,6 +31,8 @@ The `.md` report file you produce is **JSON frontmatter + a narrative markdown b
   "batchId": "{{ID}}",
   "score": <DERIVED by compute-scores.mjs; leave a placeholder, do NOT author it>,
   "scoreCeiling": <optional 0-5 hard cap; set ONLY for a blocker that must keep the score low>,
+  "northStarArchetype": "<exact archetype name from the profile, or none>",
+  "northStarMatch": "strong" | "partial" | "none",
   "domain": "...",
   "summary":          { ... },     // Bloque A
   "recommendation":   "...",
@@ -221,6 +223,8 @@ dimension 0–5 WITH its evidence in `globalScore[]` as **keyed** entries:
 ]
 ```
 
+- Choose `northStarArchetype` from the profile list by its exact name. Use `strong` when the title and scope are the target role, `partial` for adjacent scope or a different function at the right level, and `none` when no archetype fits. Code derives the north star rating from this choice. Still fill the `northStar` entry in `globalScore` with your best 0-5 estimate and one line of evidence, but the classification is what counts.
+
 - **`redFlags` is cleanliness on 0–5 (5 = clean, 0 = severe), NOT a negative number.**
 - **`buildDepth` is rated but NOT scored.** Add `"note": "recorded, not scored"`.
   Rate hands-on building demanded by the req against credible evidence in `cv.md`: **5** no
@@ -247,10 +251,10 @@ score" rule. Set the field, do not fudge the dimension ratings.
 
 | Condition detected in JD | scoreCeiling | Why |
 |--------------------------|--------------|-----|
-| Required physical presence in a `hard_no` city (see `portals.yml` location_policy: includes London, Barcelona, NYC, SF, Bay Area, Chicago, LA, Boston, Seattle, Amsterdam, Paris, Berlin, Madrid, Dublin, Toronto, Singapore, Sydney, Melbourne, Tokyo, Warsaw, Krakow, Vilnius, Tallinn) | **1.5** | International relocation or domestic hard-no, not viable regardless of role fit |
+| Required physical presence in a `hard_no` city (see `portals.yml` location_policy: includes London, Barcelona, NYC, SF, Bay Area, Chicago, LA, Boston, Seattle, Amsterdam, Paris, Berlin, Madrid, Dublin, Toronto, Singapore, Sydney, Melbourne, Tokyo, Warsaw, Krakow, Vilnius, Tallinn) | *computed by code* | Rate `location` against the policy at 1 or below, set `ceilingBasis: "location"`, and give one line in `ceilingReason`. The cap number comes from `scoring.location_ceilings`, so do not agonize over it. |
 | Visa sponsorship explicitly NOT offered AND candidate would need it (non-US JDs) | **1.5** | Hard blocker |
 | Role requires expertise candidate verifiably lacks (e.g., Xactly admin for a Sales Comp role, FedRAMP for federal sales, specific industry certifications) AND has no adjacent experience | **2.0** | Structural skill gap |
-| Title regression to a **sub-Manager individual-contributor** title (Analyst, Coordinator, Specialist, Representative, "individual contributor") when candidate is Director+ | **2.0** | Career step backward. **Manager and above (Manager, Senior Manager, Director, Senior Director, Head, VP, C-level) is IN SCOPE and a FULL level match — NEVER apply this ceiling to those.** Search scope is open from Manager up; `applyLevelFloor` in `score.mjs` floors the `level` dim to 5 for any Manager+ title, so capping the headline here would contradict it. |
+| Title regression to a **sub-Manager individual-contributor** title (Analyst, Coordinator, Specialist, Representative, "individual contributor") when candidate is Director+ | *computed by code* | Career step backward. Code caps it at `scoring.sub_manager_ceiling` from the title, so rate `level` honestly and you may set `ceilingBasis: "level"`. **Manager and above (Manager, Senior Manager, Director, Senior Director, Head, VP, C-level) is IN SCOPE and a FULL level match, and this rule never caps those titles.** |
 | `buildDepth` rated low | *computed by code* | Rate the dimension against the 0-5 anchors above and set `ceilingBasis: "buildDepth"`. Do NOT author the number: `compute-scores.mjs` reads the tiers from `scoring.build_depth_ceilings` in `config/profile.yml`, so the policy lives in one place instead of in two prompts that drift apart. |
 
 **Reasoning:** Auto-discard fires below 3.5. A 3.2 on a Barcelona-required role is

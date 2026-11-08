@@ -103,6 +103,8 @@ check(isRequeueableDiscard({ status: 'Evaluated', score: AUTO_DISCARD_SCORE - 0.
 check(isRequeueableDiscard({ status: 'Rejected', score: AUTO_DISCARD_SCORE - 0.1 }) === false, 'a company rejection is not a near-threshold auto-discard');
 check(isRequeueableDiscard({ status: 'Discarded', score: `${REQUEUE_FLOOR + 0.2}/5` }) === true, 'accepts a raw score cell');
 check(isRequeueableDiscard({ status: 'Discarded', score: 'n/a' }) === false, 'an unparseable score is not re-queueable');
+check(isRequeueableDiscard({ status: 'Passed', score: REQUEUE_FLOOR + 0.2, notes: '[passed: duplicate]' }) === false, 'a duplicate is not re-queueable');
+check(isRequeueableDiscard({ status: 'Passed', score: REQUEUE_FLOOR + 0.2, notes: '[passed: low_score]' }) === true, 'a low-score Passed row remains re-queueable');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

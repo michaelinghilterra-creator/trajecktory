@@ -92,7 +92,7 @@ window.oldStatus = (app) => (app && app.status === "Passed" ? (window.PASSED_OLD
 window.STATUSES = ["Evaluated","Applied",...window.INTERVIEW_STAGES,"Offer","Rejected","Passed","No Response"];
 // Plain words for a Passed row's reason, shown beside the Passed badge. Unknown or missing reads as Discarded,
 // the same default oldLabel() uses.
-window.PASSED_REASON_LABEL = { not_a_fit: "not a fit", skip: "skipped", posting_closed: "posting closed", withdrew: "withdrew", low_score: "low score", discarded: "discarded" };
+window.PASSED_REASON_LABEL = { not_a_fit: "not a fit", skip: "skipped", posting_closed: "posting closed", withdrew: "withdrew", low_score: "low score", discarded: "discarded", duplicate: "duplicate" };
 window.passedReasonLabel = (reason) => window.PASSED_REASON_LABEL[reason] || "discarded";
 // The SINGLE source of the archetype list for the browser — the Sankey, the
 // Archetype list for pipeline filters, chart axes, and tracker grouping.
@@ -254,7 +254,17 @@ window.kbdActivate = (fn) => (e) => {
 // save lands without a manual reload and without losing the in-progress edit. A
 // 403 is rejected by the auth middleware before any handler runs, so the retry
 // never double-writes. Non-403 responses pass straight through unchanged.
+const tjkInFlightGets = new Map();
+// Settings reads that only a tjkMutate write can change stay shared for a moment after they land, so the
+// startup check and the first component read make one request. Other reads are shared only while in flight.
+const TJK_SHORT_LIVED_GETS = new Set(['/api/setup/models']);
+const TJK_SHORT_LIVED_MS = 2500;
+// POSTs the server already treats as not changing data (NON_DATA_POSTS in server/index.mjs). The page fires
+// update-check on every load, and clearing the shared reads for it would undo the sharing.
+const TJK_NON_DATA_POSTS = new Set(['/api/system/update-check', '/api/setup/activation/event', '/api/setup/preflight']);
+
 window.tjkMutate = async function tjkMutate(url, options) {
+  if (!TJK_NON_DATA_POSTS.has(String(url))) tjkInFlightGets.clear();
   let res = await fetch(url, options);
   if (res && res.status === 403) {
     try { await fetch('/', { headers: { Accept: 'text/html' }, cache: 'no-store' }); } catch (e) { /* ignore */ }
@@ -268,6 +278,28 @@ window.tjkMutate = async function tjkMutate(url, options) {
     }).catch(() => {});
   }
   return res;
+};
+
+window.tjkGetJson = function tjkGetJson(url, options) {
+  if (options?.method && String(options.method).toUpperCase() !== 'GET') {
+    return fetch(url, options).then(response => response.json());
+  }
+  const key = String(url);
+  let request = tjkInFlightGets.get(key);
+  if (!request) {
+    request = fetch(url, options).then(response => response.json());
+    tjkInFlightGets.set(key, request);
+    const clear = () => {
+      if (tjkInFlightGets.get(key) === request) tjkInFlightGets.delete(key);
+    };
+    request.then(
+      () => { if (TJK_SHORT_LIVED_GETS.has(key)) setTimeout(clear, TJK_SHORT_LIVED_MS); else clear(); },
+      clear,
+    );
+  }
+  return request.then(data => typeof structuredClone === 'function'
+    ? structuredClone(data)
+    : JSON.parse(JSON.stringify(data)));
 };
 
 // E-5: Rejected and No Response need evidence or the person's confirmation. Before saving one, ask the

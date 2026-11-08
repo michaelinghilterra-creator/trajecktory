@@ -261,8 +261,7 @@ window.tjkGradeDraft = async function tjkGradeDraft({ body, subject, surfaceId, 
 // Draft grading is deliberately opt-in. Keep the synchronous default false so
 // no draft surface can start a review before the startup setting arrives.
 window.tjkDraftGrading = false;
-fetch('/api/setup/models')
-  .then(response => response.json())
+window.tjkGetJson('/api/setup/models')
   .then(state => { window.tjkDraftGrading = state.draftGrading === true; })
   .catch(() => { window.tjkDraftGrading = false; });
 
@@ -683,6 +682,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const [trust, setTrust] = useState({ ok: true, message: '', losing: [] });
   const [trustBusy, setTrustBusy] = useState(false);
   const [pasteVal, setPasteVal] = useState('');
+  const [pasteForceVal, setPasteForceVal] = useState('');
   const [pasteBusy, setPasteBusy] = useState(false);
   const [pasteMsg, setPasteMsg] = useState('');
   const [hasKey, setHasKey] = useState(false);       // API key present AND billed to it (effective)
@@ -725,7 +725,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // billing toggle). Re-check on focus and on 'trj:models-changed' so saving a key or
   // flipping billing flips this without a reload.
   useEffect(() => {
-    const check = () => fetch('/api/setup/models').then(r => r.json())
+    const check = () => window.tjkGetJson('/api/setup/models')
       .then(d => setHasKey(!!d.hasKey)).catch(() => {});
     check();
     window.addEventListener('focus', check);
@@ -770,11 +770,17 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     if (!v) return;
     setPasteBusy(true); setPasteMsg('');
     const body = /^https?:\/\//i.test(v) ? { url: v } : { jd: v };
+    if (v === pasteForceVal) body.force = true;
     if (hasKey) body.power = true;
     window.tjkMutate('/api/agent/deep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       .then(r => r.json().then(b => ({ ok: r.ok, b })))
       .then(({ ok, b }) => {
-        if (!ok || b.error || !b.jobId) { setPasteBusy(false); setPasteMsg(b.error || 'Could not start the evaluation.'); return; }
+        if (!ok || b.error || !b.jobId) {
+          setPasteBusy(false);
+          setPasteMsg(b.error || 'Could not start the evaluation.');
+          if (!ok && b.duplicate) setPasteForceVal(v);
+          return;
+        }
         setPasteVal(''); setPasteMsg('Evaluating…');
         const poll = setInterval(() => {
           fetch(`/api/agent/status/${b.jobId}`).then(r => r.status === 404 ? { status: 'interrupted' } : r.json()).then(job => {
@@ -921,7 +927,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // unknown) rather than spending silently — no paid run starts without a look.
   function openSpendGate(step) {
     Promise.all([
-      fetch('/api/setup/models').then(r => r.json()),
+      window.tjkGetJson('/api/setup/models'),
       fetch('/api/agent/roll-config').then(r => r.json()).catch(() => ({})),
       // Fetch the queue depth FRESH here rather than trust the pendingCount state,
       // which can lag a scan/reconcile and would make the gate say "nothing queued"
@@ -1348,7 +1354,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
 
       <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 6 }}>PASTE A JD</div>
-        <textarea value={pasteVal} onChange={e => setPasteVal(e.target.value)} aria-label="Paste a job URL or JD text" placeholder="Paste a job URL or the full JD text…"
+        <textarea value={pasteVal} onChange={e => { setPasteVal(e.target.value); setPasteForceVal(''); }} aria-label="Paste a job URL or JD text" placeholder="Paste a job URL or the full JD text…"
           style={{ width: '100%', height: 52, fontSize: 11, color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 6, padding: 6, background: 'var(--panel-2)', fontFamily: 'var(--mono)', resize: 'vertical', boxSizing: 'border-box' }} />
         <button onClick={submitPaste} disabled={deepBusy || !pasteVal.trim()}
           style={{ width: '100%', marginTop: 6, background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: (deepBusy || !pasteVal.trim()) ? 'not-allowed' : 'pointer', opacity: (deepBusy || !pasteVal.trim()) ? 0.5 : 1 }}>

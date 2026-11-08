@@ -1116,7 +1116,7 @@ window.ReviewTab = function ReviewTab({ toast }) {
     fetch('/api/metrics/weekly').then(r => r.json())
       .then(d => { if (d && d.error) setErr(d.error); else setData(d); })
       .catch(e => setErr(e.message));
-    fetch('/api/metrics/core').then(r => r.json()).then(d => { if (d && !d.error) setCore(d); }).catch(() => {});
+    window.tjkGetJson('/api/metrics/core').then(d => { if (d && !d.error) setCore(d); }).catch(() => {});
     fetch('/api/review/status').then(r => r.json()).then(setStatus).catch(() => {});
   }, []);
   const loadPending = useCallbackRv(() => {

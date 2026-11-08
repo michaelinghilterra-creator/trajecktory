@@ -27,6 +27,7 @@ import { buildDecidedIndex, findDecided, buildActiveRoleIndex, findActiveRepost,
 import { appendGateHistory } from './lib/gate-history.mjs';
 import { localToday } from './lib/local-date.mjs';
 import { buildFingerprintIndex, findDuplicateJd, snapshotFingerprint } from './lib/jd-fingerprint.mjs';
+import { buildSimilarityIndex, similarRepostFor } from './lib/jd-similarity.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PIPELINE = join(__dirname, 'data/pipeline.md');
@@ -136,6 +137,7 @@ if (pending.length === 0) {
 let decidedCount = 0;
 let repostCount = 0;
 let dupJdCount = 0;
+let similarCount = 0;
 const dropLog = [];   // rows appended to data/merge-drops.tsv for audit
 // Every disposition this run reaches — decided/repost suppressions AND (further
 // below) the browser-checked live/dead/uncertain verdicts — is also mirrored
@@ -149,6 +151,7 @@ if (!allowReeval) {
   const activeIndex = buildActiveRoleIndex({ appsPath: APPS, rootDir: __dirname });
   const companies = new Set(pending.filter(p => p.local && p.company).map(p => normalizeCompany(p.company)).filter(Boolean));
   const fpIndex = buildFingerprintIndex({ appsPath: APPS, rootDir: __dirname, companies });
+  const simIndex = buildSimilarityIndex({ appsPath: APPS, rootDir: __dirname, companies });
   const seenInBatch = new Map();
   const stillPending = [];
   for (const p of pending) {
@@ -197,6 +200,18 @@ if (!allowReeval) {
         seenInBatch.set(key, p);
       }
     }
+    if (p.local && p.company) {
+      const hit = similarRepostFor(simIndex, p, __dirname);
+      if (hit) {
+        const pct = Math.round(hit.similarity * 100);
+        lines[p.idx] = `- [!] ${p.url}${p.suffix} — similar repost of #${hit.num} (${hit.status}); JD ${pct}% alike, skipped`;
+        similarCount++;
+        dropLog.push(`${todayISO()}\tsimilar-repost\t${hit.num}\t${hit.status}\t${p.company}\t${p.role}\t${p.url}`);
+        gateHistoryRows.push({ url: p.url, company: p.company, role: p.role, result: 'duplicate', reason: `similar repost of #${hit.num} (${hit.status}); JD ${pct}% alike` });
+        console.log(`  ↳ similar   to #${hit.num} (${hit.status}) — ${p.company} / ${p.role}`);
+        continue;
+      }
+    }
     stillPending.push(p);
   }
   pending.length = 0;
@@ -206,7 +221,9 @@ if (!allowReeval) {
 
   if (dupJdCount) console.log(`Duplicate JDs suppressed: ${dupJdCount} (identical text; logged to data/merge-drops.tsv)`);
 
-  if ((decidedCount || repostCount || dupJdCount) && pending.length === 0) {
+  if (similarCount) console.log(`Similar reposts suppressed: ${similarCount} (logged to data/merge-drops.tsv)`);
+
+  if ((decidedCount || repostCount || dupJdCount || similarCount) && pending.length === 0) {
     if (!dryRun) { writeFileSync(PIPELINE, lines.join('\n'), 'utf8'); flushDropLog(dropLog); appendGateHistory(GATE_HISTORY, gateHistoryRows); }
     if (decidedCount) console.log(`Already evaluated: ${decidedCount} (skipped, not browser-checked)`);
     console.log('Nothing left to liveness-check.');
@@ -216,13 +233,13 @@ if (!allowReeval) {
 }
 
 if (suppressOnly) {
-  if (!dryRun && (decidedCount || repostCount || dupJdCount)) {
+  if (!dryRun && (decidedCount || repostCount || dupJdCount || similarCount)) {
     writeFileSync(PIPELINE, lines.join('\n'), 'utf8');
     appendGateHistory(GATE_HISTORY, gateHistoryRows);
   }
   if (decidedCount) console.log(`Already evaluated: ${decidedCount} (skipped, not browser-checked)`);
-  const suppressed = decidedCount + repostCount + dupJdCount;
-  console.log(`Suppressed: ${suppressed} (${decidedCount} already evaluated, ${repostCount} active-role reposts, ${dupJdCount} duplicate JDs; not browser-checked)`);
+  const suppressed = decidedCount + repostCount + dupJdCount + similarCount;
+  console.log(`Suppressed: ${suppressed} (${decidedCount} already evaluated, ${repostCount} active-role reposts, ${dupJdCount} duplicate JDs, ${similarCount} similar reposts; not browser-checked)`);
   console.log(`Left pending: ${pending.length}`);
   process.exit(0);
 }
@@ -361,8 +378,8 @@ const dead      = results.filter(r => r.result === 'expired');
 const uncertain = results.filter(r => r.result === 'uncertain');
 
 console.log('');
-const suppressed = decidedCount + repostCount + dupJdCount;
-if (suppressed) console.log(`Suppressed: ${suppressed} (${decidedCount} already evaluated, ${repostCount} active-role reposts, ${dupJdCount} duplicate JDs - not browser-checked)`);
+const suppressed = decidedCount + repostCount + dupJdCount + similarCount;
+if (suppressed) console.log(`Suppressed: ${suppressed} (${decidedCount} already evaluated, ${repostCount} active-role reposts, ${dupJdCount} duplicate JDs, ${similarCount} similar reposts - not browser-checked)`);
 console.log(`Live:      ${live.length}`);
 console.log(`Dead:      ${dead.length}`);
 console.log(`Uncertain: ${uncertain.length} (kept as live — manual review)`);

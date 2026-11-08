@@ -113,6 +113,7 @@ export const SYSTEM_PATHS = [
   // was frozen at install time and no fix to it ever reached an updated install.
   'scripts/',
   'dedup-tracker.mjs',
+  'tag-duplicate-reposts.mjs',
   'normalize-statuses.mjs',
   'cv-sync-check.mjs',
   'update-system.mjs',
@@ -193,6 +194,7 @@ export const SYSTEM_PATHS = [
   'verify-reports.mjs',
   'verify-score-drift.mjs',
   'verify-scorer-version.mjs',
+  'verify-ceiling-basis.mjs',
   'weekly-review.mjs',
   // test-all.mjs ships (below) and runs the suites under tests/, so without this
   // line an updated install runs a new test-all against the tests it was installed
