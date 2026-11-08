@@ -26,7 +26,7 @@ The report file is **JSON frontmatter + a narrative markdown body**, not freefor
                    This DECLARES which blocker caused the cap. Do not leave the code to
                    infer it from your prose: a location cap whose reason mentions "base
                    pay" was once silently replaced by a comp recomputation, discarding a
-                   real blocker. Comp, build depth, and location caps are computed.>,
+                   real blocker. Comp, build depth, location, and level caps are computed.>,
   "ceilingReason": <one short sentence naming the blocker, for a human reader>,
   "domain": "...",
   "summary":          { ... },     // Block A → see "summary" in schema
@@ -137,6 +137,11 @@ Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a
     evidence the job is bigger than its title (a wider multi-level band, heavy variable
     comp, or a genuinely more senior role), not a bonus. If the role really sits two rungs
     up, that is a ceiling, the same as any requirement they plainly lack.
+  - **Title regression to a sub-Manager individual-contributor title.** For Analyst,
+    Coordinator, Specialist, Representative, or "individual contributor" titles, rate
+    `level` honestly and you may set `ceilingBasis` to `"level"`. Do not author the cap:
+    code computes it from the title and `scoring.sub_manager_ceiling`. **Manager and above
+    is in scope and never capped by this rule.**
   - **Build depth trip.** Rate `buildDepth` honestly against the 0-5 anchors above and set
     `ceilingBasis` to `"buildDepth"`. **Do not author the number.** `compute-scores.mjs`
     computes the cap from `scoring.build_depth_ceilings` in `config/profile.yml`, the same

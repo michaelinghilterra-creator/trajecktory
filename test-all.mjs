@@ -504,6 +504,7 @@ for (const suite of [
   'tests/build-depth.test.mjs',
   'tests/verify-score-drift.test.mjs',
   'tests/verify-scorer-version.test.mjs',
+  'tests/verify-ceiling-basis.test.mjs',
   'tests/score-golden.test.mjs',
   'tests/compute-scores-stamp.test.mjs',
   'tests/scorer-version-read.test.mjs',
@@ -768,6 +769,7 @@ for (const suite of [
   'tests/gate-local-snapshot.test.mjs',
   'tests/ceiling-basis.test.mjs',
   'tests/location-ceiling.test.mjs',
+  'tests/level-ceiling.test.mjs',
   'tests/buffer-sync-status.test.mjs',
   // Registered 2026-10-09 after the guard below found them missing: a suite not named
   // here never runs, and its absence looks exactly like a passing run.

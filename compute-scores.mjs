@@ -27,7 +27,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs';
-import { deriveScore, loadScoringWeights, SCORE_DIMENSIONS, applyLevelFloor, leadTitle, DEFAULT_MINIMUM_LEVEL, compCeiling, buildDepthCeiling, locationCeiling, SCORER_VERSION } from './lib/score.mjs';
+import { deriveScore, loadScoringWeights, SCORE_DIMENSIONS, applyLevelFloor, leadTitle, DEFAULT_MINIMUM_LEVEL, compCeiling, buildDepthCeiling, locationCeiling, levelCeiling, SCORER_VERSION } from './lib/score.mjs';
 
 const round1 = (n) => Math.round(n * 10) / 10;
 
@@ -48,7 +48,7 @@ export function withScorerVersion(data, version = SCORER_VERSION) {
 // Pure core: given a report's markdown, return the derivation outcome and (when
 // derivable) the rewritten markdown. No file I/O, so it is unit-tested directly.
 //   reason: 'not-v1' | 'no-keyed-dims' | 'not-derivable' | 'ok'
-export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, compMinimum, nonManagementTitles, buildDepthCeilings, locationCeilings } = {}) {
+export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, compMinimum, subManagerCeiling, nonManagementTitles, buildDepthCeilings, locationCeilings } = {}) {
   if (!hasV1Frontmatter(md)) return { ok: false, reason: 'not-v1' };
   let parsed;
   try { parsed = parseV1(md); } catch { return { ok: false, reason: 'not-v1' }; }
@@ -113,6 +113,11 @@ export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, c
   if (lc.ceiling !== null && (ceiling === null || lc.ceiling < ceiling)) {
     ceiling = lc.ceiling;
     ceilingSource = `location:${lc.reason}`;
+  }
+  const lvc = levelCeiling(detectedLevel, { minimumLevel, nonManagement: nonManagementTitles, ceiling: subManagerCeiling });
+  if (lvc.ceiling !== null && (ceiling === null || lvc.ceiling < ceiling)) {
+    ceiling = lvc.ceiling;
+    ceilingSource = `level:${lvc.reason}`;
   }
   const res = deriveScore(dimsForScore, { weights, redFlagPenalty, ceiling });
   if (!res.derivable) return { ok: false, reason: 'not-derivable', score: data.score ?? null };
