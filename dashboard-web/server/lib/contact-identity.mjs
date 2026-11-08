@@ -55,10 +55,25 @@ export function linkedinKey(url) {
 // Normalize a person name for matching: drop diacritics, parentheticals (maiden
 // names), post-comma credentials (", MBA"), and emoji/symbols; lowercase; collapse
 // whitespace. Returns the cleaned string.
+// Drops each "(...)" span, from an opening bracket to the next closing one. The pattern /\([^)]*\)/
+// does the same job but rescans to the end of the text for every unclosed "(", which is quadratic on
+// hostile input, so this walks the text once.
+function stripParentheticals(s) {
+  let out = '';
+  let i = 0;
+  for (;;) {
+    const open = s.indexOf('(', i);
+    if (open < 0) break;
+    const close = s.indexOf(')', open + 1);
+    if (close < 0) break;
+    out += s.slice(i, open) + ' ';
+    i = close + 1;
+  }
+  return out + s.slice(i);
+}
+
 export function cleanName(s) {
-  return String(s || '')
-    .normalize('NFKD').replace(/[̀-ͯ]/g, '')   // strip diacritics
-    .replace(/\([^)]*\)/g, ' ')                          // (maiden) / (nickname)
+  return stripParentheticals(String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '')) // strip diacritics, then (maiden) / (nickname)
     .replace(/,.*$/, '')                                 // ", MBA" credentials
     .replace(/[^\p{L}\s'-]/gu, ' ')                      // drop emoji/symbols
     .toLowerCase().replace(/\s+/g, ' ').trim();
