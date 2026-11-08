@@ -55,7 +55,7 @@ function report(extra = {}) {
     date: '2026-01-01',
     url: 'https://jobs.example.test/example',
     jdSnapshot: 'Example role',
-    summary: { seniority: 'Director', compStated: '$150,000 to $180,000 base' },
+    summary: { seniority: 'Director', compStated: '$137,500 to $162,500 base' },
     globalScore: ratings(),
     ...extra,
   };
