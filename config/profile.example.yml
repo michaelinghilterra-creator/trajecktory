@@ -142,6 +142,19 @@ scoring:
     # report without it are still scored by the same headline formula. It is a
     # binary blocker, so it expresses itself through scoreCeiling instead.
     buildDepth: 0
+  # The model names the matching archetype and how strongly. Code maps that choice
+  # using each archetype's fit tier in target_roles.archetypes. Retune numbers here.
+  north_star_ratings:
+    primary:
+      strong: 5
+      partial: 4
+    secondary:
+      strong: 3
+      partial: 2
+    adjacent:
+      strong: 2
+      partial: 1
+    none: 1
   # With comp at 0 the four remaining weights renormalize to fit 0.41,
   # northStar 0.29, level 0.18, location 0.12.
   # Most points subtracted when red flags are severe. The model rates red-flag

@@ -21,6 +21,8 @@ The report file is **JSON frontmatter + a narrative markdown body**, not freefor
   "url": "...",
   "score": <DERIVED, do NOT author this; compute-scores.mjs computes it from globalScore>,
   "scoreCeiling": <optional 0-5 hard cap; set ONLY when a blocker must keep the score low>,
+  "northStarArchetype": "<exact archetype name from the profile, or none>",
+  "northStarMatch": "strong" | "partial" | "none",
   "ceilingBasis": <REQUIRED whenever scoreCeiling is set. One of: "comp" | "location" |
                    "level" | "buildDepth" | "requirement" | "visa" | "other".
                    This DECLARES which blocker caused the cap. Do not leave the code to
@@ -83,6 +85,8 @@ Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a
   { "key": "redFlags",  "dim": "Red Flags",            "val": <0-5>, "max": 5, "evidence": "..." }
 ]
 ```
+
+- Choose `northStarArchetype` from the profile list by its exact name. Use `strong` when the title and scope are the target role, `partial` for adjacent scope or a different function at the right level, and `none` when no archetype fits. Code derives the north star rating from this choice. Still fill the `northStar` entry in `globalScore` with your best 0-5 estimate and one line of evidence, but the classification is what counts.
 
 - Each dimension maps to a block you already reason through: **fit** ← Block B (CV match),
   **northStar** ← archetype / target fit (Step 0 + profile), **level** ← Block C,

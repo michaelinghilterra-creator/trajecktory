@@ -27,7 +27,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs';
-import { deriveScore, loadScoringWeights, SCORE_DIMENSIONS, applyLevelFloor, leadTitle, DEFAULT_MINIMUM_LEVEL, compCeiling, buildDepthCeiling, locationCeiling, levelCeiling, SCORER_VERSION } from './lib/score.mjs';
+import { deriveScore, loadScoringWeights, SCORE_DIMENSIONS, applyLevelFloor, leadTitle, DEFAULT_MINIMUM_LEVEL, compCeiling, buildDepthCeiling, locationCeiling, levelCeiling, northStarRating, SCORER_VERSION } from './lib/score.mjs';
 
 const round1 = (n) => Math.round(n * 10) / 10;
 
@@ -48,7 +48,7 @@ export function withScorerVersion(data, version = SCORER_VERSION) {
 // Pure core: given a report's markdown, return the derivation outcome and (when
 // derivable) the rewritten markdown. No file I/O, so it is unit-tested directly.
 //   reason: 'not-v1' | 'no-keyed-dims' | 'not-derivable' | 'ok'
-export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, compMinimum, subManagerCeiling, nonManagementTitles, buildDepthCeilings, locationCeilings } = {}) {
+export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, compMinimum, northStarTiers, northStarRatings, subManagerCeiling, nonManagementTitles, buildDepthCeilings, locationCeilings } = {}) {
   if (!hasV1Frontmatter(md)) return { ok: false, reason: 'not-v1' };
   let parsed;
   try { parsed = parseV1(md); } catch { return { ok: false, reason: 'not-v1' }; }
@@ -68,7 +68,19 @@ export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, c
   // merely reports to a Director is not misread as one.
   const detectedLevel = (data.levelMatch && data.levelMatch.jdLevel) || (data.summary && data.summary.seniority) || null;
   const floor = applyLevelFloor(gs, detectedLevel, minimumLevel, nonManagementTitles);
-  const dimsForScore = floor.dims;
+  const nsr = northStarRating(data.northStarArchetype, data.northStarMatch, { tiers: northStarTiers, ratings: northStarRatings });
+  const northStarDim = floor.dims.find((d) => d && d.key === 'northStar');
+  const northStarApplied = nsr.rating !== null && Boolean(northStarDim);
+  const priorNorthStarBasis = data.scoreBasis?.northStar;
+  const northStarFrom = priorNorthStarBasis
+    && priorNorthStarBasis.archetype === data.northStarArchetype
+    && priorNorthStarBasis.match === data.northStarMatch
+    && priorNorthStarBasis.to === nsr.rating
+    ? priorNorthStarBasis.from
+    : (typeof northStarDim?.val === 'number' ? northStarDim.val : null);
+  const dimsForScore = northStarApplied
+    ? floor.dims.map((d) => d && d.key === 'northStar' ? { ...d, val: nsr.rating, max: 5 } : d)
+    : floor.dims;
 
   // A hard ceiling (a location you will not work, visa you cannot get) caps the
   // headline no matter how well the rest scores. The eval sets it; the code enforces it.
@@ -131,6 +143,7 @@ export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, c
     // Record the level floor when it fired, so the score change is auditable and the
     // drawer can explain why a Manager+ title scores a full 5 on level.
     ...(floor.floored ? { levelFloor: { applied: true, detectedLevel, from: floor.from, to: 5, minimumLevel: minimumLevel || DEFAULT_MINIMUM_LEVEL } } : {}),
+    ...(northStarApplied ? { northStar: { archetype: data.northStarArchetype, tier: nsr.tier, match: data.northStarMatch, from: northStarFrom, to: nsr.rating, reason: nsr.reason } } : {}),
     // `uncapped` rides along only when a ceiling exists, because that is the only
     // time it differs from the headline. Without it the drawer prints a formula
     // summing to one number under a headline showing another.
@@ -140,12 +153,18 @@ export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, c
   // breakdown matches the headline (the drawer reads globalScore) and annotate the
   // evidence so the change is self-explaining. Otherwise globalScore is untouched.
   let globalScore = data.globalScore;
-  if (floor.floored) {
+  if (floor.floored || northStarApplied) {
     const label = leadTitle(detectedLevel) || String(detectedLevel);
     globalScore = dimsForScore.map((d) => {
       if (d && d.key === 'level') {
+        if (!floor.floored) return d;
         const base = typeof d.evidence === 'string' && d.evidence ? d.evidence.trimEnd() + ' ' : '';
         return { ...d, evidence: `${base}[Level floored to 5: "${label}" is at or above the ${minimumLevel || DEFAULT_MINIMUM_LEVEL} minimum — an in-scope title is a full level match, not a downlevel (policy 2026-08-17).]` };
+      }
+      if (d && d.key === 'northStar' && northStarApplied) {
+        const note = `[North star set from the archetype classification: ${data.northStarArchetype} / ${data.northStarMatch}.]`;
+        const evidence = typeof d.evidence === 'string' ? d.evidence : '';
+        return evidence.includes(note) ? d : { ...d, evidence: `${evidence ? evidence.trimEnd() + ' ' : ''}${note}` };
       }
       return d;
     });
