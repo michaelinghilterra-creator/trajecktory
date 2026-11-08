@@ -255,6 +255,10 @@ window.kbdActivate = (fn) => (e) => {
 // 403 is rejected by the auth middleware before any handler runs, so the retry
 // never double-writes. Non-403 responses pass straight through unchanged.
 const tjkInFlightGets = new Map();
+// Settings reads that only a tjkMutate write can change stay shared for a moment after they land, so the
+// startup check and the first component read make one request. Other reads are shared only while in flight.
+const TJK_SHORT_LIVED_GETS = new Set(['/api/setup/models']);
+const TJK_SHORT_LIVED_MS = 2500;
 
 window.tjkMutate = async function tjkMutate(url, options) {
   tjkInFlightGets.clear();
@@ -285,7 +289,10 @@ window.tjkGetJson = function tjkGetJson(url, options) {
     const clear = () => {
       if (tjkInFlightGets.get(key) === request) tjkInFlightGets.delete(key);
     };
-    request.then(clear, clear);
+    request.then(
+      () => { if (TJK_SHORT_LIVED_GETS.has(key)) setTimeout(clear, TJK_SHORT_LIVED_MS); else clear(); },
+      clear,
+    );
   }
   return request.then(data => typeof structuredClone === 'function'
     ? structuredClone(data)

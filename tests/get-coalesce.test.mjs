@@ -41,9 +41,11 @@ function harness() {
     return promise;
   };
   const window = { dispatchEvent() {} };
-  const context = vm.createContext({ window, fetch, structuredClone, CustomEvent: class CustomEvent {} });
+  const timers = [];
+  const setTimeout = (fn) => { timers.push(fn); return timers.length; };
+  const context = vm.createContext({ window, fetch, setTimeout, structuredClone, CustomEvent: class CustomEvent {} });
   vm.runInContext(helperSource, context);
-  return { window, calls };
+  return { window, calls, timers };
 }
 
 const response = (body, status = 200) => ({ status, json: () => Promise.resolve(body) });
@@ -114,6 +116,30 @@ console.log('get-coalesce.test.mjs');
   check(calls.filter(call => call.url === '/clear').length === 2, 'a mutation separates reads started before and after it');
   for (const call of calls) call.resolve(response({ ok: true }));
   await Promise.all([before, mutation, after]);
+}
+
+{
+  const { window, calls, timers } = harness();
+  const first = window.tjkGetJson('/api/setup/models');
+  calls[0].resolve(response({ hasKey: true }));
+  await first;
+  const again = window.tjkGetJson('/api/setup/models');
+  check(calls.length === 1, 'a models read right after the first one reuses it');
+  check((await again).hasKey === true, 'the reused models read still returns its data');
+  timers.forEach(fn => fn());
+  window.tjkGetJson('/api/setup/models');
+  check(calls.length === 2, 'a models read after the short window makes a new request');
+  calls[1].resolve(response({ hasKey: false }));
+  await window.tjkGetJson('/api/setup/models');
+  window.tjkMutate('/api/setup/models', { method: 'POST' });
+  window.tjkGetJson('/api/setup/models');
+  check(calls.filter(call => call.url === '/api/setup/models' && !call.options).length === 3, 'a write clears the short shared window');
+  const other = harness();
+  const p = other.window.tjkGetJson('/api/followups/stale');
+  other.calls[0].resolve(response({ ok: 1 }));
+  await p;
+  other.window.tjkGetJson('/api/followups/stale');
+  check(other.calls.length === 2, 'follow-up reads are never reused after they land');
 }
 
 const shared = readFileSync(join(ROOT, 'dashboard-web', 'src', 'shared.jsx'), 'utf8');
