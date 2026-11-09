@@ -686,6 +686,7 @@ for (const suite of [
   'tests/finish-draft.test.mjs',
   'tests/profile-narrative.test.mjs',
   'tests/obsidian-prep.test.mjs',
+  'tests/obsidian-prep-similarity.test.mjs',
   'tests/batch-runner-sandbox.test.mjs',
   'tests/batch-runner-min-score.test.mjs',
   'tests/obsidian-nightly.test.mjs',
