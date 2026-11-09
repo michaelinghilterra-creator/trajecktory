@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.27.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.27.1...v5.27.2) (2026-11-09)
+
+
+### Bug Fixes
+
+* catch cross-board reposts in the nightly prep step ([#514](https://github.com/michaelinghilterra-creator/trajecktory/issues/514)) ([9377ad4](https://github.com/michaelinghilterra-creator/trajecktory/commit/9377ad468fb636b657b936e91606c6153f00e249))
+
 ## [5.27.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.27.0...v5.27.1) (2026-11-09)
 
 
