@@ -46,6 +46,11 @@ const samples = [
   undefined,
   "O'Example Personone \u{1F600}",
   'Example   Personone\t(x)\n(y) Third',
+  'Example, Personone\nThird, MBA',
+  'Example, Personone\r\nThird',
+  'Example, Personone, MBA',
+  ',,,\n,,,',
+  'Example Personone\n, MBA',
 ];
 let same = true;
 for (const sample of samples) {
@@ -58,7 +63,7 @@ check(same, 'cleanName matches the original on ordinary, nested, unclosed and em
 
 let seed = 20310101;
 const next = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed; };
-const alphabet = ['(', ')', 'a', 'b', ' ', ',', '-', "'"];
+const alphabet = ['(', ')', 'a', 'b', ' ', ',', ',', '-', "'", '\n', '\r', ' '];
 let randomSame = true;
 for (let i = 0; i < 400; i++) {
   let text = '';
@@ -72,6 +77,11 @@ const hostile = '('.repeat(200000) + ' Example Personone';
 const start = Date.now();
 const result = cleanName(hostile);
 check(Date.now() - start < 2000 && typeof result === 'string', 'a very long run of unclosed brackets is cleaned in linear time');
+
+const commas = ','.repeat(200000) + '\nExample Personone';
+const commaStart = Date.now();
+const commaResult = cleanName(commas);
+check(Date.now() - commaStart < 2000 && typeof commaResult === 'string', 'a very long run of commas followed by a line break is cleaned in linear time');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
