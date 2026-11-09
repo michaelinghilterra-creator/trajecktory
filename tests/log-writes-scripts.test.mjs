@@ -306,10 +306,11 @@ function copyRuntime(sandbox, script) {
   }
 }
 
-function runScript(sandbox, script, args = []) {
+function runScript(sandbox, script, args = [], extraEnv = {}) {
   return spawnSync(process.execPath, [path.join(sandbox, script), ...args], {
     cwd: sandbox,
     encoding: 'utf8',
+    env: { ...process.env, ...extraEnv },
   });
 }
 
@@ -522,8 +523,10 @@ console.log('\nverify-actionable');
   const on = setupVerifySandbox('verify-log-on', true);
   const offStatusBefore = fileBytes(off, 'data/status-events.tsv');
   const onStatusBefore = fileBytes(on, 'data/status-events.tsv');
-  const offRun = runScript(off, 'verify-actionable.mjs', ['--apply', '--confirm-delay', '0']);
-  const onRun = runScript(on, 'verify-actionable.mjs', ['--apply', '--confirm-delay', '0']);
+  // The write path only runs with liveness discarding switched on.
+  const discardOn = { TJK_LIVENESS_DISCARD: '1' };
+  const offRun = runScript(off, 'verify-actionable.mjs', ['--apply', '--confirm-delay', '0'], discardOn);
+  const onRun = runScript(on, 'verify-actionable.mjs', ['--apply', '--confirm-delay', '0'], discardOn);
   const store = openEventStore(path.join(on, 'data/trajecktory.db'));
   const statusEvents = readEvents(store).filter(event => event.type === 'status_changed' && event.source === 'cli');
   const dirty = store.db.prepare('SELECT COUNT(*) AS n FROM legacy_render_state WHERE dirty > 0').get().n;

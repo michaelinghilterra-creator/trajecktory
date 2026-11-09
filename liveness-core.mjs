@@ -33,7 +33,33 @@ const APPLY_PATTERNS = [
   /ich bewerbe mich/i,
 ];
 
+// Bot protection (Akamai, Cloudflare, PerimeterX, Imperva) answers a headless
+// browser with a short block page. That page says nothing about the posting, so
+// it must never read as "expired": it used to fall through to the thin-content
+// rule below and live jobs were discarded as closed.
+const BLOCKED_STATUSES = new Set([401, 403, 429, 999]);
+const BOT_WALL_PATTERNS = [
+  /you don.t have permission to access/i,
+  /errors\.edgesuite\.net/i,
+  /just a moment\.\.\./i,
+  /checking (if the site connection is secure|your browser)/i,
+  /verify (that )?you are (a )?human/i,
+  /attention required.{0,5}cloudflare/i,
+  /press (&|and) hold/i,
+  /pardon our interruption/i,
+  /request unsuccessful\. incapsula/i,
+];
+
 const MIN_CONTENT_CHARS = 300;
+
+// Liveness verdicts may only DISCARD a posting (gate it out of the pipeline, or
+// flip an Evaluated row to Passed) when this switch is on. It is OFF by default
+// since 2026-11-09: a spot check found most "dead" verdicts were live jobs. While
+// off, both checks still run and log every verdict so the checker can be
+// measured against reality before discarding is trusted again.
+export function livenessDiscardEnabled(env = process.env) {
+  return env.TJK_LIVENESS_DISCARD === '1';
+}
 
 function firstMatch(patterns, text = '') {
   return patterns.find((pattern) => pattern.test(text));
@@ -60,6 +86,10 @@ export function classifyLiveness({ status = 0, finalUrl = '', bodyText = '', app
 
   if (hasApplyControl(applyControls)) {
     return { result: 'active', reason: 'visible apply control detected' };
+  }
+
+  if (BLOCKED_STATUSES.has(status) || firstMatch(BOT_WALL_PATTERNS, bodyText)) {
+    return { result: 'uncertain', reason: `blocked by bot protection${status ? ` (HTTP ${status})` : ''}` };
   }
 
   const listingPage = firstMatch(LISTING_PAGE_PATTERNS, bodyText);

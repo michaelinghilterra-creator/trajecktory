@@ -21,7 +21,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { launchSandboxedChromium } from './lib/sandboxed-chromium.mjs';
 import yaml from 'js-yaml';
-import { classifyLiveness, parseWorkdayUrl, checkWorkdayLiveness, workdaySiteFromCareersUrl } from './liveness-core.mjs';
+import { classifyLiveness, parseWorkdayUrl, checkWorkdayLiveness, workdaySiteFromCareersUrl, livenessDiscardEnabled } from './liveness-core.mjs';
 import { isSafeLivenessUrl } from './lib/safe-url.mjs';
 import { buildDecidedIndex, findDecided, buildActiveRoleIndex, findActiveRepost, sourceUrlFromSnapshot, normalizeCompany } from './lib/identity.mjs';
 import { appendGateHistory } from './lib/gate-history.mjs';
@@ -338,7 +338,8 @@ async function checkOne(item) {
     const bodyText = await page.evaluate(() => document.body?.innerText ?? '');
     const applyControls = await page.evaluate(() => {
       const els = Array.from(document.querySelectorAll('a, button, input[type="submit"], input[type="button"], [role="button"]'));
-      return els.filter(el => !el.closest('nav, header, footer, [aria-hidden="true"]'))
+      // No aria-hidden exclusion: a sign-in modal marks the page aria-hidden.
+      return els.filter(el => !el.closest('nav, header, footer'))
                 .map(el => (el.innerText || el.value || '').trim())
                 .filter(Boolean);
     });
@@ -393,7 +394,13 @@ console.log('');
 // (the batch agent can read the JD even if the page lacks an apply button —
 // it's the dead/expired ones we want to keep out of LLM scope).
 const newLines = [...lines];
-for (const r of dead) {
+// Discarding is OFF unless TJK_LIVENESS_DISCARD=1: dead verdicts stay pending
+// and are only logged to gate-history.tsv below, so they can be measured.
+const discardOn = livenessDiscardEnabled();
+if (!discardOn && dead.length) {
+  console.log(`Liveness discard is OFF: ${dead.length} "dead" URLs kept pending (verdicts logged only).`);
+}
+for (const r of discardOn ? dead : []) {
   const reasonShort = (r.reason || 'closed').replace(/[\r\n]+/g, ' ').slice(0, 60);
   newLines[r.idx] = `- [!] ${r.url}${r.suffix} — gated: ${reasonShort}`;
 }
@@ -412,6 +419,7 @@ if (dryRun) {
 
 writeFileSync(PIPELINE, newLines.join('\n'));
 appendGateHistory(GATE_HISTORY, gateHistoryRows);
-console.log(`Rewrote ${PIPELINE} — ${dead.length} entries flipped to "- [!]" (gated).`);
-console.log(`Batch will now process only ${live.length + uncertain.length} URLs.`);
+const flipped = discardOn ? dead.length : 0;
+console.log(`Rewrote ${PIPELINE} — ${flipped} entries flipped to "- [!]" (gated).`);
+console.log(`Batch will now process only ${live.length + uncertain.length + (dead.length - flipped)} URLs.`);
 console.log(`Logged ${gateHistoryRows.length} verdicts to data/gate-history.tsv (audit trail, survives a pipeline.md loss).`);
