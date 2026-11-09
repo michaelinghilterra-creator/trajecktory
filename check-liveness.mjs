@@ -44,8 +44,10 @@ async function probePage(page, url) {
 
     return candidates
       .filter((element) => {
+        // No aria-hidden exclusion: a sign-in modal (LinkedIn) marks the whole
+        // page aria-hidden, which hid a visible Apply button and discarded live
+        // jobs. The size and style checks below already drop hidden elements.
         if (element.closest('nav, header, footer')) return false;
-        if (element.closest('[aria-hidden="true"]')) return false;
 
         const style = window.getComputedStyle(element);
         if (style.display === 'none' || style.visibility === 'hidden') return false;
@@ -93,7 +95,8 @@ async function checkUrl(browser, sharedPage, url, isolated) {
   try {
     return await probePage(page, url);
   } catch (err) {
-    return { result: 'expired', reason: `navigation error: ${err.message.split('\n')[0]}` };
+    // A timeout or network error says nothing about the posting.
+    return { result: 'uncertain', reason: `navigation error: ${err.message.split('\n')[0]}` };
   } finally {
     if (isolated) await page.close();
   }

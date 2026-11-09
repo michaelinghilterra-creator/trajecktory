@@ -154,3 +154,6 @@ HANDOFF.md
 # used to mkdtemp straight into the repo root, so a leftover was an untracked
 # directory one `git add -A` away from being committed. Contained here instead.
 .test-sandboxes/
+
+# Written by the nightly prep step; lists real posting links, never commit
+batch/obsidian-auto-sourced.txt

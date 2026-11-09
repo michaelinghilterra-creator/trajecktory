@@ -48,10 +48,14 @@ function setup(name, rows, stub) {
   return sandbox;
 }
 
-function run(sandbox, args) {
+function run(sandbox, args, discard = '1') {
+  const env = { ...process.env };
+  if (discard === null) delete env.TJK_LIVENESS_DISCARD;
+  else env.TJK_LIVENESS_DISCARD = discard;
   return spawnSync(process.execPath, [path.join(sandbox, 'verify-actionable.mjs'), ...args], {
     cwd: sandbox,
     encoding: 'utf8',
+    env,
   });
 }
 
@@ -94,13 +98,28 @@ check(fs.readFileSync(path.join(confirmSandbox, 'liveness-count.txt'), 'utf8') =
   'apply invokes the liveness checker twice');
 check(byId.get(900101)?.status === 'Passed' && /posting_closed/.test(byId.get(900101)?.notes || ''),
   'an expired verdict confirmed as expired is flipped');
-check(byId.get(900104)?.status === 'Passed' && /passed: discarded/.test(byId.get(900104)?.notes || ''),
-  'an uncertain verdict confirmed as uncertain is flipped');
+check(byId.get(900104)?.status === 'Evaluated',
+  'an uncertain verdict never flips a row, even with discard enabled');
 check(byId.get(900102)?.status === 'Evaluated' && byId.get(900103)?.status === 'Evaluated',
   'active and changed confirmation verdicts keep their rows Evaluated');
 check(/Unconfirmed, kept as Evaluated:/.test(confirmedRun.stdout)
-  && /Flipped 2 entries to Passed; 2 unconfirmed\./.test(confirmedRun.stdout),
+  && /Flipped 1 entries to Passed; 2 unconfirmed\./.test(confirmedRun.stdout),
   'output identifies unconfirmed rows and summarizes both counts');
+
+const offSandbox = setup('verify-actionable-off', [
+  row(900106, 'expired-twice'),
+  row(900107, 'uncertain-twice'),
+], confirmStub);
+const offBefore = fs.readFileSync(path.join(offSandbox, 'data', 'applications.md'), 'utf8');
+const offRun = run(offSandbox, ['--apply', '--confirm-delay', '0'], null);
+const offAfter = fs.readFileSync(path.join(offSandbox, 'data', 'applications.md'), 'utf8');
+const observations = path.join(offSandbox, 'data', 'liveness-observations.tsv');
+check(offRun.status === 0 && offBefore === offAfter,
+  'with the discard switch unset, apply changes no tracker rows');
+check(fs.existsSync(observations)
+  && fs.readFileSync(observations, 'utf8').trim().split('\n').length === 3,
+  'with the discard switch unset, every verdict is logged for later measurement');
+check(/Liveness discard is OFF/.test(offRun.stdout), 'output says discarding is off');
 
 const dryStub = `
 import fs from 'node:fs';

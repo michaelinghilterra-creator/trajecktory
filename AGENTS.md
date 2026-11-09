@@ -88,6 +88,7 @@ AI-powered job search, run from a local dashboard: pipeline tracking, offer scor
 | `scan.mjs` | Zero-token portal scanner — hits Greenhouse/Ashby/Lever APIs directly, zero LLM cost |
 | `repair-workday-urls.mjs` | Restores the careers-site segment in stored Workday links that the scanner saved without one before v5.13.1 (`node repair-workday-urls.mjs` dry run, then `--apply`). The site is read from `portals.yml`; a tenant with several sites, or none known, is reported and left alone. Only the url cell is written, with a timestamped backup and a byte-identical check of every other cell. |
 | `check-liveness.mjs` | Job posting liveness checker |
+| `data/liveness-observations.tsv` | Every verdict `verify-actionable.mjs` reached while liveness discarding is off, for measuring the checker against reality |
 | `liveness-core.mjs` | Shared liveness logic (expired signals win over generic Apply text) |
 | `reports/` | Evaluation reports (format: `{###}-{company-slug}-{YYYY-MM-DD}.md`). Blocks A-F + G (Posting Legitimacy). Header includes `**Legitimacy:** {tier}`. |
 
@@ -697,9 +698,10 @@ verification in the summary.
 - JDs in `jds/` (referenced as `local:jds/{file}` in pipeline.md)
 - Batch in `batch/` (gitignored except scripts and prompt)
 - Report numbering: obtain the number from the persistent counter — run `node next-jd.mjs` (prints the next number; `--pad` for 3-digit zero-padded). NEVER compute "max existing + 1" by hand: report files get pruned, so a hand-computed max reuses numbers across different companies and drifts away from the tracker id. The counter is monotonic, never reused, and keeps the report number == the tracker id.
+- **Liveness discarding is OFF by default (since 2026-11-09).** A spot check found most "dead" verdicts were live jobs (LinkedIn sign-in modals hid the Apply button, bot-protection 403 pages read as closed, and "uncertain" was treated as dead). Until `TJK_LIVENESS_DISCARD=1` is set, `gate-pipeline.mjs` keeps "dead" URLs pending and `verify-actionable.mjs --apply` changes no rows; both still run and log every verdict (`data/gate-history.tsv`, `data/liveness-observations.tsv`) so the checker can be measured. Even when switched on, an `uncertain` verdict never discards anything. The two RULE lines below describe the behavior with the switch on.
 - **RULE: BEFORE every batch run, run `node gate-pipeline.mjs`** to liveness-check every pending URL in `data/pipeline.md`. Dead URLs get flipped from `- [ ]` to `- [!]` with a closure reason, so the batch agent skips them entirely. This is the most important step — without it, you spend Claude tokens evaluating dead postings (a 60-URL batch can be 80%+ dead from WebSearch index staleness). The gate runs Playwright in the parent process where it works correctly (sub-agents cannot use Playwright).
 - **RULE: After each batch of evaluations, run `node merge-tracker.mjs`** to merge tracker additions and avoid duplications.
-- **RULE: After every batch merge, run `node verify-actionable.mjs --apply`** as a safety net to catch any dead URLs that slipped past the pre-batch gate (e.g., postings that closed between gate-time and apply-time). Auto-flips Evaluated to Passed for any URL that no longer accepts applications.
+- **RULE: After every batch merge, run `node verify-actionable.mjs --apply`** as a safety net to catch any dead URLs that slipped past the pre-batch gate (e.g., postings that closed between gate-time and apply-time). Auto-flips Evaluated to Passed for any URL confirmed expired twice (only with `TJK_LIVENESS_DISCARD=1`; otherwise it reports and logs only).
 
 **The one true batch workflow:**
 

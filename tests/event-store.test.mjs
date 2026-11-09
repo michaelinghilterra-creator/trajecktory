@@ -48,7 +48,7 @@ const dir = makeSandbox('event-store-test');
 
 {
   const store = openEventStore(join(dir, 'pragmas.db'));
-  check(store.db.prepare('PRAGMA busy_timeout').get().timeout === 5000, 'open sets busy_timeout to 5000');
+  check(store.db.prepare('PRAGMA busy_timeout').get().timeout === 30000, 'open sets busy_timeout to 30000');
   check(store.db.prepare('PRAGMA foreign_keys').get().foreign_keys === 1, 'open enables foreign_keys');
   store.close();
 }

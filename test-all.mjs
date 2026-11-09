@@ -126,6 +126,18 @@ try {
   } else {
     fail(`Active job page misclassified as ${activeWorkdayPage.result}`);
   }
+
+  const botWall = classifyLiveness({
+    status: 403,
+    finalUrl: 'https://jobs.example.test/job-detail/?gh_jid=1',
+    bodyText: 'Access Denied\nYou don\'t have permission to access this page on this server.',
+    applyControls: [],
+  });
+  if (botWall.result === 'uncertain') {
+    pass('A bot-protection block page is uncertain, never expired');
+  } else {
+    fail(`Bot-protection block page misclassified as ${botWall.result}`);
+  }
 } catch (e) {
   fail(`Liveness classification tests crashed: ${e.message}`);
 }
@@ -454,6 +466,7 @@ for (const suite of [
   'tests/health-check.test.mjs',
   'tests/verify-reports-comp.test.mjs',
   'tests/verify-actionable.test.mjs',
+  'tests/liveness-truth.test.mjs',
   'tests/no-live-dir-writes.test.mjs',
   'tests/discard.test.mjs',
   'tests/scan-core.test.mjs',

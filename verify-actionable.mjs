@@ -1,8 +1,12 @@
 #!/usr/bin/env node
-// Check every Evaluated tracker entry and optionally move confirmed dead or
-// non-actionable postings to Passed. Dry run is the default.
+// Check every Evaluated tracker entry and optionally move confirmed dead
+// postings to Passed. Dry run is the default.
+//
+// Discarding is OFF unless TJK_LIVENESS_DISCARD=1 (same switch as
+// livenessDiscardEnabled() in liveness-core.mjs). While off, --apply only
+// reports and appends every verdict to data/liveness-observations.tsv.
 
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, appendFileSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -63,18 +67,50 @@ function runLiveness(checkTargets) {
   }
   const outLines = output.split('\n');
   return checkTargets.map(t => {
-    const statusLine = outLines.find(line => line.includes(t.url));
-    if (!statusLine) return { ...t, livenessStatus: 'unknown' };
-    if (/\bactive\b/i.test(statusLine)) return { ...t, livenessStatus: 'active' };
-    if (/\bexpired\b/i.test(statusLine)) return { ...t, livenessStatus: 'expired' };
-    if (/\buncertain\b/i.test(statusLine)) return { ...t, livenessStatus: 'uncertain' };
-    return { ...t, livenessStatus: 'unknown' };
+    const idx = outLines.findIndex(line => line.includes(t.url));
+    const statusLine = idx >= 0 ? outLines[idx] : '';
+    const livenessReason = idx >= 0 ? (outLines[idx + 1] || '').trim() : '';
+    if (!statusLine) return { ...t, livenessStatus: 'unknown', livenessReason };
+    if (/\bactive\b/i.test(statusLine)) return { ...t, livenessStatus: 'active', livenessReason };
+    if (/\bexpired\b/i.test(statusLine)) return { ...t, livenessStatus: 'expired', livenessReason };
+    if (/\buncertain\b/i.test(statusLine)) return { ...t, livenessStatus: 'uncertain', livenessReason };
+    return { ...t, livenessStatus: 'unknown', livenessReason };
   });
 }
 
+const discardEnabled = process.env.TJK_LIVENESS_DISCARD === '1';
+const OBSERVATIONS = join(DATA_DIR, 'liveness-observations.tsv');
+function logObservations(rows) {
+  if (!rows.length) return;
+  if (!existsSync(OBSERVATIONS)) {
+    writeFileSync(OBSERVATIONS, 'date\tsource\tid\tcompany\tscore\turl\tverdict\treason\n', 'utf8');
+  }
+  const clean = value => String(value ?? '').replace(/[\t\r\n]+/g, ' ');
+  appendFileSync(OBSERVATIONS, rows.map(t => [
+    localToday(), 'verify-actionable', t.id, t.company, t.score, t.url, t.livenessStatus, t.livenessReason,
+  ].map(clean).join('\t')).join('\n') + '\n', 'utf8');
+}
+
 console.log(`Checking ${targets.length} Evaluated entries for liveness...\n`);
-const expired = runLiveness(targets)
-  .filter(t => t.livenessStatus === 'expired' || t.livenessStatus === 'uncertain');
+const firstResults = runLiveness(targets);
+// Only a definite "expired" verdict may ever flip a row. "uncertain" means the
+// checker could not tell (bot wall, sign-in modal, timeout); flipping those
+// discarded live, high-scoring jobs for months.
+const uncertainRows = firstResults.filter(t => t.livenessStatus === 'uncertain' || t.livenessStatus === 'unknown');
+if (uncertainRows.length > 0) {
+  console.log('Could not confirm, kept as Evaluated:');
+  for (const t of uncertainRows) console.log(`  #${t.id} ${t.company}: ${t.livenessStatus}`);
+  console.log('');
+}
+const expired = firstResults.filter(t => t.livenessStatus === 'expired');
+
+if (apply && !discardEnabled) {
+  logObservations(firstResults);
+  console.log(`Liveness discard is OFF (set TJK_LIVENESS_DISCARD=1 to enable). No rows changed.`);
+  console.log(`${expired.length} entries looked expired; ${firstResults.length} verdicts logged to data/liveness-observations.tsv.`);
+  for (const t of expired) console.log(`  #${t.id} ${t.company}: ${t.livenessReason}`);
+  process.exit(0);
+}
 
 if (expired.length === 0) {
   console.log('All checked entries are still live.');
