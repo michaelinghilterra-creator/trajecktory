@@ -63,7 +63,8 @@ test('prep lists only tagged survivors in canonical form', () => {
 
   const lines = fs.readFileSync(path.join(setup.repo, 'batch', 'obsidian-auto-sourced.txt'), 'utf8')
     .split(/\r?\n/).filter(Boolean);
-  assert.deepEqual(lines, [canonicalUrl(tagged)]);
+  // The local: note path is listed too: merge-tracker sees that path, not the posting URL, for most notes.
+  assert.deepEqual(lines, [canonicalUrl(tagged), `local:${path.resolve(setup.source, 'Tagged.md')}`]);
 });
 
 test('prep rewrites an empty auto sourced list when no survivor is tagged', () => {

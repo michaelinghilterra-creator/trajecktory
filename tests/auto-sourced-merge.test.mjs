@@ -71,6 +71,10 @@ check(/added-auto-sourced/.test(tagged.sourceLog), 'auto sourced addition is log
 const replaced = runCase({ num: 1002, url: 'https://jobs.example.test/roles/12', listed: true, notes: '[self-sourced] Invented note' });
 check(/\[auto-sourced\]/i.test(replaced.row.notes) && !/\[self-sourced\]/i.test(replaced.row.notes), 'stray self sourced tag is replaced');
 
+const localNote = runCase({ num: 1008, url: 'local:C:\\Fixture Vault\\Open Roles\\Invented Role.md', listed: true });
+check(/\[auto-sourced\]/i.test(localNote.row.notes) && !/\[self-sourced\]/i.test(localNote.row.notes),
+  'a listed local note path receives the auto sourced tag');
+
 const ordinary = runCase({ num: 1003, url: 'https://jobs.example.test/roles/13' });
 check(/\[self-sourced\]/i.test(ordinary.row.notes), 'unlisted URL remains self sourced');
 
