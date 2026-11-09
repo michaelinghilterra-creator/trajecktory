@@ -55,11 +55,38 @@ export function linkedinKey(url) {
 // Normalize a person name for matching: drop diacritics, parentheticals (maiden
 // names), post-comma credentials (", MBA"), and emoji/symbols; lowercase; collapse
 // whitespace. Returns the cleaned string.
+// Drops each "(...)" span, from an opening bracket to the next closing one. The pattern /\([^)]*\)/
+// does the same job but rescans to the end of the text for every unclosed "(", which is quadratic on
+// hostile input, so this walks the text once.
+function stripParentheticals(s) {
+  let out = '';
+  let i = 0;
+  for (;;) {
+    const open = s.indexOf('(', i);
+    if (open < 0) break;
+    const close = s.indexOf(')', open + 1);
+    if (close < 0) break;
+    out += s.slice(i, open) + ' ';
+    i = close + 1;
+  }
+  return out + s.slice(i);
+}
+
+// Drops ", MBA" style credentials: from the first comma that has no line break after it, to the end.
+// The pattern /,.*$/ does the same job but retries from every comma when a line break stops the dot,
+// which is quadratic on hostile input, so this finds that comma in one backward and one forward scan.
+function stripCredentials(s) {
+  let lastBreak = -1;
+  for (let i = s.length - 1; i >= 0; i--) {
+    const code = s.charCodeAt(i);
+    if (code === 10 || code === 13 || code === 0x2028 || code === 0x2029) { lastBreak = i; break; }
+  }
+  const comma = s.indexOf(',', lastBreak + 1);
+  return comma < 0 ? s : s.slice(0, comma);
+}
+
 export function cleanName(s) {
-  return String(s || '')
-    .normalize('NFKD').replace(/[̀-ͯ]/g, '')   // strip diacritics
-    .replace(/\([^)]*\)/g, ' ')                          // (maiden) / (nickname)
-    .replace(/,.*$/, '')                                 // ", MBA" credentials
+  return stripCredentials(stripParentheticals(String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, ''))) // strip diacritics, then (maiden) / (nickname), then ", MBA" credentials
     .replace(/[^\p{L}\s'-]/gu, ' ')                      // drop emoji/symbols
     .toLowerCase().replace(/\s+/g, ' ').trim();
 }
