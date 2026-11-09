@@ -76,7 +76,7 @@ function runPrep({ source, triaged, dupes, repo }) {
   ], { encoding: 'utf8' });
 }
 
-test('prep quarantines a near-identical posting already evaluated from the ledger', () => {
+test('prep drops a near-identical posting already evaluated from the ledger', () => {
   const tmp = makeSandbox('obsidian-prep-similar-tracker');
   try {
     const setup = prepare(tmp);
@@ -113,7 +113,7 @@ test('prep quarantines a near-identical posting already evaluated from the ledge
   }
 });
 
-test('prep quarantines a near-identical posting matching an evaluated note', () => {
+test('prep drops a near-identical posting matching an evaluated note', () => {
   const tmp = makeSandbox('obsidian-prep-similar-triaged');
   try {
     const setup = prepare(tmp);
