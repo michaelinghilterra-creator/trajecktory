@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.28.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.27.2...v5.28.0) (2026-11-09)
+
+
+### Features
+
+* tag nightly sourcer finds as auto-sourced, not self-sourced ([#516](https://github.com/michaelinghilterra-creator/trajecktory/issues/516)) ([0a6ae4c](https://github.com/michaelinghilterra-creator/trajecktory/commit/0a6ae4c411c7e06c7751ddda48bfba30d7711deb))
+
 ## [5.27.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.27.1...v5.27.2) (2026-11-09)
 
 
