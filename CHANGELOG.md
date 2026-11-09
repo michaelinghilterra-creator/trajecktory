@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.27.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.27.0...v5.27.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* clean person names in linear time and patch minimatch ([#512](https://github.com/michaelinghilterra-creator/trajecktory/issues/512)) ([cd96b61](https://github.com/michaelinghilterra-creator/trajecktory/commit/cd96b61237e1aac4856aad34829cd74093d4370a))
+
 ## [5.27.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.26.2...v5.27.0) (2026-11-08)
 
 
