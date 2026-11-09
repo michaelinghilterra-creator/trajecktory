@@ -76,7 +76,7 @@ function runPrep({ source, triaged, dupes, repo }) {
   ], { encoding: 'utf8' });
 }
 
-test('prep quarantines a similar tracker snapshot repost', () => {
+test('prep quarantines a near-identical posting already evaluated from the ledger', () => {
   const tmp = makeSandbox('obsidian-prep-similar-tracker');
   try {
     const setup = prepare(tmp);
@@ -113,7 +113,7 @@ test('prep quarantines a similar tracker snapshot repost', () => {
   }
 });
 
-test('prep quarantines a similar evaluated triaged note', () => {
+test('prep quarantines a near-identical posting matching an evaluated note', () => {
   const tmp = makeSandbox('obsidian-prep-similar-triaged');
   try {
     const setup = prepare(tmp);
@@ -201,7 +201,7 @@ test('prep preserves text role and length similarity negatives', () => {
     ));
     fs.writeFileSync(path.join(setup.source, 'Different Role.md'), obsidian(
       'https://jobs.example.test/roles/900008',
-      'Pricing Strategy Director',
+      'Ledger Harmonization Director',
       nearCopyText,
       { company: 'Quennox Ratchet Works', created: '2030-04-02' },
     ));

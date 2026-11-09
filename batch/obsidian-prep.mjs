@@ -134,10 +134,12 @@ export async function main(argv = process.argv.slice(2), { fetchImpl = globalThi
   const triagedKeys = new Set();
   const triagedNotes = [];
   for (const file of markdownFiles(options.triaged)) {
-    const note = frontmatter(fs.readFileSync(file, 'utf8'));
-    const key = canonicalUrl(note.sourceUrl);
+    const text = fs.readFileSync(file, 'utf8');
+    const { sourceUrl } = frontmatter(text);
+    const key = canonicalUrl(sourceUrl);
     if (key) triagedKeys.add(key);
-    if (note.company && note.title) triagedNotes.push({ file, company: note.company, title: note.title, body: null });
+    const { company, title: noteTitle } = frontmatter(text);
+    if (company && noteTitle) triagedNotes.push({ file, company, title: noteTitle, body: null });
   }
 
   // A repost on another board has a different URL, so the URL checks never see it. These compare the
