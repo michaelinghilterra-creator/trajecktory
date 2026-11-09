@@ -206,11 +206,13 @@ function normalizeSector(raw) {
 
 // Classify how this entry entered the tracker — for the dashboard "Source" column.
 //   Self-sourced — user pasted the JD manually (notes tagged [self-sourced])
+//   Auto-sourced — collected by the nightly sourcer (Sparky or the laptop channels), notes tagged [auto-sourced]
 //   Referral     — came via a referral (notes tagged [referral: NAME])
 //   API Scan     — zero-token scanner hit a Greenhouse/Ashby/Lever endpoint
 //   Agent Scan   — agent ran /trajecktory scan against a non-API portal
 function classifySource(notes, url) {
   if (/\[self-sourced\]/i.test(notes)) return 'Self-sourced';
+  if (/\[auto-sourced\]/i.test(notes)) return 'Auto-sourced';
   if (/\[referral:/i.test(notes))      return 'Referral';
   // [cowork] is a resume-tailoring ENGINE tag, not a JD source — let those rows
   // fall through to URL-based classification (API Scan / Agent Scan) instead of
@@ -318,7 +320,7 @@ function parseApplicationsMd() {
       size: null,
       url,
       jdSnapshot,          // in-repo `jds/<file>.md` — the Open JD fallback when url isn't web-openable
-      source,              // 'Self-sourced' | 'Referral' | 'API Scan' | 'Agent Scan'
+      source,              // 'Self-sourced' | 'Auto-sourced' | 'Referral' | 'API Scan' | 'Agent Scan'
       legitimacy,          // 'High Confidence' | 'Proceed with Caution' | 'Suspicious' | null
       scorerVersion: header?.scorerVersion ?? null, // which scoring rules made the score: a date, 'authored', or null
     });

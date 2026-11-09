@@ -46,9 +46,9 @@ function argumentsFor(argv) {
 function frontmatter(text) {
   const lines = String(text).split(/\r?\n/);
   const boundary = '-'.repeat(3);
-  if (lines[0] !== boundary) return { sourceUrl: '', title: '', company: '', created: '', body: String(text) };
+  if (lines[0] !== boundary) return { sourceUrl: '', title: '', company: '', created: '', sourcer: false, body: String(text) };
   const end = lines.indexOf(boundary, 1);
-  if (end < 0) return { sourceUrl: '', title: '', company: '', created: '', body: String(text) };
+  if (end < 0) return { sourceUrl: '', title: '', company: '', created: '', sourcer: false, body: String(text) };
   const block = lines.slice(1, end).join('\n');
   const source = block.match(/^source:\s*"?([^"\n]+)"?\s*$/m);
   const title = block.match(/^title:\s*"?([^"\n]+)"?\s*$/m);
@@ -59,6 +59,8 @@ function frontmatter(text) {
     title: title ? title[1].trim() : '',
     company: company ? company[1].trim() : '',
     created: created ? created[1] : '',
+    // The sourcer (Sparky and the laptop channels) stamps every note it writes with the openclaw tag.
+    sourcer: /openclaw/i.test(block),
     body: lines.slice(end + 1).join('\n'),
   };
 }
@@ -175,7 +177,7 @@ export async function main(argv = process.argv.slice(2), { fetchImpl = globalThi
     const key = canonicalUrl(parsed.sourceUrl) || `nourl::${normalizeCompany(title)}`;
     const item = {
       file, bytes, sourceUrl: parsed.sourceUrl, title, company: parsed.company,
-      created: parsed.created, body: parsed.body, mtimeMs: fs.statSync(file).mtimeMs, key,
+      created: parsed.created, sourcer: parsed.sourcer, body: parsed.body, mtimeMs: fs.statSync(file).mtimeMs, key,
     };
     if (kept.has(key)) {
       const previous = kept.get(key);
@@ -271,6 +273,10 @@ export async function main(argv = process.argv.slice(2), { fetchImpl = globalThi
     fs.mkdirSync(path.join(repo, 'batch'), { recursive: true });
     fs.writeFileSync(path.join(repo, 'batch', 'batch-input.tsv'), `${inputRows.join('\n')}\n`);
     fs.writeFileSync(path.join(repo, 'batch', 'obsidian-manifest.tsv'), `${manifestRows.join('\n')}\n`);
+    // Which of tonight's posting URLs came from the sourcer, so merge-tracker can tag them [auto-sourced]
+    // instead of [self-sourced]. Rewritten every run, even when empty, so a stale list never lingers.
+    const autoSourced = survivors.filter(item => item.sourcer).map(item => canonicalUrl(item.sourceUrl)).filter(Boolean);
+    fs.writeFileSync(path.join(repo, 'batch', 'obsidian-auto-sourced.txt'), `${autoSourced.join('\n')}\n`);
   } else {
     console.log(`would write ${survivors.length} survivor rows`);
     for (const row of inputRows.slice(1, 6)) console.log(row);

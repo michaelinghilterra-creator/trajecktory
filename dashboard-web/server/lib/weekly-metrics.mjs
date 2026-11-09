@@ -106,10 +106,11 @@ export function weeklyMetrics({
     sourceMix = M({
       scanFound: scanRows.length,
       selfSourced: rows.filter(a => a.source === 'Self-sourced').length,
+      autoSourced: rows.filter(a => a.source === 'Auto-sourced').length,
       scanFoundAtOrAbove3_3: scanRows.filter(a => Number.isFinite(Number(a.score)) && Number(a.score) >= 3.3).length,
     }, true, sourceMixCaveat);
   } else {
-    sourceMix = M({ scanFound: 0, selfSourced: 0, scanFoundAtOrAbove3_3: 0 }, false, 'applications not available');
+    sourceMix = M({ scanFound: 0, selfSourced: 0, autoSourced: 0, scanFoundAtOrAbove3_3: 0 }, false, 'applications not available');
   }
 
   return {
