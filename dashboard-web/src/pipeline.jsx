@@ -43,6 +43,7 @@ const LAST_STAGE = STATUS.length - 1; // Offer
 
 const SOURCE = {
   'Self-sourced': { short: 'Self',   color: 'var(--accent)', hex: '#a78bfa', rgb: '167,139,250' },
+  'Auto-sourced': { short: 'Auto',   color: 'var(--cyan)',   hex: '#22d3ee', rgb: '34,211,238' },
   'Referral':     { short: 'Ref',    color: 'var(--green)',  hex: '#22c55e', rgb: '34,197,94' },
   'CoWork':       { short: 'CoWork', color: 'var(--pink)',   hex: '#ec4899', rgb: '236,72,153' },
   'API Scan':     { short: 'API',    color: 'var(--blue)',   hex: '#60a5fa', rgb: '96,165,250' },

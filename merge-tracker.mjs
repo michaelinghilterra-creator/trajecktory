@@ -47,6 +47,13 @@ const DATA_DIR = join(CAREER_OPS, 'data');
 // original root applications.md. On a fresh install NEITHER exists yet — default
 // to the canonical data/applications.md so a created tracker lands where the
 // dashboard actually reads it (root would be invisible to the UI).
+// URLs that obsidian-prep says came from the nightly sourcer (Sparky and the laptop channels), not from the
+// user. They are not in pipeline.md either, so without this list they were all tagged [self-sourced], which
+// exempts them from auto-discard and the dead-link sweep and labels them as the user's own finds.
+const AUTO_SOURCED_FILE = join(CAREER_OPS, 'batch/obsidian-auto-sourced.txt');
+const autoSourcedUrls = new Set(existsSync(AUTO_SOURCED_FILE)
+  ? readFileSync(AUTO_SOURCED_FILE, 'utf-8').split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(canonicalUrl)
+  : []);
 const DATA_APPS = join(CAREER_OPS, 'data/applications.md');
 const ROOT_APPS = join(CAREER_OPS, 'applications.md');
 const APPS_FILE = existsSync(DATA_APPS) ? DATA_APPS : (existsSync(ROOT_APPS) ? ROOT_APPS : DATA_APPS);
@@ -402,7 +409,7 @@ if (existsSync(PIPELINE_FILE)) {
 const SOURCE_TAG_SEPARATOR = '[|;,·—–-]';
 function stripSourceTag(notes) {
   return String(notes)
-    .replace(new RegExp(`\\s*${SOURCE_TAG_SEPARATOR}?\\s*\\[self-sourced\\]\\s*`, 'i'), ' ')
+    .replace(new RegExp(`\\s*${SOURCE_TAG_SEPARATOR}?\\s*\\[(?:self-sourced|auto-sourced)\\]\\s*`, 'i'), ' ')
     .replace(/\s{2,}/g, ' ')
     .replace(new RegExp(`^\\s*${SOURCE_TAG_SEPARATOR}\\s*`), '')
     .replace(new RegExp(`\\s*${SOURCE_TAG_SEPARATOR}\\s*$`), '')
@@ -441,8 +448,16 @@ function enforceSource(reportLink, notes, num, company, role) {
     }
     return cleaned;
   }
+  // Collected by the nightly sourcer: its own tag, never [self-sourced]. A referral, cowork or reinstated
+  // tag still wins, and a stray [self-sourced] the agent wrote is swapped out.
+  if (autoSourcedUrls.has(canonicalUrl(u)) && !/\[(?:reinstated|cowork|auto-sourced)\]|\[referral:/i.test(notes || '')) {
+    const base = stripSourceTag(notes || '');
+    console.log(`   ↳ source: tagged [auto-sourced] (nightly sourcer) (${label})`);
+    logSourceFlip('added-auto-sourced', num, company, role, u);
+    return base ? `[auto-sourced] ${base}` : '[auto-sourced]';
+  }
   // Not in pipeline.md → self-sourced. Tag it unless already source-tagged.
-  if (/\[(?:self-sourced|reinstated|cowork)\]|\[referral:/i.test(notes || '')) return notes;
+  if (/\[(?:self-sourced|auto-sourced|reinstated|cowork)\]|\[referral:/i.test(notes || '')) return notes;
   const tagged = notes ? `[self-sourced] ${notes}` : '[self-sourced]';
   console.log(`   ↳ source: tagged [self-sourced] (not in pipeline.md) (${label})`);
   logSourceFlip('added-self-sourced', num, company, role, u);

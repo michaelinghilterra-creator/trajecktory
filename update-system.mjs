@@ -114,6 +114,7 @@ export const SYSTEM_PATHS = [
   'scripts/',
   'dedup-tracker.mjs',
   'tag-duplicate-reposts.mjs',
+  'retag-auto-sourced.mjs',
   'normalize-statuses.mjs',
   'cv-sync-check.mjs',
   'update-system.mjs',
