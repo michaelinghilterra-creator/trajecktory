@@ -123,6 +123,7 @@ export const SYSTEM_PATHS = [
   'discover.mjs',
   'gate-pipeline.mjs',
   'verify-actionable.mjs',
+  'liveness-truth.mjs',
   'doctor.mjs',
   'check-liveness.mjs',
   'check-outreach.mjs',

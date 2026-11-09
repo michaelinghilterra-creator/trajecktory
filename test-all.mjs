@@ -466,6 +466,7 @@ for (const suite of [
   'tests/health-check.test.mjs',
   'tests/verify-reports-comp.test.mjs',
   'tests/verify-actionable.test.mjs',
+  'tests/liveness-truth.test.mjs',
   'tests/no-live-dir-writes.test.mjs',
   'tests/discard.test.mjs',
   'tests/scan-core.test.mjs',
