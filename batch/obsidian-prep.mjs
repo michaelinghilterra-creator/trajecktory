@@ -10,7 +10,9 @@ import {
   findActiveRepost,
   findDecided,
   normalizeCompany,
+  sameRole,
 } from '../lib/identity.mjs';
+import { SIMILAR_JD_THRESHOLD, buildSimilarityIndex, findSimilarPosting, jdSimilarity } from '../lib/jd-similarity.mjs';
 import { loadHandledSet, readPipelineRows, sourceUrlOf } from '../lib/pipeline.mjs';
 import { parsePostingUrl, fetchJdText } from '../lib/ats-jd.mjs';
 import { saveSnapshot } from '../resolve-jds.mjs';
@@ -130,11 +132,39 @@ export async function main(argv = process.argv.slice(2), { fetchImpl = globalThi
     // supply the JD text, and a clipped note is exactly that, so it must be evaluated.
   });
   const triagedKeys = new Set();
+  const triagedNotes = [];
   for (const file of markdownFiles(options.triaged)) {
-    const { sourceUrl } = frontmatter(fs.readFileSync(file, 'utf8'));
+    const text = fs.readFileSync(file, 'utf8');
+    const { sourceUrl } = frontmatter(text);
     const key = canonicalUrl(sourceUrl);
     if (key) triagedKeys.add(key);
+    const { company, title: noteTitle } = frontmatter(text);
+    if (company && noteTitle) triagedNotes.push({ file, company, title: noteTitle, body: null });
   }
+
+  // A repost on another board has a different URL, so the URL checks never see it. These compare the
+  // posting TEXT, the same 60% shingle test the pipeline gate and the paste box use: against earlier
+  // evaluations, against notes already evaluated from this folder, and against this run.
+  const similarityIndex = buildSimilarityIndex({ appsPath, rootDir: repo, allCompanies: true });
+  // normalizeCompany keeps a legal suffix ("Acme" vs "Acme Inc."), so treat a prefix as the same employer.
+  const sameEmployer = (a, b) => {
+    const x = normalizeCompany(a);
+    const y = normalizeCompany(b);
+    return Boolean(x && y) && (x === y || (Math.min(x.length, y.length) >= 4 && (x.startsWith(y) || y.startsWith(x))));
+  };
+  // Same employer AND same role, like the pipeline gate: findSimilarPosting needs one exact company key,
+  // so ask it for every index key that is the same employer and keep the best hit.
+  const findSimilarRow = ({ company, role, text, url }) => {
+    if (!company) return null;
+    let best = null;
+    for (const key of similarityIndex.keys()) {
+      if (!sameEmployer(key, company)) continue;
+      const hit = findSimilarPosting(similarityIndex, { company: key, role, text, url, rootDir: repo });
+      if (hit && (!best || hit.similarity > best.similarity)) best = hit;
+    }
+    return best;
+  };
+  const noteBody = note => (note.body ??= frontmatter(fs.readFileSync(note.file, 'utf8')).body);
 
   const kept = new Map();
   const quarantined = [];
@@ -164,7 +194,22 @@ export async function main(argv = process.argv.slice(2), { fetchImpl = globalThi
         const repost = parsed.company
           ? findActiveRepost(activeIdx, parsed.sourceUrl, { company: parsed.company, role: title })
           : null;
+        const similar = repost ? null
+          : findSimilarRow({ company: parsed.company, role: title, text: parsed.body, url: parsed.sourceUrl });
+        const evaluatedNote = repost || similar || !parsed.company ? null
+          : triagedNotes.find(note => sameEmployer(note.company, parsed.company) && sameRole(note.title, title)
+            && jdSimilarity(noteBody(note), parsed.body) >= SIMILAR_JD_THRESHOLD);
+        const sibling = repost || similar || evaluatedNote || !parsed.company ? null
+          : [...kept.values()].find(prior => prior.company && sameEmployer(prior.company, parsed.company)
+            && sameRole(prior.title, title) && jdSimilarity(prior.body, parsed.body) >= SIMILAR_JD_THRESHOLD);
         if (repost) quarantined.push({ ...item, reason: 'active-repost', matchedOn: 'active-repost' });
+        else if (similar) quarantined.push({ ...item, reason: 'similar-repost', matchedOn: `similar-repost#${similar.num} (${similar.status})` });
+        else if (evaluatedNote) quarantined.push({ ...item, reason: 'similar-repost', matchedOn: 'similar-evaluated-note' });
+        else if (sibling && bytes > sibling.bytes) {
+          quarantined.push({ ...sibling, reason: 'similar-repost', matchedOn: 'similar-same-run' });
+          kept.delete(sibling.key);
+          kept.set(key, item);
+        } else if (sibling) quarantined.push({ ...item, reason: 'similar-repost', matchedOn: 'similar-same-run' });
         else kept.set(key, item);
       }
     }

@@ -652,6 +652,9 @@ When spawning headless workers for batch processing, use the appropriate command
 
 Obsidian notes must start with `---` on line 1. Prep reads one-line `source:`
 and `title:` fields. It also reads `company:` for active-repost deduplication.
+The same `company:` field drives the repost-by-text check: a note whose posting text is at least 60% like
+an earlier evaluation, an already-evaluated Triaged note, or another note in the run, for the same employer
+and role, is quarantined as `similar-repost` even when its URL differs.
 
 Manual flow:
 
