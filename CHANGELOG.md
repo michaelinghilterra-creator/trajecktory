@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.29.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.28.0...v5.29.0) (2026-11-09)
+
+
+### Features
+
+* stop liveness checks from discarding live postings, add a spot-check log ([#518](https://github.com/michaelinghilterra-creator/trajecktory/issues/518)) ([46662b8](https://github.com/michaelinghilterra-creator/trajecktory/commit/46662b83bfbd0590335028fc4260600488c8c8bc))
+
 ## [5.28.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.27.2...v5.28.0) (2026-11-09)
 
 
