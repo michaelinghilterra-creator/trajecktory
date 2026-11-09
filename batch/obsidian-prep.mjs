@@ -60,7 +60,7 @@ function frontmatter(text) {
     company: company ? company[1].trim() : '',
     created: created ? created[1] : '',
     // The sourcer (Sparky and the laptop channels) stamps every note it writes with the openclaw tag.
-    sourcer: /openclaw/i.test(block),
+    sourcer: /\bopenclaw\b/i.test(block),
     body: lines.slice(end + 1).join('\n'),
   };
 }
