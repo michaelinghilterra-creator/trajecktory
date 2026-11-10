@@ -180,6 +180,18 @@ section('an OTE-only band below the floor keeps its comp cap through derivation'
   check(uncapped === 5, `an OTE band above the floor adds no cap (got ${uncapped})`);
 }
 
+section('compFloorCeiling: null switches the comp cap off entirely');
+{
+  const low = { scoreCeiling: 2.0, ceilingBasis: 'comp', ceilingReason: 'pay below floor',
+    summary: { seniority: 'Director', compStated: '$70,000 - $95,000 base' } };
+  const off = deriveReportScore(report(low), { ...CFG, compFloorCeiling: null });
+  check(off.ok && off.score === 5, `a band below the floor adds no cap when the cap is off (got ${off.score})`);
+  const custom = deriveReportScore(report(low), { ...CFG, compFloorCeiling: 3.0 });
+  check(custom.ok && custom.score === 3, `a configured number replaces the 2.0 default (got ${custom.score})`);
+  const unset = deriveReportScore(report(low), { ...CFG, compFloorCeiling: undefined });
+  check(unset.ok && unset.score === 2, `undefined keeps the shipped 2.0 default (got ${unset.score})`);
+}
+
 section('an unknown basis does not trigger recomputation');
 for (const b of ['visa', 'other', 'requirement', '']) {
   const s = score({ scoreCeiling: 2.0, ceilingBasis: b, ceilingReason: 'pay below floor' });

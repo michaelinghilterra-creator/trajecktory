@@ -225,7 +225,7 @@ dimension 0–5 WITH its evidence in `globalScore[]` as **keyed** entries:
 ]
 ```
 
-- Choose `northStarArchetype` from the profile list by its exact name. Use `strong` when the title and scope are the target role, `partial` for adjacent scope or a different function at the right level, and `none` when no archetype fits. Code derives the north star rating from this choice. Still fill the `northStar` entry in `globalScore` with your best 0-5 estimate and one line of evidence, but the classification is what counts.
+- Choose `northStarArchetype` from the profile list by its exact name. Use `strong` when the function and scope are the archetype's work, `partial` for an adjacent function or a meaningfully different domain, and `none` when no archetype fits. **Title level never makes a match `partial`:** a Manager or Senior Manager version of an archetype's function is the same match as the Director or VP version, because level is scored separately by `level`. Code derives the north star rating from this choice. Still fill the `northStar` entry in `globalScore` with your best 0-5 estimate and one line of evidence, but the classification is what counts.
 
 - **`redFlags` is cleanliness on 0–5 (5 = clean, 0 = severe), NOT a negative number.**
 - **`buildDepth` is rated but NOT scored.** Add `"note": "recorded, not scored"`.
@@ -258,6 +258,13 @@ score" rule. Set the field, do not fudge the dimension ratings.
 | Role requires expertise candidate verifiably lacks (e.g., Xactly admin for a Sales Comp role, FedRAMP for federal sales, specific industry certifications) AND has no adjacent experience | **2.0** | Structural skill gap. Set `ceilingBasis: "requirement"`. This covers a required function, years of experience, or credential the candidate lacks. "fit" is NOT a valid basis. |
 | Title regression to a **sub-Manager individual-contributor** title (Analyst, Coordinator, Specialist, Representative, "individual contributor") when candidate is Director+ | *computed by code* | Career step backward. Code caps it at `scoring.sub_manager_ceiling` from the title, so rate `level` honestly and you may set `ceilingBasis: "level"`. **Manager and above (Manager, Senior Manager, Director, Senior Director, Head, VP, C-level) is IN SCOPE and a FULL level match, and this rule never caps those titles.** |
 | `buildDepth` rated low | *computed by code* | Rate the dimension against the 0-5 anchors above and set `ceilingBasis: "buildDepth"`. Do NOT author the number: `compute-scores.mjs` reads the tiers from `scoring.build_depth_ceilings` in `config/profile.yml`, so the policy lives in one place instead of in two prompts that drift apart. |
+
+**Pay is never a blocker when the comp floor is off.** If `scoring.comp_floor_ceiling` in
+`config/profile.yml` is `null`, do not set `ceilingBasis: "comp"`, do not call pay a
+blocker, a disqualifier or a reason not to apply in `recommendation`, `tldr` or the
+verdict. Never write "do not apply", "hard blocker" or "not recommended" in the tracker
+note because of pay alone: those phrases auto-discard the row. Report the stated band in
+Block D and, at most, one negotiation note.
 
 **Reasoning:** Auto-discard fires below 3.5. A 3.2 on a Barcelona-required role is
 misleading. Setting `scoreCeiling: 1.5` caps the derived headline so the number matches

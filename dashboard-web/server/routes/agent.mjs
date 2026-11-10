@@ -432,6 +432,7 @@ function dashboardConstraints(mode, opts) {
       ` Evaluate at most ${evalCap} pending unchecked URLs this run (${capWhy}). They are ordered best-fit first, so take them from the TOP of the pending list; once you have evaluated ${evalCap}, STOP even if more remain and tell me how many pending URLs are left so I can run Evaluate again for the next batch.` +
       ' Do not run gate-pipeline.mjs or any browser tool; just evaluate the pending unchecked URLs as they are. To read each job description, your FIRST step is to run node fetch-jd.mjs from the repo root, passing the posting URL as its only argument (quote the URL in your own shell). it returns the full JD straight from the ATS API (Ashby, Greenhouse, Lever) and works where WebFetch cannot, because those postings are JavaScript single-page apps that a raw fetch sees as an empty shell. Evaluate ONLY from the text it prints. If fetch-jd.mjs exits non-zero (no ATS API available for that URL, e.g. a Workday posting), THEN try WebFetch. When it exits with code 3, the posting has been taken down, so skip WebFetch and defer it exactly as described below. Only if BOTH fail do you defer: do NOT reconstruct the JD from WebSearch or aggregator mirrors — a stitched-together JD produces a confident score for a posting you never actually read, and that has shipped CLOSED roles as high scores. Instead append one tab-separated line (url, company, role) to data/needs-manual-jd.tsv (create it with that exact header row if it is missing), and write NO report and NO tracker TSV for it. The user will confirm the posting is live and paste the JD text themselves.' +
       ' Do NOT edit data/pipeline.md at all — checking off evaluated, deferred, and already-decided rows is handled deterministically after the run, so an in-prompt edit is both unnecessary and unsafe when this run parallelizes across the batch.' +
+      ' Do NOT run compute-scores.mjs and do not work the headline score out by hand: the server derives every report score from your globalScore ratings right after the run. Leave the score placeholder and put the same placeholder in the TSV score column.' +
       ' Record every evaluation as a single line nine column TSV in batch/tracker-additions/ and do not edit data/applications.md directly. Always write the report to reports/ even for a low score so the result is visible. Write each report in the trajecktory-report/v1 format (JSON frontmatter then narrative body) and you MUST populate the optional frontmatter sections so the dashboard drawer is complete, not just the score: include customizationCV and customizationLI (the CV and LinkedIn personalization plan), starStories plus a leadStory (interview prep, with the single story to lead with), and a legitimacy object with a tier and signals. Base EVERY section only on the JD text you actually fetched — never fabricate or infer missing content from search results. Legitimacy is assessed from the fetched posting (freshness, description quality, reposting, prompt-injection); set verification to unconfirmed (no live browser). If you could not fetch the posting, it does not belong here at all — it goes to data/needs-manual-jd.tsv per the rule above, not into a report. When done, the user will run Merge Tracker to fold your TSVs into the pipeline.' + snapshotJd;
   }
   // NOTE ON THE DEDUP SENTENCE BELOW: it is belt-and-braces,
@@ -1059,6 +1060,32 @@ function runMergeTracker() {
   });
 }
 
+// Derive every new report's headline right after an evaluation run. The eval
+// sandbox (eval-agent-sandbox.settings.json) does not allow the agent to run
+// compute-scores itself, so its reports used to sit at a placeholder 0 or a
+// hand-worked number until someone clicked Derive Scores. Awaited, not
+// fire-and-forget: the text-hygiene pass and the deep-mode merge both read or
+// rewrite the same report files and must see the derived score.
+// Best-effort: a failure is recorded on the job and never fails the run.
+function runComputeScores() {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(process.execPath, ['compute-scores.mjs', '--all', '--apply'], { cwd: ROOT_DIR, windowsHide: true });
+    } catch (e) {
+      return resolve({ ok: false, error: (e && e.message) || 'compute-scores failed to start' });
+    }
+    let err = '';
+    if (child.stdin) { try { child.stdin.end(); } catch { /* already closed */ } }
+    child.stdout && child.stdout.on('data', () => {});   // drain so a full pipe never blocks the child
+    child.stderr && child.stderr.on('data', (c) => { err += c.toString(); });
+    child.on('error', (e) => resolve({ ok: false, error: (e && e.message) || 'compute-scores error' }));
+    child.on('close', (code) => resolve(code === 0
+      ? { ok: true }
+      : { ok: false, error: err.trim().slice(-300) || `compute-scores exited ${code}` }));
+  });
+}
+
 // After the server adds newly-discovered companies to portals.yml, surface their
 // REAL live roles by re-running the zero-token scanner over just those boards.
 // This is what makes the discovery half honest: the roles come from the actual
@@ -1221,6 +1248,15 @@ async function runAgent(jobId, mode, target) {
   // rolling chain calls between batches, so there is one reconcile implementation.
   await clearClosedManualRows();
   reconcilePipelineQueue();
+
+  // Derive scores before hygiene and before any merge (see runComputeScores).
+  if ((mode === 'pipeline' || mode === 'deep') && wroteSomething) {
+    const derived = await runComputeScores();
+    if (!derived.ok) {
+      const job = agentJobs.get(jobId) || {};
+      agentJobs.set(jobId, { ...job, deriveError: derived.error });
+    }
+  }
 
   // Tier-B text hygiene: evaluation reports and interview prep are authored by the
   // `claude` agent SUBPROCESS, so that text never passed through the server's

@@ -86,7 +86,7 @@ Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a
 ]
 ```
 
-- Choose `northStarArchetype` from the profile list by its exact name. Use `strong` when the title and scope are the target role, `partial` for adjacent scope or a different function at the right level, and `none` when no archetype fits. Code derives the north star rating from this choice. Still fill the `northStar` entry in `globalScore` with your best 0-5 estimate and one line of evidence, but the classification is what counts.
+- Choose `northStarArchetype` from the profile list by its exact name. Use `strong` when the function and scope are the archetype's work, `partial` for an adjacent function or a meaningfully different domain, and `none` when no archetype fits. **Title level never makes a match `partial`:** a Manager or Senior Manager version of an archetype's function is the same match as the Director or VP version, because level is scored separately by `level`. Code derives the north star rating from this choice. Still fill the `northStar` entry in `globalScore` with your best 0-5 estimate and one line of evidence, but the classification is what counts.
 
 - Each dimension maps to a block you already reason through: **fit** ← Block B (CV match),
   **northStar** ← archetype / target fit (Step 0 + profile), **level** ← Block C,
@@ -106,7 +106,8 @@ Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a
   not against the market, and add `"note": "recorded, not scored"` to the entry so the
   drawer says so. Pay is information here, not a score input: an aspiration is a number the
   user can miss and still want the job, so it must not lower a score that decides whether
-  they apply at all. The hard floor is handled by the ceiling rule below.
+  they apply at all. The hard floor is handled by the ceiling rule below, and only when
+  `scoring.comp_floor_ceiling` is not `null`.
 - **`buildDepth` is rated but NOT scored.** Add `"note": "recorded, not scored"` to
   the entry. Rate the hands-on building the req demands against what the candidate can
   credibly claim from `cv.md`: **5** no hands-on build demand, with strategy, operations,
@@ -137,6 +138,12 @@ Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a
     roles for missing an *aspiration*. If the JD states a figure whose TOP is below that
     floor, set `scoreCeiling` (e.g. `2.0`). Below `target_range` but above the floor is a
     negotiation note, NOT a ceiling and NOT a penalty. No stated figure means no ceiling.
+    **When `scoring.comp_floor_ceiling` in `config/profile.yml` is `null`, the floor is
+    OFF:** never set a comp ceiling, and never call pay a blocker, a disqualifier or a
+    reason not to apply in the recommendation, the TL;DR or the verdict. Never write "do
+    not apply", "hard blocker" or "not recommended" in the tracker note because of pay
+    alone: those phrases auto-discard the row. Report the band in Block D and, at most,
+    one negotiation note.
   - **Scope clearly above the target level.** Pay far above the user's band is usually
     evidence the job is bigger than its title (a wider multi-level band, heavy variable
     comp, or a genuinely more senior role), not a bonus. If the role really sits two rungs
@@ -236,7 +243,9 @@ Read `cv.md`. Create a table mapping each JD requirement to exact lines from the
 `comp.walkaway` is NOT yours to estimate: it is `compensation.minimum` from
 `config/profile.yml`, the user's hard floor. `compensation.target_range` is the
 aspiration and is a different number. Stated pay topping out below the floor sets a
-`scoreCeiling` (see the Scoring section); missing the aspiration does not.
+`scoreCeiling` (see the Scoring section); missing the aspiration does not. When
+`scoring.comp_floor_ceiling` is `null`, neither does: pay is reported here and never
+argued as a reason not to apply.
 
 Use WebSearch for:
 - Current salaries for the role (Glassdoor, Levels.fyi, Blind)

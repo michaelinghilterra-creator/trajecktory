@@ -48,7 +48,7 @@ export function withScorerVersion(data, version = SCORER_VERSION) {
 // Pure core: given a report's markdown, return the derivation outcome and (when
 // derivable) the rewritten markdown. No file I/O, so it is unit-tested directly.
 //   reason: 'not-v1' | 'no-keyed-dims' | 'not-derivable' | 'ok'
-export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, compMinimum, northStarTiers, northStarRatings, subManagerCeiling, nonManagementTitles, buildDepthCeilings, locationCeilings } = {}) {
+export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, compMinimum, compFloorCeiling, northStarTiers, northStarRatings, subManagerCeiling, nonManagementTitles, buildDepthCeilings, locationCeilings } = {}) {
   if (!hasV1Frontmatter(md)) return { ok: false, reason: 'not-v1' };
   let parsed;
   try { parsed = parseV1(md); } catch { return { ok: false, reason: 'not-v1' }; }
@@ -111,7 +111,10 @@ export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, c
   let ceilingSource = ceiling === null ? null : 'authored';
   const basis = typeof data.ceilingBasis === 'string' ? data.ceilingBasis.trim().toLowerCase() : '';
   if (basis === 'comp') {
-    const cc = compCeiling(data.summary && data.summary.compStated, { minimum: compMinimum });
+    // undefined keeps the shipped 2.0 default; null (scoring.comp_floor_ceiling) switches the cap off.
+    const cc = compCeiling(data.summary && data.summary.compStated, {
+      minimum: compMinimum, ...(compFloorCeiling !== undefined ? { ceiling: compFloorCeiling } : {}),
+    });
     ceiling = cc.ceiling;
     ceilingSource = `comp:${cc.reason}`;
   } else if (basis === 'builddepth') {
