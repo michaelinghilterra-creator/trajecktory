@@ -59,9 +59,6 @@ const PIPELINE_PATH = 'data/pipeline.md';
 const APPLICATIONS_PATH = 'data/applications.md';
 const SCAN_COVERAGE_PATH = 'data/scan-coverage.json';
 
-// Ensure required directories exist (fresh setup)
-mkdirSync('data', { recursive: true });
-
 const CONCURRENCY = 10;
 const FETCH_TIMEOUT_MS = 10_000;
 
@@ -191,6 +188,22 @@ function skipPlatform(company) {
 
 // ── API parsers ─────────────────────────────────────────────────────
 
+function parserWorkplace(value) {
+  const normalized = String(value || '').toLowerCase().replace(/[\s_-]+/g, ' ').trim();
+  if (normalized === 'remote') return 'remote';
+  if (normalized === 'hybrid') return 'hybrid';
+  if (normalized === 'onsite' || normalized === 'on site') return 'onsite';
+  return '';
+}
+
+function lowerCountries(values) {
+  return values.filter(Boolean).map(value => String(value).toLowerCase().trim()).filter(Boolean);
+}
+
+function hasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object || {}, key);
+}
+
 function parseGreenhouse(json, companyName) {
   const jobs = json.jobs || [];
   return jobs.map(j => ({
@@ -198,8 +211,11 @@ function parseGreenhouse(json, companyName) {
     url: j.absolute_url || '',
     company: companyName,
     location: j.location?.name || '',
+    workplace: '',
+    countries: [],
     postedAt: j.updated_at || null,   // ISO string; best available proxy for age
-    remoteHint: j.content || '',      // JD body (needs ?content=true) — grepped for "remote"
+    legacyRemoteHint: j.content || '',
+    remoteHint: j.content || '',      // JD body (needs ?content=true) — checked for role-level assertions
   }));
 }
 
@@ -211,8 +227,17 @@ function parseAshby(json, companyName) {
     company: companyName,
     location: j.location || '',
     postedAt: j.publishedDate || j.createdAt || null,  // ISO string
-    // Ashby exposes an explicit isRemote flag + workplaceType — precise, no body grep needed.
-    remoteHint: `${j.isRemote ? 'remote' : ''} ${j.workplaceType || ''} ${j.descriptionPlain || ''}`,
+    workplace: j.workplaceType
+      ? parserWorkplace(j.workplaceType)
+      : (j.isRemote === true ? 'remote' : (j.isRemote === false ? 'onsite' : '')),
+    countries: lowerCountries([
+      j.address?.postalAddress?.addressCountry,
+      ...(Array.isArray(j.secondaryLocations)
+        ? j.secondaryLocations.map(location => location?.address?.addressCountry)
+        : []),
+    ]),
+    remoteHint: j.descriptionPlain || '',
+    legacyRemoteHint: `${j.isRemote ? 'remote' : ''} ${j.workplaceType || ''} ${j.descriptionPlain || ''}`,
   }));
 }
 
@@ -224,8 +249,10 @@ function parseLever(json, companyName) {
     company: companyName,
     location: j.categories?.location || '',
     postedAt: j.createdAt ? new Date(j.createdAt).toISOString() : null,  // Unix ms → ISO
-    // Lever exposes workplaceType ("remote"/"hybrid"/"on-site") — precise signal + body backup.
-    remoteHint: `${j.workplaceType || ''} ${j.descriptionPlain || ''}`,
+    workplace: parserWorkplace(j.workplaceType),
+    countries: [],
+    remoteHint: j.descriptionPlain || '',
+    legacyRemoteHint: `${j.workplaceType || ''} ${j.descriptionPlain || ''}`,
   }));
 }
 
@@ -245,14 +272,15 @@ function parseWorkday(json, companyName, baseUrl, site) {
       company: companyName,
       // locationsText is a flat string; bulletFields[0] sometimes carries location
       location: j.locationsText || bullets[0] || '',
+      workplace: '',
+      countries: [],
       postedAt: j.postedOn || null,
-      // Workday's list API returns no JD body and no explicit remote flag, so a
-      // genuinely-remote role listing only its HQ city was geo-blocked as
-      // out-of-region — parseWorkday was the ONE parser with no remoteHint.
-      // Fold title + all bulletFields + locationsText into the hint so the
-      // location filter can still find a "remote" signal wherever Workday put it
-      // (commonly a "(Remote)" suffix in the title).
+      // Workday's list API returns no JD body and no explicit remote flag. Keep
+      // its available posting text in the hint for compatibility; the location
+      // gate still requires a role-level assertion before body-like text can
+      // establish remoteness.
       remoteHint: [j.title, ...bullets, j.locationsText].filter(Boolean).join(' '),
+      legacyRemoteHint: [j.title, ...bullets, j.locationsText].filter(Boolean).join(' '),
     };
   });
 }
@@ -264,6 +292,8 @@ function parseWorkable(json, companyName) {
     url: j.url || j.shortlink || j.application_url || '',
     company: companyName,
     location: [j.city, j.state, j.country].filter(Boolean).join(', '),
+    workplace: hasOwn(j, 'telecommuting') ? (j.telecommuting ? 'remote' : 'onsite') : '',
+    countries: lowerCountries([j.country]),
     postedAt: j.published_on || j.created_at || null,   // ISO date string
     // telecommuting is Workable's explicit remote flag; department adds context.
     remoteHint: `${j.telecommuting ? 'remote' : ''} ${j.department || ''}`,
@@ -280,6 +310,10 @@ function parseBamboohr(json, companyName, subdomain) {
     location: [j.location?.city, j.location?.state].filter(Boolean).join(', ')
       || (typeof j.atsLocation === 'object' && j.atsLocation
         ? [j.atsLocation.city, j.atsLocation.state, j.atsLocation.country].filter(Boolean).join(', ') : ''),
+    workplace: (j.isRemote === true || String(j.locationType) === '1')
+      ? 'remote'
+      : ((hasOwn(j, 'isRemote') || hasOwn(j, 'locationType')) ? 'onsite' : ''),
+    countries: lowerCountries([j.location?.country, j.atsLocation?.country]),
     postedAt: null,   // the list endpoint has no posting date
     // isRemote is BambooHR's explicit flag; locationType '1' also means remote.
     remoteHint: `${j.isRemote || String(j.locationType) === '1' ? 'remote' : ''} ${j.departmentLabel || ''}`,
@@ -295,6 +329,12 @@ function parseSmartRecruiters(json, companyName, companyId) {
     company: companyName,
     location: j.location?.fullLocation
       || [j.location?.city, j.location?.region, j.location?.country].filter(Boolean).join(', '),
+    workplace: j.location?.remote === true
+      ? 'remote'
+      : (j.location?.hybrid === true
+        ? 'hybrid'
+        : ((hasOwn(j.location, 'remote') || hasOwn(j.location, 'hybrid')) ? 'onsite' : '')),
+    countries: lowerCountries([j.location?.country]),
     postedAt: j.releasedDate || null,   // ISO string
     // location.remote / .hybrid are explicit booleans — precise signal, no body grep.
     remoteHint: `${j.location?.remote ? 'remote' : ''} ${j.location?.hybrid ? 'hybrid' : ''}`,
@@ -568,6 +608,10 @@ async function main() {
   const maxHistoryDaysFlag = args.indexOf('--max-history-days');
   const maxHistoryDays = maxHistoryDaysFlag !== -1 ? parseInt(args[maxHistoryDaysFlag + 1], 10) || 30 : 30;
 
+  // Imports are read-only (the audit CLI reuses the parsers). Only an actual
+  // scanner run should bootstrap its writable data directory.
+  mkdirSync('data', { recursive: true });
+
   // 1. Read portals.yml
   if (!existsSync(PORTALS_PATH)) {
     console.error('Error: portals.yml not found. Run onboarding first.');
@@ -669,7 +713,11 @@ async function main() {
           }
           continue;
         }
-        if (!locationFilter(job.location, job.remoteHint)) {
+        if (!locationFilter(job.location, job.remoteHint, {
+          workplace: job.workplace,
+          countries: job.countries,
+          title: job.title,
+        })) {
           totalGeoBlocked++;
           if (!seenUrls.has(nurl)) {
             rejects.push({ url: job.url, title: job.title, company: job.company, source: `${type}-api`, status: 'skipped_location' });

@@ -12,7 +12,7 @@
  * Run: node tests/scan-parsers.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { buildSuccessCoverageOutcome, detectApi, parseBamboohr, parseWorkable, parseSmartRecruiters, parseWorkday, insertOffersIntoPipeline, scanCompanies } from '../scan.mjs';
+import { buildSuccessCoverageOutcome, detectApi, parseAshby, parseBamboohr, parseGreenhouse, parseLever, parseWorkable, parseSmartRecruiters, parseWorkday, insertOffersIntoPipeline, scanCompanies } from '../scan.mjs';
 
 let passed = 0, failed = 0;
 
@@ -95,6 +95,8 @@ console.log('\n4. parseWorkable');
   check(offers[0].title === 'Director of Revenue Operations', 'title from j.title');
   check(offers[0].url === 'https://apply.workable.com/acmehr/j/ABC123/', 'url prefers j.url');
   check(offers[0].location === 'Austin, TX, US', `location joins city/state/country (${offers[0].location})`);
+  check(offers[0].workplace === 'remote', 'telecommuting:true -> structured remote workplace');
+  check(offers[0].countries[0] === 'us', 'Workable country is emitted as lowercase metadata');
   check(offers[0].postedAt === '2026-07-20', 'postedAt prefers published_on');
   check(/remote/.test(offers[0].remoteHint), 'telecommuting:true → "remote" in remoteHint');
   check(offers[1].postedAt === '2026-06-01', 'postedAt falls back to created_at');
@@ -117,17 +119,53 @@ console.log('\n5. parseSmartRecruiters');
   check(offers[0].url === 'https://jobs.smartrecruiters.com/AcmeCo/744000133907678',
     `public posting url built from companyId + id (${offers[0].url})`);
   check(offers[0].location === 'Austin, TX, United States', 'location prefers fullLocation');
+  check(offers[0].workplace === 'hybrid', 'SmartRecruiters hybrid boolean -> structured hybrid workplace');
+  check(offers[0].countries[0] === 'us', 'SmartRecruiters country -> structured lowercase metadata');
   check(offers[0].postedAt === '2026-06-24T10:00:11.853Z', 'postedAt from releasedDate');
   check(/hybrid/.test(offers[0].remoteHint) && !/remote/.test(offers[0].remoteHint.replace('hybrid','')),
     'hybrid:true reflected in remoteHint');
   check(offers[1].location === 'us', 'falls back to city/region/country join when no fullLocation');
+  check(offers[1].workplace === 'remote', 'SmartRecruiters remote boolean -> structured remote workplace');
   check(/remote/.test(offers[1].remoteHint), 'remote:true → "remote" in remoteHint');
 }
 
 // ── 6. parseWorkday (remoteHint recovery) ────────────────────────────────────
-// Workday's list API has no JD body and no remote flag, so parseWorkday used to
-// emit no remoteHint and genuinely-remote roles listing only an HQ city were
-// geo-blocked. The hint now folds title + bulletFields + locationsText.
+// Workday's list API has no JD body or structured arrangement. Its compatibility
+// hint still folds title + bulletFields + locationsText; the location gate decides
+// whether that text contains a qualifying role-level assertion.
+console.log('\n5b. Greenhouse/Ashby/Lever structured location metadata');
+{
+  const greenhouse = parseGreenhouse({ jobs: [{
+    title: 'Director, Operations', absolute_url: 'https://example.test/gh/1',
+    location: { name: 'Chicago, IL' }, content: '<p>This role is fully remote.</p>',
+  }] }, 'Acme')[0];
+  check(greenhouse.workplace === '' && greenhouse.countries.length === 0,
+    'Greenhouse emits empty structured fields because its API has none');
+  check(/fully remote/.test(greenhouse.remoteHint), 'Greenhouse keeps JD body text in remoteHint');
+
+  const ashby = parseAshby({ jobs: [{
+    title: 'Zorblax Widgetry Alliances Director', jobUrl: 'https://jobs.ashbyhq.com/zorblax/1', location: 'New York City',
+    isRemote: true, workplaceType: 'Hybrid', descriptionPlain: 'remote Hybrid ...',
+    address: { postalAddress: { addressCountry: 'United States' } },
+    secondaryLocations: [
+      { address: { addressCountry: 'United Kingdom' } },
+      { address: { addressCountry: 'United States' } },
+    ],
+  }] }, 'Acme')[0];
+  check(ashby.workplace === 'hybrid', 'Ashby workplaceType beats a conflicting isRemote flag');
+  check(ashby.countries.join(',') === 'united states,united kingdom,united states',
+    'Ashby primary and secondary structured countries are emitted');
+  check(ashby.remoteHint === 'remote Hybrid ...', 'Ashby remoteHint contains body text, not synthesized arrangement data');
+
+  const lever = parseLever([{
+    text: 'Director, Analytics', hostedUrl: 'https://jobs.lever.co/zorblax/1',
+    workplaceType: 'on-site', descriptionPlain: 'This role is fully remote.', categories: { location: 'Denver, CO' },
+  }], 'Acme')[0];
+  check(lever.workplace === 'onsite', 'Lever on-site workplaceType normalizes to onsite');
+  check(lever.countries.length === 0, 'Lever emits no guessed countries');
+  check(lever.remoteHint === 'This role is fully remote.', 'Lever remoteHint preserves description body text');
+}
+
 console.log('\n6. parseWorkday');
 {
   const base = 'https://acme.wd1.myworkdayjobs.com/careers';
@@ -143,6 +181,8 @@ console.log('\n6. parseWorkday');
   check(offers.length === 3, `maps all jobPostings (${offers.length}/3)`);
   check(offers[0].url === base + '/job/Chicago/Director-Analytics_JR1', 'url = baseUrl + externalPath');
   check(offers[0].location === 'Chicago, IL', 'location from locationsText');
+  check(offers.every(offer => offer.workplace === '' && offer.countries.length === 0),
+    'Workday emits empty structured fields when the list API has none');
   check(/\bremote\b/i.test(offers[0].remoteHint), '"(Remote)" in title surfaces in remoteHint (was geo-blocked before)');
   check(!/\bremote\b/i.test(offers[1].remoteHint), 'genuine onsite role carries no remote signal');
   check(/\bremote\b/i.test(offers[2].remoteHint), 'remote signal in a bulletField also surfaces');
@@ -187,6 +227,9 @@ console.log('\n8. BambooHR detection and parsing');
   check(!/remote/i.test(offers[0].remoteHint), 'an on-site role carries no remote signal');
   check(/remote/i.test(offers[1].remoteHint), 'isRemote surfaces in remoteHint');
   check(offers[1].location === 'United States', 'falls back to atsLocation when location is empty');
+  check(offers[0].workplace === 'onsite' && offers[1].workplace === 'remote',
+    'BambooHR emits structured onsite/remote arrangement');
+  check(offers[1].countries[0] === 'united states', 'BambooHR structured country is emitted lowercase');
   check(parseBamboohr({}, 'X', 'x').length === 0 && parseBamboohr(null, 'X', 'x').length === 0, 'an empty or malformed response yields no offers');
 }
 
