@@ -35,6 +35,7 @@ import path from 'path';
 import { loadEnvKey as loadEnvKeyFromPaths } from './lib/env-key.mjs';
 import { buildPool, nextSlice } from './lib/discover-queries.mjs';
 import { loadCursor, saveCursor } from './lib/discover-rotation.mjs';
+import { checkDiscoveredJobs } from './lib/discover-liveness.mjs';
 
 const DRY_RUN   = process.argv.includes('--dry-run');
 const VERBOSE   = process.argv.includes('--verbose');
@@ -225,13 +226,13 @@ function writePipeline(newJobs, today) {
   writeFileSync(PIPELINE_PATH, text, 'utf8');
 }
 
-function appendHistory(jobs, today, source) {
+function appendHistory(jobs, today, source, status = 'added') {
   const needsHeader = !existsSync(HISTORY_PATH);
   const lines = jobs.map(j0 => {
     const j = { ...j0, url: sanitizeCell(j0.url), title: sanitizeCell(j0.title), company: sanitizeCell(j0.company) };
     const p = parseAtsUrl(j.url);
     const portalTag = p ? `${source}_${p.type}` : source;
-    return `${j.url}\t${today}\t${portalTag}\t${j.title || 'unknown'}\t${j.company}\tadded`;
+    return `${j.url}\t${today}\t${portalTag}\t${j.title || 'unknown'}\t${j.company}\t${status}`;
   });
   if (needsHeader) writeFileSync(HISTORY_PATH, 'url\tfirst_seen\tportal\ttitle\tcompany\tstatus\n', 'utf8');
   appendFileSync(HISTORY_PATH, lines.join('\n') + '\n', 'utf8');
@@ -356,6 +357,7 @@ async function main() {
   // ── Phase 2: Brave Search (optional) ───────────────────────────────
 
   const phase2Jobs    = [];
+  const phase2Closed  = [];
   const phase2Entries = [];
 
   if (BRAVE_KEY && braveQueries.length) {
@@ -386,6 +388,23 @@ async function main() {
       }
       console.log(`${results.length} results, ${added} new`);
       if (i < braveQueries.length - 1) await sleep(1200);
+    }
+    if (phase2Jobs.length > 0 && process.env.TJK_DISCOVER_SKIP_LIVENESS !== '1') {
+      const originalPhase2Jobs = new Set(phase2Jobs);
+      const checked = await checkDiscoveredJobs(phase2Jobs);
+      const surviving = [];
+      for (const job of checked.keep) {
+        if (!originalPhase2Jobs.has(job)) {
+          const normalizedUrl = canonicalUrl(job.url);
+          if (seenUrls.has(normalizedUrl)) continue;
+          seenUrls.add(normalizedUrl);
+        }
+        surviving.push(job);
+      }
+      phase2Jobs.length = 0;
+      phase2Jobs.push(...surviving);
+      phase2Closed.push(...checked.closed);
+      console.log(`   Liveness: ${phase2Jobs.length} open, ${phase2Closed.length} closed (skipped), ${checked.replaced.length} swapped for the current posting`);
     }
     if (!DRY_RUN) saveCursor(DATA_DIR, braveRotation.nextCursor);
   }
@@ -436,6 +455,7 @@ async function main() {
   }
 
   if (DRY_RUN) {
+    if (phase2Closed.length)  { console.log('\nPhase 2 closed (not added):'); phase2Closed.forEach(j => console.log(`  x ${j.url} | ${j.title} | ${j.reason}`)); }
     console.log('\n[dry-run — no files written]');
     if (phase1Entries.length) { console.log('\nPhase 1 — portals.yml additions:'); phase1Entries.forEach(e => console.log(`  + ${e.name}`)); }
     if (phase2Entries.length) { console.log('\nPhase 2 — portals.yml additions:'); phase2Entries.forEach(e => console.log(`  + ${e.name}`)); }
@@ -444,7 +464,7 @@ async function main() {
     return;
   }
 
-  if (totalNewCompanies === 0 && totalNewJobs === 0) {
+  if (totalNewCompanies === 0 && totalNewJobs === 0 && phase2Closed.length === 0) {
     console.log('\n✅ Nothing new — done.\n');
     return;
   }
@@ -452,6 +472,10 @@ async function main() {
   if (totalNewCompanies > 0) {
     writePortals(portalsRaw, [...phase1Entries, ...phase2Entries]);
     console.log(`\n✅ portals.yml — ${totalNewCompanies} companies added`);
+  }
+
+  if (phase2Jobs.length === 0 && phase3Jobs.length === 0 && phase2Closed.length > 0) {
+    appendHistory(phase2Closed, today, 'discovery_brave', 'skipped_closed');
   }
 
   let allNewJobs = [...phase2Jobs, ...phase3Jobs];
@@ -463,6 +487,7 @@ async function main() {
     writePipeline(allNewJobs, today);
     appendHistory(phase2Jobs, today, 'discovery_brave');
     appendHistory(phase3Jobs, today, 'discovery_muse');
+    if (phase2Closed.length > 0) appendHistory(phase2Closed, today, 'discovery_brave', 'skipped_closed');
     console.log(`✅ pipeline.md + scan-history.tsv — ${allNewJobs.length} job URLs added`);
   }
 
