@@ -127,5 +127,20 @@ check(/Do NOT grep, head, or tail/i.test(scan), 'scan prompt forbids reading the
 check(/writeTrackedCompanyList\(/.test(src) && /tracked-companies\.txt/.test(src),
   'scan route writes the tracked-company list before the agent runs');
 
+// The eval sandbox cannot run compute-scores, so the server derives scores after
+// an evaluation run, awaited, and BEFORE the hygiene pass and the deep-mode merge
+// (both touch the same report files). The prompt tells the agent not to try.
+const pipe = branch('pipeline');
+check(/Do NOT run compute-scores\.mjs/.test(pipe), 'pipeline prompt tells the agent the server derives scores');
+check(/function runComputeScores\(/.test(src) && /'compute-scores\.mjs', '--all', '--apply'/.test(src),
+  'server has a compute-scores runner');
+{
+  const derive = src.indexOf('await runComputeScores()');
+  const hygiene = src.indexOf("'clean-generated-text.mjs'");
+  const merge = src.indexOf('await runMergeTracker()');
+  check(derive > 0 && hygiene > derive && merge > derive,
+    'scores are derived before the hygiene pass and before the deep-mode merge');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
