@@ -518,6 +518,7 @@ for (const suite of [
   'tests/verify-score-drift.test.mjs',
   'tests/verify-scorer-version.test.mjs',
   'tests/verify-ceiling-basis.test.mjs',
+  'tests/prompt-ceiling-basis.test.mjs',
   'tests/score-golden.test.mjs',
   'tests/compute-scores-stamp.test.mjs',
   'tests/scorer-version-read.test.mjs',

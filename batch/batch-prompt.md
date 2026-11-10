@@ -31,6 +31,8 @@ The `.md` report file you produce is **JSON frontmatter + a narrative markdown b
   "batchId": "{{ID}}",
   "score": <DERIVED by compute-scores.mjs; leave a placeholder, do NOT author it>,
   "scoreCeiling": <optional 0-5 hard cap; set ONLY for a blocker that must keep the score low>,
+  "ceilingBasis": <REQUIRED whenever scoreCeiling is set. Exactly one of: "comp" | "location" | "level" | "buildDepth" | "requirement" | "visa" | "other". Any other word (for example "fit") is rejected by verify-ceiling-basis.mjs. Declares which blocker caused the cap; the code never infers it from prose>,
+  "ceilingReason": <one short sentence naming the blocker, for a human reader>,
   "northStarArchetype": "<exact archetype name from the profile, or none>",
   "northStarMatch": "strong" | "partial" | "none",
   "domain": "...",
@@ -252,8 +254,8 @@ score" rule. Set the field, do not fudge the dimension ratings.
 | Condition detected in JD | scoreCeiling | Why |
 |--------------------------|--------------|-----|
 | Required physical presence in a `hard_no` city (see `portals.yml` location_policy: includes London, Barcelona, NYC, SF, Bay Area, Chicago, LA, Boston, Seattle, Amsterdam, Paris, Berlin, Madrid, Dublin, Toronto, Singapore, Sydney, Melbourne, Tokyo, Warsaw, Krakow, Vilnius, Tallinn) | *computed by code* | Rate `location` against the policy at 1 or below, set `ceilingBasis: "location"`, and give one line in `ceilingReason`. The cap number comes from `scoring.location_ceilings`, so do not agonize over it. |
-| Visa sponsorship explicitly NOT offered AND candidate would need it (non-US JDs) | **1.5** | Hard blocker |
-| Role requires expertise candidate verifiably lacks (e.g., Xactly admin for a Sales Comp role, FedRAMP for federal sales, specific industry certifications) AND has no adjacent experience | **2.0** | Structural skill gap |
+| Visa sponsorship explicitly NOT offered AND candidate would need it (non-US JDs) | **1.5** | Hard blocker. Set `ceilingBasis: "visa"`. |
+| Role requires expertise candidate verifiably lacks (e.g., Xactly admin for a Sales Comp role, FedRAMP for federal sales, specific industry certifications) AND has no adjacent experience | **2.0** | Structural skill gap. Set `ceilingBasis: "requirement"`. This covers a required function, years of experience, or credential the candidate lacks. "fit" is NOT a valid basis. |
 | Title regression to a **sub-Manager individual-contributor** title (Analyst, Coordinator, Specialist, Representative, "individual contributor") when candidate is Director+ | *computed by code* | Career step backward. Code caps it at `scoring.sub_manager_ceiling` from the title, so rate `level` honestly and you may set `ceilingBasis: "level"`. **Manager and above (Manager, Senior Manager, Director, Senior Director, Head, VP, C-level) is IN SCOPE and a FULL level match, and this rule never caps those titles.** |
 | `buildDepth` rated low | *computed by code* | Rate the dimension against the 0-5 anchors above and set `ceilingBasis: "buildDepth"`. Do NOT author the number: `compute-scores.mjs` reads the tiers from `scoring.build_depth_ceilings` in `config/profile.yml`, so the policy lives in one place instead of in two prompts that drift apart. |
 

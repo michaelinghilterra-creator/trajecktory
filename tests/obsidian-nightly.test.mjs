@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeRepoSandbox } from './helpers/sandbox.mjs';
 import { formatTrackerLine, TRACKER_HEADER, TRACKER_SEPARATOR } from '../lib/tracker.mjs';
-import { main } from '../batch/obsidian-nightly.mjs';
+import { main, mergedTrackerIds } from '../batch/obsidian-nightly.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const flag = name => '-' + `-${name}`;
@@ -112,6 +112,61 @@ test('dry run writes nothing', () => {
   assert.equal(calls, 0);
   assert.ok(!fs.existsSync(fx.summary));
   assert.ok(!fs.existsSync(path.join(fx.repo, 'batch', 'obsidian-nightly.lock')));
+});
+
+test('mergedTrackerIds reads the numbers merge-tracker reports adding or updating', () => {
+  const text = [
+    'Existing: 10 entries, max #900001',
+    'Found 3 pending additions',
+    'Add #900003: Zorblax Widgetry, Widget Director (2.0/5, Passed)',
+    'Add #900002: Quennox Ratchet Works, Gear Lead (4.0/5, Evaluated)',
+    'Update: #900001 Zorblax Widgetry (1.0 to 2.0)',
+    'Add #900002: duplicate line',
+    'Skip: #900009 not an addition',
+  ].join('\r\n');
+  assert.deepEqual(mergedTrackerIds(text), [900001, 900002, 900003]);
+  assert.deepEqual(mergedTrackerIds(''), []);
+});
+
+test('resync covers rows the leading orphan merge added, not only tonight\'s evaluations', () => {
+  const fx = fixture('obsidian-nightly-orphan-resync');
+  const resyncScopes = [];
+  const run = (command, args) => {
+    const script = String(args[0]);
+    if (script.endsWith('merge-tracker.mjs') && !resyncScopes.merged) {
+      resyncScopes.merged = true;
+      return result('Add #900003: Zorblax Widgetry, Widget Director (2.0/5, Passed)\nAdd #900002: Quennox Ratchet Works, Gear Lead (4.0/5, Evaluated)\n');
+    }
+    if (script.endsWith('obsidian-prep.mjs')) {
+      fs.writeFileSync(path.join(fx.repo, 'batch', 'batch-state.tsv'), [
+        'id\turl\tstatus\tstarted_at\tcompleted_at\treport_num\tscore\terror\tretries',
+        '1\thttps://jobs.example.test/roles/900005\tcompleted\ta\tb\t900005\t4.6\t\t0', '',
+      ].join('\n'));
+      return result('scanned: 1\nsurvivors: 1\ndeferred: 0\nTHIN\n');
+    }
+    if (script.endsWith('drain-wrapper.sh')) return result('DRAIN_RESULT completed=1 failed=0 skipped=0\n');
+    if (script.endsWith('resync-tracker-scores.mjs')) resyncScopes.push(args[args.indexOf(flag('only')) + 1]);
+    return result();
+  };
+  main(fx.args, { env: {}, run });
+  assert.deepEqual([...resyncScopes], ['900002,900003,900005']);
+});
+
+test('resync still runs for orphans when tonight evaluated nothing', () => {
+  const fx = fixture('obsidian-nightly-orphan-only');
+  const resyncScopes = [];
+  const run = (command, args) => {
+    const script = String(args[0]);
+    if (script.endsWith('merge-tracker.mjs') && !resyncScopes.merged) {
+      resyncScopes.merged = true;
+      return result('Add #900002: Quennox Ratchet Works, Gear Lead (4.0/5, Evaluated)\n');
+    }
+    if (script.endsWith('obsidian-prep.mjs')) return result('scanned: 0\nsurvivors: 0\ndeferred: 0\nTHIN\n');
+    if (script.endsWith('resync-tracker-scores.mjs')) resyncScopes.push(args[args.indexOf(flag('only')) + 1]);
+    return result();
+  };
+  main(fx.args, { env: {}, run });
+  assert.deepEqual([...resyncScopes], ['900002']);
 });
 
 test('missing paths print usage and exit two', () => {
