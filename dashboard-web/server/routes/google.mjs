@@ -16,6 +16,7 @@ import { DATA_DIR, PORT, TT_CORR_DIR } from '../config.mjs';
 import { patchRowInMd, parseApplicationsMd } from '../lib/applications.mjs';
 import { addNote, findNoteByMsgId } from '../lib/notes.mjs';
 import { readApplyDates } from '../lib/sidecars.mjs';
+import { isContactRevivalStatus, reviveArchivedContactsForCompany } from '../lib/contact-revive.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
 import { evaluateReplyAttachment } from '../../../lib/reply-guards.mjs';
@@ -742,6 +743,13 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
         alreadyLogged = addNote(id, noteText, noteMeta).added === false;
       }
       if (statusFlip) patchRowInMd(id, { status: statusFlip }, { company });
+      if (isContactRevivalStatus(statusFlip)) {
+        try {
+          reviveArchivedContactsForCompany(company);
+        } catch (error) {
+          console.warn(`[contacts] could not revive contacts for ${company}: ${error.message}`);
+        }
+      }
 
       let contactLogged = false;
       if (contact && !automatedWithoutContact) {

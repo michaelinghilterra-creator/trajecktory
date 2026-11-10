@@ -1,8 +1,14 @@
 import { companiesMatchForOutreach } from '../../../lib/identity.mjs';
+import { parseApplicationsMd } from './applications.mjs';
 import { OUTREACH_ELIGIBLE_STATUSES, TALENT_STATUS_LABELS } from './statuses.mjs';
+import { parseTargetTalentMd, updateTTLine } from './target-talent.mjs';
 
 const WAS_TAG = /\[was:([^\]]+)\]/i;
 const MANUAL_ARCHIVE_MARKER = /Archived \d{4}-\d{2}-\d{2}:/;
+
+export function isContactRevivalStatus(status) {
+  return OUTREACH_ELIGIBLE_STATUSES.includes(status);
+}
 
 export function withWasTag(notes, status) {
   const text = String(notes || '');
@@ -41,4 +47,18 @@ export function contactIdsToRevive(apps, ttRows, company) {
         : (String(row.lastTouch || '').trim() ? 'Sent' : 'Not Contacted');
       return { id: row.id, status, notes: reviveNotes(row.notes) };
     });
+}
+
+export function reviveArchivedContactsForCompany(company, {
+  readApps = parseApplicationsMd,
+  readContacts = parseTargetTalentMd,
+  writeContact = updateTTLine,
+} = {}) {
+  if (!String(company || '').trim()) return 0;
+  const contacts = contactIdsToRevive(readApps(), readContacts(), company);
+  let revived = 0;
+  for (const contact of contacts) {
+    if (writeContact(contact.id, { status: contact.status, notes: contact.notes })) revived++;
+  }
+  return revived;
 }
