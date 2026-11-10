@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.29.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.29.1...v5.29.2) (2026-11-10)
+
+
+### Bug Fixes
+
+* stop the scan location gate passing onsite, hybrid and non-US roles ([#522](https://github.com/michaelinghilterra-creator/trajecktory/issues/522)) ([08c494f](https://github.com/michaelinghilterra-creator/trajecktory/commit/08c494fbdcbbe9defb4c8327f66fe9f46102545a))
+
 ## [5.29.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.29.0...v5.29.1) (2026-11-10)
 
 
