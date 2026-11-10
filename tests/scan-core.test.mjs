@@ -8,7 +8,7 @@
  * Run: node tests/scan-core.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { normalizeUrl, buildTitleFilter, buildLocationFilter, normalizeForMatch, scoreOffer, expandTitleMatrix, findLooseRun, matchesRankedProximity } from '../lib/scan-core.mjs';
+import { normalizeUrl, buildTitleFilter, buildLocationFilter, normalizeForMatch, scoreOffer, expandTitleMatrix, findLooseRun, matchesRankedProximity, containsWholePhrase } from '../lib/scan-core.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -545,6 +545,30 @@ check(matchesRankedProximity(['analytics'], proxMatrix) === false,
   'matchesRankedProximity: a ranked function alone never matches');
 check(matchesRankedProximity(['director'], proxMatrix) === false,
   'matchesRankedProximity: a seniority word alone never matches');
+
+// ── buildTitleFilter: seniority + function forms match WHOLE words ────────────
+// A plain substring let a short ranked function ("zx") match the start of an
+// unrelated word, so unrelated roles reached evaluation.
+const ww = buildTitleFilter({
+  matrix: {
+    seniority: ['director', 'manager', 'lead'],
+    functions_bare: ['sprocket operations'],
+    functions_ranked: ['zx', 'widget intelligence', 'ratchetry'],
+  },
+  negative: ['intern'],
+});
+check(ww('Manager, Zxylophone Tuning') === false, 'whole words: "manager zx" does not match a word that starts with zx');
+check(ww('Lead Zxenologist') === false, 'whole words: "lead zx" does not match a word that starts with zx');
+check(ww('Director, Widget Intelligence') === true, 'whole words: a multi-word ranked function still passes');
+check(ww('Director, ZX') === true, 'whole words: the short form still passes as a whole word');
+check(ww('Director, Ratchetry.') === true, 'whole words: trailing punctuation does not block a match');
+check(containsWholePhrase('manager zx', 'manager zx') === true, 'containsWholePhrase: exact text matches');
+check(containsWholePhrase('senior manager zx team', 'manager zx') === true, 'containsWholePhrase: bounded by spaces matches');
+check(containsWholePhrase('manager zxylophone', 'manager zx') === false, 'containsWholePhrase: a letter after the phrase rejects');
+check(containsWholePhrase('xmanager zx', 'manager zx') === false, 'containsWholePhrase: a letter before the phrase rejects');
+check(containsWholePhrase('manager zx.', 'manager zx') === true, 'containsWholePhrase: punctuation after the phrase matches');
+check(containsWholePhrase('manager zxylophone manager zx', 'manager zx') === true, 'containsWholePhrase: a later bounded hit is found');
+check(containsWholePhrase('anything', '') === false, 'containsWholePhrase: an empty phrase never matches');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
