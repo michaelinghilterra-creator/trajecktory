@@ -116,6 +116,19 @@ function parsePostfix(text) {
   };
 }
 
+// Tracker numbers merge-tracker reports touching ("Add #5343: ...", "Update: #5343 ...").
+// The leading merge-orphans step folds in TSVs an earlier run left behind. Their reports are
+// not derived yet, so the row lands with the TSV's authored whole-number score; compute-scores
+// then moves the report to its decimal headline and nothing copies it back to the tracker.
+export function mergedTrackerIds(text) {
+  const ids = new Set();
+  for (const line of String(text).split(/\r?\n/)) {
+    const match = line.match(/\b(?:Add|Update):?\s+#(\d+)\b/);
+    if (match) ids.add(Number(match[1]));
+  }
+  return [...ids].sort((a, b) => a - b);
+}
+
 function completedRows(statePath) {
   if (!fs.existsSync(statePath)) return [];
   const lines = fs.readFileSync(statePath, 'utf8').split(/\r?\n/).filter(Boolean);
@@ -281,6 +294,7 @@ export function main(argv = process.argv.slice(2), dependencies = {}) {
 
     let result = required('merge-orphans', process.execPath, [path.join(options.repo, 'merge-tracker.mjs')], { timeout: 10 * 60 * 1000 });
     if (!result.ok) return finish('aborted', 'merge-orphans', 2);
+    const orphanIds = mergedTrackerIds(result.stdout);
     result = required('prep', process.execPath, prepArgs, { timeout: 10 * 60 * 1000 });
     summary.prep = parsePrep(result.stdout);
     if (!result.ok) return finish('aborted', 'prep', 2);
@@ -301,7 +315,10 @@ export function main(argv = process.argv.slice(2), dependencies = {}) {
     const post = [
       ['compute-scores', 'compute-scores.mjs', [flag('all'), flag('apply')], 10 * 60 * 1000],
     ];
-    if (completed.length) post.push(['resync-tracker-scores', 'resync-tracker-scores.mjs', [flag('apply'), flag('only'), completed.map(row => row.reportNum).join(',')], 10 * 60 * 1000]);
+    // Scope = tonight's evaluations plus every row the leading orphan merge touched. Without the
+    // second half, an orphan's whole-number tracker score survives compute-scores for good.
+    const resyncIds = [...new Set([...completed.map(row => row.reportNum), ...orphanIds])].sort((a, b) => a - b);
+    if (resyncIds.length) post.push(['resync-tracker-scores', 'resync-tracker-scores.mjs', [flag('apply'), flag('only'), resyncIds.join(',')], 10 * 60 * 1000]);
     post.push(
       ['clean-generated-text', 'clean-generated-text.mjs', ['reports', flag('apply')], 10 * 60 * 1000],
       ['merge-tracker', 'merge-tracker.mjs', [], 10 * 60 * 1000],
