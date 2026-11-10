@@ -144,7 +144,7 @@ console.log('\n5b. Greenhouse/Ashby/Lever structured location metadata');
   check(/fully remote/.test(greenhouse.remoteHint), 'Greenhouse keeps JD body text in remoteHint');
 
   const ashby = parseAshby({ jobs: [{
-    title: 'Partner Director', jobUrl: 'https://jobs.ashbyhq.com/acme/1', location: 'New York City',
+    title: 'Zorblax Widgetry Alliances Director', jobUrl: 'https://jobs.ashbyhq.com/zorblax/1', location: 'New York City',
     isRemote: true, workplaceType: 'Hybrid', descriptionPlain: 'remote Hybrid ...',
     address: { postalAddress: { addressCountry: 'United States' } },
     secondaryLocations: [
@@ -158,7 +158,7 @@ console.log('\n5b. Greenhouse/Ashby/Lever structured location metadata');
   check(ashby.remoteHint === 'remote Hybrid ...', 'Ashby remoteHint contains body text, not synthesized arrangement data');
 
   const lever = parseLever([{
-    text: 'Director, Analytics', hostedUrl: 'https://jobs.lever.co/acme/1',
+    text: 'Director, Analytics', hostedUrl: 'https://jobs.lever.co/zorblax/1',
     workplaceType: 'on-site', descriptionPlain: 'This role is fully remote.', categories: { location: 'Denver, CO' },
   }], 'Acme')[0];
   check(lever.workplace === 'onsite', 'Lever on-site workplaceType normalizes to onsite');

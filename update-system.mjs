@@ -153,6 +153,7 @@ export const SYSTEM_PATHS = [
   'agent-edit.mjs',
   'archive-discarded.mjs',
   'audit-discards.mjs',
+  'audit-location-filter.mjs',
   'audit-orphan-reports.mjs',
   'audit-unlogged-mail.mjs',
   'auto-discard-low.mjs',
