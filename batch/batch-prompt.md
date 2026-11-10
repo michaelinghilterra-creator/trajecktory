@@ -259,6 +259,13 @@ score" rule. Set the field, do not fudge the dimension ratings.
 | Title regression to a **sub-Manager individual-contributor** title (Analyst, Coordinator, Specialist, Representative, "individual contributor") when candidate is Director+ | *computed by code* | Career step backward. Code caps it at `scoring.sub_manager_ceiling` from the title, so rate `level` honestly and you may set `ceilingBasis: "level"`. **Manager and above (Manager, Senior Manager, Director, Senior Director, Head, VP, C-level) is IN SCOPE and a FULL level match, and this rule never caps those titles.** |
 | `buildDepth` rated low | *computed by code* | Rate the dimension against the 0-5 anchors above and set `ceilingBasis: "buildDepth"`. Do NOT author the number: `compute-scores.mjs` reads the tiers from `scoring.build_depth_ceilings` in `config/profile.yml`, so the policy lives in one place instead of in two prompts that drift apart. |
 
+**Pay is never a blocker when the comp floor is off.** If `scoring.comp_floor_ceiling` in
+`config/profile.yml` is `null`, do not set `ceilingBasis: "comp"`, do not call pay a
+blocker, a disqualifier or a reason not to apply in `recommendation`, `tldr` or the
+verdict. Never write "do not apply", "hard blocker" or "not recommended" in the tracker
+note because of pay alone: those phrases auto-discard the row. Report the stated band in
+Block D and, at most, one negotiation note.
+
 **Reasoning:** Auto-discard fires below 3.5. A 3.2 on a Barcelona-required role is
 misleading. Setting `scoreCeiling: 1.5` caps the derived headline so the number matches
 the verdict. If you would write "HARD DISQUALIFIER" or "do not apply", set `scoreCeiling`
