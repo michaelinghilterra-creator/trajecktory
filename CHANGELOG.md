@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.29.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.29.0...v5.29.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* resync tracker scores for orphan-merged rows and declare ceilingBasis in the batch prompt ([#520](https://github.com/michaelinghilterra-creator/trajecktory/issues/520)) ([e6627a3](https://github.com/michaelinghilterra-creator/trajecktory/commit/e6627a3653dd61dd10ba771218124867e4deec8f))
+
 ## [5.29.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.28.0...v5.29.0) (2026-11-09)
 
 
