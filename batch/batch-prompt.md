@@ -225,7 +225,7 @@ dimension 0–5 WITH its evidence in `globalScore[]` as **keyed** entries:
 ]
 ```
 
-- Choose `northStarArchetype` from the profile list by its exact name. Use `strong` when the title and scope are the target role, `partial` for adjacent scope or a different function at the right level, and `none` when no archetype fits. Code derives the north star rating from this choice. Still fill the `northStar` entry in `globalScore` with your best 0-5 estimate and one line of evidence, but the classification is what counts.
+- Choose `northStarArchetype` from the profile list by its exact name. Use `strong` when the function and scope are the archetype's work, `partial` for an adjacent function or a meaningfully different domain, and `none` when no archetype fits. **Title level never makes a match `partial`:** a Manager or Senior Manager version of an archetype's function is the same match as the Director or VP version, because level is scored separately by `level`. Code derives the north star rating from this choice. Still fill the `northStar` entry in `globalScore` with your best 0-5 estimate and one line of evidence, but the classification is what counts.
 
 - **`redFlags` is cleanliness on 0–5 (5 = clean, 0 = severe), NOT a negative number.**
 - **`buildDepth` is rated but NOT scored.** Add `"note": "recorded, not scored"`.

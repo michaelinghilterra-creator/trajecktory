@@ -89,6 +89,10 @@ check(loadScoringWeights(writeProfile('custom.yml', 'scoring:\n  sub_manager_cei
 check(loadScoringWeights(writeProfile('disabled.yml', 'scoring:\n  sub_manager_ceiling: null\n')).subManagerCeiling === null, 'null disables the cap');
 check(loadScoringWeights(writeProfile('text.yml', 'scoring:\n  sub_manager_ceiling: abc\n')).subManagerCeiling === 2, 'text is ignored');
 check(loadScoringWeights(writeProfile('negative.yml', 'scoring:\n  sub_manager_ceiling: -1\n')).subManagerCeiling === 2, 'a negative cap is ignored');
+check(loadScoringWeights(writeProfile('comp-default.yml', 'scoring:\n  redFlagPenalty: 1.5\n')).compFloorCeiling === 2, 'the comp cap defaults to 2.0');
+check(loadScoringWeights(writeProfile('comp-off.yml', 'scoring:\n  comp_floor_ceiling: null\n')).compFloorCeiling === null, 'null switches the comp cap off');
+check(loadScoringWeights(writeProfile('comp-custom.yml', 'scoring:\n  comp_floor_ceiling: 2.5\n')).compFloorCeiling === 2.5, 'a custom comp cap loads');
+check(loadScoringWeights(writeProfile('comp-text.yml', 'scoring:\n  comp_floor_ceiling: abc\n')).compFloorCeiling === 2, 'a text comp cap is ignored');
 
 console.log('report derivation');
 let result = derive('Senior Analyst');
