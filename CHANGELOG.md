@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.30.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.29.2...v5.30.0) (2026-11-10)
+
+
+### Features
+
+* check search-found postings before queueing, let the comp cap be switched off, and match title forms on whole words ([#524](https://github.com/michaelinghilterra-creator/trajecktory/issues/524)) ([2c5d7aa](https://github.com/michaelinghilterra-creator/trajecktory/commit/2c5d7aa38b4e1b250a0821a9f34eea45c0158dda))
+
 ## [5.29.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.29.1...v5.29.2) (2026-11-10)
 
 
