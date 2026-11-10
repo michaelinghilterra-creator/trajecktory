@@ -106,6 +106,76 @@ title_filter:
     - "Head"
     - "Director"
 
+  location_policy:
+    # Countries allowed for remote work when an ATS supplies structured country
+    # metadata. If any listed country is allowed, the posting remains eligible.
+    remote_countries: [united states, us, usa, united states of america]
+
+    # Whole-word location markers that block a remote posting when the ATS gives
+    # no structured country and the location contains no explicit US token/state.
+    # Canada is intentionally absent so mixed Canada/US postings can pass.
+    foreign_markers:
+      - united kingdom
+      - uk
+      - england
+      - london
+      - ireland
+      - dublin
+      - europe
+      - emea
+      - germany
+      - berlin
+      - munich
+      - france
+      - paris
+      - spain
+      - madrid
+      - barcelona
+      - italy
+      - milan
+      - netherlands
+      - amsterdam
+      - poland
+      - warsaw
+      - portugal
+      - lisbon
+      - sweden
+      - stockholm
+      - switzerland
+      - zurich
+      - apac
+      - asia
+      - hong kong
+      - singapore
+      - china
+      - japan
+      - tokyo
+      - korea
+      - seoul
+      - india
+      - bangalore
+      - bengaluru
+      - australia
+      - sydney
+      - melbourne
+      - new zealand
+      - latam
+      - brazil
+      - sao paulo
+      - mexico
+      - argentina
+      - colombia
+      - kazakhstan
+      - almaty
+      - israel
+      - tel aviv
+      - dubai
+      - uae
+
+    # Whole-word regional scopes in titles. A title that also names a US scope
+    # such as North America, Americas, US, or United States is not blocked.
+    title_region_blocks: [emea, apac, latam, dach, nordics, anz, southern europe, northern europe, western europe, central europe, eastern europe, japan, "uk&i", uki, benelux, mena, apj]
+
 # -- Search queries --
 # Each query triggers a WebSearch. Use site: to filter by portal.
 # The scanner extracts title, URL, and company from results.

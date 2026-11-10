@@ -273,6 +273,147 @@ check(lf('Waco, TX (Remote)') === true, 'TX city outside commute radius passes r
 check(lf('Denver, CO') === false, 'named non-TX city with no remote signal still blocks');
 check(lf('Denver, CO (Remote)') === true, 'named non-TX city with remote signal still passes');
 
+// Structured ATS metadata and role-level body assertions close three remote
+// leaks: boilerplate body mentions, hybrid/onsite arrangements presented as
+// remote, and remote roles scoped to a foreign country or title region.
+const remoteLf = buildLocationFilter({
+  location_policy: {
+    ...locPolicy.location_policy,
+    hard_no: [],
+  },
+});
+
+check(remoteLf(
+  'Springfield, Illinois, United States',
+  '<p>Our offices are in Springfield, IL and Riverside, CA. Certain roles &mdash; such as field sales or other remote positions &mdash; may follow a different arrangement.</p>',
+  { title: 'Director, Head of Revenue Operations' },
+) === false, 'body boilerplate about certain remote roles does not rescue an onsite role');
+check(remoteLf(
+  'Mountain View, CA, USA',
+  'The pay range shown is for the role location; if the role can be performed remote, your recruiter will share the range for your preferred location.',
+  { title: 'Program Manager, BI Enablement' },
+) === false, 'conditional body language does not assert that this role is remote');
+check(remoteLf('New York City', 'remote Hybrid ...', {
+  workplace: 'hybrid', countries: ['united states'], title: 'Partner Director, Cloud Alliances',
+}) === false, 'structured hybrid outside the home region blocks even when body text says remote');
+check(remoteLf('London, UK', '', {
+  workplace: 'hybrid', countries: ['united kingdom'], title: 'Partner Sales Leader, Southern Europe',
+}) === false, 'foreign structured country blocks a hybrid role');
+check(remoteLf('Hong Kong, remote', '', {
+  workplace: 'remote', countries: ['hong kong', 'australia', 'china', 'singapore', 'south korea'], title: 'GTM Lead, APAC',
+}) === false, 'foreign-only structured countries block a remote role');
+check(remoteLf('Remote', '', { title: 'Director, Revenue Operations EMEA' }) === false,
+  'foreign title region blocks a nominally remote role');
+check(remoteLf('Berlin, Germany (Remote)', '') === false,
+  'foreign marker in an unstructured location blocks a nominally remote role');
+
+check(remoteLf('Remote, USA', '') === true, 'explicit remote USA location passes');
+check(remoteLf('Chicago, IL', '100% remote from select states. Hybrid available for candidates near our headquarters.') === true,
+  'role-level 100% remote body assertion passes despite a later hybrid option');
+check(remoteLf('San Francisco, CA', 'We are remote-first. Every position, unless otherwise specified, can be performed remotely within the US.') === true,
+  'remote-first company policy and unless-otherwise exception pass');
+check(remoteLf('San Francisco, CA', 'This role is fully remote within the United States.') === true,
+  'explicit this-role remote assertion passes');
+check(remoteLf('San Francisco, CA; Remote', '') === true, 'short location remote signal still passes');
+check(remoteLf('Canada/US', '') === true, 'Canada/US remains a cityless pass');
+check(remoteLf('London or Remote US', '') === true, 'foreign marker with an explicit US token passes');
+check(remoteLf('Remote', '', {
+  workplace: 'remote', countries: ['united states', 'united kingdom'],
+}) === true, 'one allowed structured country is enough to pass');
+check(remoteLf('Remote', '', { title: 'VP Sales Operations, North America and EMEA' }) === true,
+  'US title scope overrides a foreign title-region term');
+check(remoteLf('Indianapolis, Indiana (Remote)', '') === true,
+  'whole-word foreign matching does not mistake Indiana for India');
+check(remoteLf('Remote', '', { title: 'Director, Revenue Operations, Duke Health' }) === true,
+  'whole-word title matching does not mistake Duke for UK');
+check(remoteLf('San Francisco, CA', 'This role is fully remote within the US.', {
+  workplace: 'onsite', countries: ['united states'],
+}) === false, 'structured onsite never gains a remote signal from the body');
+
+// Several ATS feeds use "distributed" / "home based" as
+// short-location synonyms for remote. They must also collapse in the city-less
+// residual so a bare arrangement label never looks like an out-of-region city.
+check(remoteLf('Distributed', '') === true, 'bare Distributed location passes as remote and city-less');
+check(remoteLf('Distributed; Hybrid', '') === true, 'Distributed plus Hybrid location passes as remote and city-less');
+check(remoteLf('Home Based - Americas; Home based - EMEA', '') === true,
+  'Home Based location passes when Americas and EMEA scopes are both listed');
+check(remoteLf('Home-based - North America', '') === true,
+  'hyphenated Home-based location passes as a remote signal');
+
+// Full state names and the common US-region labels must override an otherwise
+// foreign-looking token before normal geo policy resumes.
+const fullStateNames = [
+  'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado',
+  'Connecticut', 'Delaware', 'Florida', 'Georgia', 'Hawaii', 'Idaho',
+  'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana', 'Maine',
+  'Maryland', 'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi',
+  'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey',
+  'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio',
+  'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina',
+  'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia',
+  'Washington', 'West Virginia', 'Wisconsin', 'Wyoming',
+];
+for (const state of fullStateNames) {
+  check(remoteLf(`Remote - ${state}; EMEA`, '') === true,
+    `full US state name ${state} overrides a foreign location marker`);
+}
+check(remoteLf('Remote - District of Columbia; EMEA', '') === true,
+  'District of Columbia is recognized as a US location token');
+check(remoteLf('Albuquerque, New Mexico (Remote)', '') === true,
+  'New Mexico is not mistaken for the foreign Mexico marker');
+check(remoteLf.explain('Dublin, California', '').rule === 'out_of_region_block',
+  'Dublin, California reaches normal US geo policy instead of a foreign-location block');
+check(remoteLf('Paris, Texas', '') === true,
+  'Paris, Texas reaches the configured Texas policy without a state abbreviation');
+check(remoteLf('Remote - North America; EMEA', '') === true,
+  'North America overrides a foreign location marker');
+check(remoteLf('Remote - AMER; EMEA', '') === true,
+  'AMER overrides a foreign location marker');
+check(remoteLf('Mexico City, Mexico', '') === false,
+  'Mexico City, Mexico remains blocked as a foreign location');
+
+// Explicit role-level body assertions found in the audit. Keep these grounded
+// in an out-of-region location so each pass depends on the body assertion.
+for (const body of [
+  'Dallas, TX, Denver, CO, OR Remote US',
+  'Dallas, TX, Denver, CO, OR Remote (US)',
+  'Dallas, TX, Denver, CO, OR Remote within the US',
+]) {
+  check(remoteLf('New York, NY', body) === true, `office list remote alternative passes: ${body}`);
+}
+for (const body of [
+  'Contract engagement, remote, US or Canada',
+  'Contract engagement, remote, United States or Canada',
+  'Contract engagement, remote US or Canada',
+]) {
+  check(remoteLf('New York, NY', body) === true, `explicit remote US scope passes: ${body}`);
+}
+check(remoteLf('New York, NY', 'Metro hubs and select remote (Boston, plus Remote CA, CT)') === true,
+  'Select Remote body assertion passes');
+for (const body of [
+  'Work from our office, or remotely',
+  'This position can be performed in office or remotely',
+  'Choose to work on-site or remotely',
+]) {
+  check(remoteLf('New York, NY', body) === true, `office-or-remote body assertion passes: ${body}`);
+}
+check(remoteLf('New York, NY', 'Remote is an option') === true,
+  'Remote is an option body assertion passes');
+check(remoteLf('New York, NY', 'If not, remote is always an option') === true,
+  'comma-delimited fallback keeps remote is always an option affirmative');
+
+// Nearby remote vocabulary must not become a role-level assertion.
+for (const body of [
+  'Remote applicants will not be considered',
+  'we do not offer remote-only roles',
+  'you are expected in person three days a week, with some remote flexibility',
+  'Our hybrid model mixes remote work with time in our offices',
+  'a remote friendly culture and flexible hours',
+  'conducting remote "interviews"',
+]) {
+  check(remoteLf('New York, NY', body) === false, `non-assertive remote body remains blocked: ${body}`);
+}
+
 // A policy with no home block must NOT fall back to some hardcoded town: there
 // is no origin to measure from, so the radius math is skipped and TX cities
 // pass through to eval (rule 7's unknown-city path). Guards against a default
