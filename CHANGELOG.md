@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.30.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.30.0...v5.30.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* revive contacts on live statuses, match legal-suffix names, hide muted and excluded items ([#526](https://github.com/michaelinghilterra-creator/trajecktory/issues/526)) ([92eb8ca](https://github.com/michaelinghilterra-creator/trajecktory/commit/92eb8cacc89084f8fa94890cc798899a2d97a24d))
+
 ## [5.30.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.29.2...v5.30.0) (2026-11-10)
 
 
