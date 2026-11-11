@@ -611,6 +611,7 @@ for (const suite of [
   'tests/inbound-classify.test.mjs',
   'tests/auto-reply-caps.test.mjs',
   'tests/followups-snooze.test.mjs',
+  'tests/followups-stale-mute.test.mjs',
   'tests/followup-card.test.mjs',
   'tests/outreach-policy.test.mjs',
   'tests/check-outreach.test.mjs',
