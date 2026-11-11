@@ -363,6 +363,7 @@ export function buildActivities({ from, to, identity, interviewRecords, today, s
     interviewOverrides.set(`${item.appId}|${normalizeStage(item.stage)}`, item);
   }
   const emittedInterviews = new Set();
+  const interviewExclusions = overrides.exclude.map(validExcludeOverride).filter((x) => x && x.kind === 'interview');
   const addInterview = ({ appId, stage, event, override }) => {
     const key = `${appId}|${normalizeStage(stage)}`;
     if (emittedInterviews.has(key)) return;
@@ -395,6 +396,9 @@ export function buildActivities({ from, to, identity, interviewRecords, today, s
     if (!isYmd(date)) return;
     const company = (app && app.company) || (event && event.company) || '';
     emittedInterviews.add(key);
+    // An interview the person excluded in the overrides file (it never took place) is not asked about at the gate
+    // either; the exclusion below only filters lines that were already counted.
+    if (interviewExclusions.some((x) => !x.contact && x.date === date && (!x.company || normalizeCompany(x.company) === normalizeCompany(company)))) return;
     if (strict) {
       unrecorded.push({ appId, stage, date, company });
       return;
