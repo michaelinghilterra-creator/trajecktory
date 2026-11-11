@@ -242,6 +242,9 @@ function buildStaleBody(renderPending, handEdited) {
   const cold = [];
   const snoozed = [];
   for (const it of merged) {
+    // A muted contact ("Done for now") is hidden from every contact surface, this
+    // one included. Muted APPLICATIONS are handled in the lib (forced cold).
+    if (it.source !== 'app' && isMuted(it.id, it.source)) continue;
     const until = snoozedUntil(it);
     if (until && until > today) { snoozed.push({ ...it, snoozeUntil: until }); continue; }
     if (it.klass === 'cold') cold.push(it);

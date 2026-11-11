@@ -135,6 +135,11 @@ check(companyAliasKeys('Zenco (Parentco)').join() === 'zencoparentco,zenco', 'al
 check(companyAliasKeys('Alphaco / Betaco').join() === 'alphacobetaco,alphaco,betaco', 'alias keys: each side of a slash is a key');
 check(companyAliasKeys('Ab / Cd').join() === 'abcd', 'alias keys: fragments under four characters are not keys');
 check(companyAliasKeys('').length === 0, 'alias keys: a blank name has none');
+check(companyAliasKeys('Zorblax Widgetry Inc.').includes('zorblaxwidgetry'), 'alias keys: a trailing Inc. adds the key without it');
+check(companyAliasKeys('Quennox Ratchet Works Co., Ltd.').includes('quennoxratchetworks'), 'alias keys: stacked legal suffixes are all dropped');
+check(companyAliasKeys('Zorblax Widgetry Inc.').some(k => companyAliasKeys('Zorblax Widgetry').includes(k)), 'alias keys: the suffixed and plain names share a key');
+check(!companyAliasKeys('Zorblax Group').includes('zorblax'), 'alias keys: Group is not a legal suffix and is kept');
+check(companyAliasKeys('Inc').join() === 'inc', 'alias keys: a name that is only a suffix is not emptied');
 const variantApps = [
   { id: 201, company: 'Alphaco / Betaco', status: 'No Response', role: 'Ops', date: '2026-02-01' },
   { id: 202, company: 'Zenco (Parentco)', status: 'Applied', role: 'Ops', date: '2026-02-02' },

@@ -21,7 +21,7 @@ import { localToday, logWriteRouteError, logWritesEnabled, renderPendingResponse
 import { startCadences } from '../lib/cadence-start.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
 import { contactIdsToArchiveForCompany } from '../lib/tt-reconcile-core.mjs';
-import { contactIdsToRevive, withWasTag } from '../lib/contact-revive.mjs';
+import { reviveArchivedContactsForCompany, withWasTag } from '../lib/contact-revive.mjs';
 
 export const router = express.Router();
 
@@ -269,10 +269,7 @@ router.patch('/api/applications/:id', (req, res) => {
     let contactsRevived = 0;
     if (becomingApplied && updated) {
       try {
-        const revivals = contactIdsToRevive(parseApplicationsMd(), parseTargetTalentMd(), updated.company);
-        for (const contact of revivals) {
-          if (updateTTLine(contact.id, { status: contact.status, notes: contact.notes })) contactsRevived++;
-        }
+        contactsRevived = reviveArchivedContactsForCompany(updated.company);
       } catch (err) {
         console.warn(`[contacts] could not revive contacts for ${updated.company}: ${err.message}`);
       }

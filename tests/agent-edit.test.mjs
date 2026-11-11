@@ -57,6 +57,24 @@ function compare(name, args, files = ['applications.md', 'status-events.tsv'], e
 
 console.log('agent-edit.test.mjs');
 compare('status change', ['application', '--id', '900001', '--status', 'Applied', '--event-date', '2030-05-02']);
+{
+  const dataDir = setup('contact-revival', false);
+  const targetTalent = [
+    '# Target Talent',
+    '',
+    '| ID | Company | Last | First | Salute | Title | City | State | ZIP | Phone | Email | LinkedIn | Status | Last Touch | Notes | Website |',
+    '| 900002 | Zorblax Widgetry | Personone | Example | Example | Invented Recruiter | Invented City | TX | 70001 | 5550109002 | example.personone@example.test | https://example.test/personone | Archived | 2030-05-01 | Invented contact note [was:Replied] | https://example.test |',
+    '',
+  ].join('\n');
+  fs.writeFileSync(path.join(dataDir, 'target-talent.md'), targetTalent);
+  const flag = name => `-${name}`;
+  const result = run(dataDir, ['application', flag('-id'), '900001', flag('-status'), 'Applied', flag('-event-date'), '2030-05-02', flag('-json')]);
+  const output = JSON.parse(result.stdout);
+  const contactText = fs.readFileSync(path.join(dataDir, 'target-talent.md'), 'utf8');
+  check(result.status === 0 && output.contactsRevived === 1 && /\| Replied \| 2030-05-01 \| Invented contact note \|/.test(contactText)
+    && !contactText.includes('| Archived |'),
+  'Applied revives the company contact and reports the JSON count');
+}
 for (const on of [false, true]) {
   const mode = on ? 'on' : 'off';
   const readDates = dir => {

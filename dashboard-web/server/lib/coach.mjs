@@ -16,6 +16,7 @@ import { floorStatus } from './rolling-floor.mjs';
 import { createTodo } from './todos.mjs';
 import { getIdentity } from './profile.mjs';
 import { withPassedReason } from '../../../lib/passed.mjs';
+import { isContactRevivalStatus, reviveArchivedContactsForCompany } from './contact-revive.mjs';
 import { FUNNEL_ORDER } from './statuses.mjs';
 
 const MAX_MESSAGES = 200;
@@ -194,6 +195,13 @@ export function executeAction(action) {
     const updates = { status: a.status };
     if (a.status === 'Passed') updates.notes = withPassedReason(row.notes, 'discarded');
     patchRowInMd(a.appId, updates, { company: row.company });
+    if (isContactRevivalStatus(a.status)) {
+      try {
+        reviveArchivedContactsForCompany(row.company);
+      } catch (error) {
+        console.warn(`[contacts] could not revive contacts for ${row.company}: ${error.message}`);
+      }
+    }
     return { ok: true, message: `Marked ${row.company} as ${a.status}.` };
   }
   if (a.kind === 'addTodo') {
