@@ -186,7 +186,7 @@ Prioritize by frequency and relevance to the role. Max 10 items.
 
 Things to say, do, and avoid based on research:
 
-- **Values they screen for:** name them, cite source (careers page, blog, Glassdoor reviews)
+- **Values they screen for (REQUIRED):** name every stated core value exactly as the company words it, and cite the source. Prefer the company's own site over third-party pages. If the company publishes only the names and no definitions, say so with the tag `[no official definitions]`; never write a definition as if it were the company's own. Add the mission statement and tagline if the company publishes them. Then prepare one line for "which of our values resonates most with you, and why?", built only from the user's real stories. Interviewers at culture-led companies ask this, and a candidate who has not read the values is marked down for it.
 - **Vocabulary to use:** terms the company uses internally — shows homework (e.g., Stripe says "increase the GDP of the internet", Anthropic says "safety" not "alignment")
 - **Things to avoid:** specific anti-patterns flagged in interview reviews
 - **Questions to ask them:** 2-3 sharp questions that demonstrate you've researched the company, tied to recent news or blog posts discovered in Step 1
@@ -216,5 +216,6 @@ After delivering the report:
 - **NEVER invent interview questions and attribute them to sources.** Inferred questions must be labeled `[inferred from JD]`.
 - **NEVER fabricate Glassdoor ratings or statistics.** If the data isn't there, say so.
 - **Cite everything.** Every question, every stat, every claim gets a source or an `[inferred]` tag.
+- **Core values are a required section.** If the research finds no stated values, write that in the report instead of leaving the line out. Never write that the user has studied the values unless the user says so.
 - Generate in the language of the JD (EN default).
 - Be direct. This is a working prep document, not a pep talk.
