@@ -22,6 +22,7 @@ Saves to `interview-prep/` and optionally pushes to Obsidian vault.
 1. **Find the report**: `Grep reports/ -i {company}` → read the matching `.md` file in full
 2. If multiple reports match: use the most recent (sort by date in filename)
 3. If no report found: ask the user to run `/trajecktory oferta` first, or paste the JD so the full pipeline can run
+4. **Company values:** read the company's stated core values and mission from the interview-prep intel report if one exists, otherwise from the company's own site. Under "The Angle to Own" add one line naming the stated values and the one that best fits the user's real stories, tagged `[no official definitions]` when the company publishes only names. Do not write that the user has studied the values unless the user says so.
 
 ---
 
