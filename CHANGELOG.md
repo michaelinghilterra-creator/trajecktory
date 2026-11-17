@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.30.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.30.1...v5.30.2) (2026-11-17)
+
+
+### Bug Fixes
+
+* ignore subagent transcripts in the nightly model check and steer comp research to WebSearch ([#529](https://github.com/michaelinghilterra-creator/trajecktory/issues/529)) ([9414d58](https://github.com/michaelinghilterra-creator/trajecktory/commit/9414d58ae1429db31fe5bdcb9659d11379caac7a))
+
 ## [5.30.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.30.0...v5.30.1) (2026-11-11)
 
 
