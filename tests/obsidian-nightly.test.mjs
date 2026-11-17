@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeRepoSandbox } from './helpers/sandbox.mjs';
 import { formatTrackerLine, TRACKER_HEADER, TRACKER_SEPARATOR } from '../lib/tracker.mjs';
-import { main, mergedTrackerIds } from '../batch/obsidian-nightly.mjs';
+import { main, mergedTrackerIds, modelCheck } from '../batch/obsidian-nightly.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const flag = name => '-' + `-${name}`;
@@ -171,4 +171,18 @@ test('resync still runs for orphans when tonight evaluated nothing', () => {
 
 test('missing paths print usage and exit two', () => {
   assert.equal(main([], { env: {}, run: () => result() }), 2);
+});
+
+test('modelCheck ignores subagent transcripts and still catches a wrong model in a session', () => {
+  const projects = path.join(makeRepoSandbox(root, 'obsidian-nightly-modelcheck'), 'projects');
+  const session = path.join(projects, 'C--tmp-widgetrepo');
+  const sub = path.join(session, 'abc123', 'subagents');
+  fs.mkdirSync(sub, { recursive: true });
+  const line = model => JSON.stringify({ type: 'assistant', message: { model } }) + '\n';
+  fs.writeFileSync(path.join(session, 'abc123.jsonl'), line('model-expected') + line('<synthetic>'));
+  fs.writeFileSync(path.join(sub, 'agent-1.jsonl'), line('model-helper'));
+  assert.equal(modelCheck('/x/widgetrepo', 0, 'model-expected', projects), true);
+  fs.writeFileSync(path.join(session, 'def456.jsonl'), line('model-other'));
+  assert.equal(modelCheck('/x/widgetrepo', 0, 'model-expected', projects), false);
+  assert.equal(modelCheck('/x/otherrepo', 0, 'model-expected', projects), null);
 });
