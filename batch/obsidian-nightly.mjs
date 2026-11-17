@@ -178,15 +178,16 @@ function markdownBacklog(source) {
     .filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith('.md')).length;
 }
 
-function modelCheck(repo, startedMs, expected) {
-  const projects = path.join(os.homedir(), '.claude', 'projects');
+export function modelCheck(repo, startedMs, expected, projects = path.join(os.homedir(), '.claude', 'projects')) {
   if (!fs.existsSync(projects)) return null;
   const repoName = path.basename(repo).toLowerCase();
   const files = [];
   const walk = dir => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
+      // A subagent the eval session spawns (a research helper, say) runs on its own default
+      // model by design. Only the sessions the nightly itself started carry the model it chose.
+      if (entry.isDirectory()) { if (entry.name !== 'subagents') walk(full); }
       else if (entry.name.endsWith('.jsonl') && fs.statSync(full).mtimeMs >= startedMs) files.push(full);
     }
   };
