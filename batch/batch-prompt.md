@@ -175,6 +175,8 @@ Sección de **gaps** con estrategia de mitigación para cada uno:
 
 Usar WebSearch para salarios actuales (Glassdoor, Levels.fyi, Blind), reputación comp de la empresa, tendencia demanda. Tabla con datos y fuentes citadas. Si no hay datos, decirlo.
 
+Llamar a WebSearch directamente. No delegarlo a un subagente: el subagente `web-fetch` no tiene búsqueda y devuelve vacío. Hacer 2 o 3 consultas específicas del título del puesto y la empresa; si el primer resultado es una cifra genérica de toda la empresa, buscar de nuevo para este puesto y marcar en la tabla las fuentes que son solo una estimación general.
+
 Score de comp (1-5): 5=top quartile, 4=above market, 3=median, 2=slightly below, 1=well below.
 
 #### Bloque E — Plan de Personalización

@@ -252,6 +252,12 @@ Use WebSearch for:
 - Company comp reputation
 - Demand trend for this role
 
+Call WebSearch yourself for this. Do not hand it to a subagent: the built-in `web-fetch`
+subagent has no search tool and returns nothing (seen on a 2026-11-17 evaluation). Run 2 or 3
+queries specific to the role title and the employer. If the first result is a generic
+company-wide figure, search again for this role before relying on it, and say in the table
+when a source is only a general estimate.
+
 **Comp table** — Reliability column MUST use icons:
 
 | Source | Data | Reliability |
