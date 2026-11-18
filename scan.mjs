@@ -24,6 +24,7 @@ import { buildTitleFilter, buildLocationFilter, normalizeUrl, scoreOffer } from 
 import { sanitizeCell } from './lib/sanitize-cell.mjs';
 import { coverageKey, updateCoverage } from './lib/scan-coverage.mjs';
 import { localToday } from './lib/local-date.mjs';
+import { createWorkdayPacer } from './lib/workday-pacer.mjs';
 const parseYaml = yaml.load;
 
 /** The scanner reads only locally tracked companies, never externally owned ones. */
@@ -61,6 +62,18 @@ const SCAN_COVERAGE_PATH = 'data/scan-coverage.json';
 
 const CONCURRENCY = 10;
 const FETCH_TIMEOUT_MS = 10_000;
+
+function readEnvInteger(name, minimum) {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return undefined;
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= minimum ? value : undefined;
+}
+
+const workdayPacer = createWorkdayPacer({
+  gapMs: readEnvInteger('TJK_WORKDAY_GAP_MS', 0),
+  maxPagesPerBoard: readEnvInteger('TJK_WORKDAY_MAX_PAGES', 1),
+});
 
 // TEST CAP (temporary): when TJK_TEST_LIMIT is set (e.g. a line in
 // dashboard-web/.env), only the first N new offers are written to the pipeline,
@@ -374,31 +387,38 @@ async function fetchJson(url) {
 
 // Workday requires POST + pagination (returns max 20 per page by default)
 async function fetchWorkdayJobs(apiUrl, baseUrl, companyName, site) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS * 3);
   const limit = 20;  // Workday rejects limit > 20 on most tenants
   let offset = 0;
   let allPostings = [];
 
-  try {
-    while (true) {
-      const res = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appliedFacets: {}, limit, offset, searchText: '' }),
-        signal: controller.signal,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const page = json.jobPostings || [];
-      allPostings = allPostings.concat(page);
-      if (page.length < limit || allPostings.length >= (json.total || 0)) break;
-      offset += limit;
-    }
-    return parseWorkday({ jobPostings: allPostings }, companyName, baseUrl, site);
-  } finally {
-    clearTimeout(timer);
+  for (let pageNumber = 0; pageNumber < workdayPacer.maxPagesPerBoard; pageNumber++) {
+    const json = await workdayPacer.run(async () => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS * 3);
+      try {
+        const res = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appliedFacets: {}, limit, offset, searchText: '' }),
+          signal: controller.signal,
+        });
+        if ([403, 429, 503].includes(res.status)) {
+          workdayPacer.trip(`HTTP ${res.status}`);
+          throw new Error(`HTTP ${res.status}`);
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } finally {
+        clearTimeout(timer);
+      }
+    });
+    const page = json.jobPostings || [];
+    allPostings = allPostings.concat(page);
+    if (page.length < limit || allPostings.length >= (json.total || 0)) break;
+    offset += limit;
   }
+
+  return parseWorkday({ jobPostings: allPostings }, companyName, baseUrl, site);
 }
 
 // SmartRecruiters paginates (100/page). Public read API, no auth.
@@ -684,6 +704,7 @@ async function main() {
   const errors = [];
   const rejects = [];            // title/location rejects, logged for false-negative auditing
   const coverageOutcomes = [];   // per-company result, for the durable coverage log
+  let workdayBoardsSkipped = 0;
 
   const tasks = targets.map(company => async () => {
     const { type, url, meta } = company._api;
@@ -738,10 +759,15 @@ async function main() {
         newOffers.push({ ...job, source: `${type}-api` });
       }
     } catch (err) {
-      errors.push({ company: company.name, error: err.message });
+      const paused = err.message.startsWith('Workday paused for this scan:');
+      if (paused) {
+        workdayBoardsSkipped++;
+      } else {
+        errors.push({ company: company.name, error: err.message });
+      }
       coverageOutcomes.push({
         key: covKey, name: company.name, ats: type,
-        result: /HTTP 404/.test(err.message) ? 'http_404' : 'error',
+        result: paused ? 'skipped_paused' : (/HTTP 404/.test(err.message) ? 'http_404' : 'error'),
       });
     }
   });
@@ -822,6 +848,10 @@ async function main() {
     if (coverageAlerts.length > 30) {
       console.log(`  … and ${coverageAlerts.length - 30} more (see ${SCAN_COVERAGE_PATH})`);
     }
+  }
+
+  if (workdayPacer.tripped) {
+    console.log(`\nWorkday paused this scan after ${workdayPacer.reason}; ${workdayBoardsSkipped} boards skipped.`);
   }
 
   if (newOffers.length > 0) {

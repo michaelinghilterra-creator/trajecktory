@@ -474,6 +474,7 @@ for (const suite of [
   'tests/title-filter-consumers.test.mjs',
   'tests/scan-parsers.test.mjs',
   'tests/scan-coverage.test.mjs',
+  'tests/workday-pacer.test.mjs',
   'tests/coverage-cleanup-report.test.mjs',
   'tests/resolve-jds.test.mjs',
   'tests/gate-history.test.mjs',

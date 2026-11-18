@@ -67,6 +67,31 @@ console.log('scan-coverage.test.mjs');
   check(alerts.length === 0, 'a transient error raises no alert');
 }
 
+// 4b. skipped_paused records only the attempted scan metadata
+{
+  const prev = {
+    'workday:zorblax': {
+      name: 'Zorblax Systems',
+      ats: 'workday',
+      consecutiveZero: 3,
+      lastFound: '2030-01-02',
+      last404: '2030-01-03',
+      lastOutcome: 'found',
+      updated: '2030-01-04',
+    },
+  };
+  const { coverage, alerts } = updateCoverage(prev, [
+    { key: 'workday:zorblax', name: 'Zorblax Systems', ats: 'workday', result: 'skipped_paused' },
+  ], '2031-02-05');
+  const record = coverage['workday:zorblax'];
+  check(record.consecutiveZero === 3, 'skipped_paused leaves consecutiveZero unchanged');
+  check(record.lastFound === '2030-01-02', 'skipped_paused leaves lastFound unchanged');
+  check(record.last404 === '2030-01-03', 'skipped_paused leaves last404 unchanged');
+  check(record.lastOutcome === 'skipped_paused', 'skipped_paused updates lastOutcome');
+  check(record.updated === '2031-02-05', 'skipped_paused updates the scan date');
+  check(alerts.length === 0, 'skipped_paused raises no alert');
+}
+
 // ── 5. skipped_no_api is recorded but not alerted ────────────────────────────
 {
   const { coverage, alerts } = updateCoverage({}, [
