@@ -14,6 +14,7 @@ process.env.TJK_DATA_DIR = sandbox;
 // Whitespace prevents dashboard-web/.env from supplying a local key while the
 // missing-key case runs. Individual success cases replace it with a fake key.
 process.env.HUNTER_API_KEY = ' ';
+process.env.BRAVE_API_KEY = ' ';
 process.env.MILLIONVERIFIER_API_KEY = ' ';
 
 const header = '# Target Talent\n\n| # | Company | Last | First | Salute | Title | City | State | Zip | Phone | Email | LinkedIn | Status | Last Touch | Notes | Website |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n';
@@ -57,6 +58,7 @@ const { router } = await import('../dashboard-web/server/routes/tt-reconcile.mjs
 // Server config deliberately loads dashboard-web/.env during import. Restore the
 // whitespace override afterward so a developer's real key stays neutralized.
 process.env.HUNTER_API_KEY = ' ';
+process.env.BRAVE_API_KEY = ' ';
 const app = express();
 app.use(express.json());
 app.use(router);

@@ -14,6 +14,7 @@ const sandbox = makeSandbox('discover-attempts');
 process.env.TJK_DATA_DIR = sandbox;
 process.env.ANTHROPIC_API_KEY = ' ';
 process.env.HUNTER_API_KEY = ' ';
+process.env.BRAVE_API_KEY = ' ';
 process.env.MILLIONVERIFIER_API_KEY = ' ';
 
 const header = '# Target Talent\n\n| # | Company | Last | First | Salute | Title | City | State | Zip | Phone | Email | LinkedIn | Status | Last Touch | Notes | Website |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n';
@@ -22,6 +23,13 @@ const attemptsFile = path.join(sandbox, 'contact-search-attempts.json');
 
 const express = (await import('express')).default;
 const routeModule = await import('../dashboard-web/server/routes/tt-reconcile.mjs');
+// The server config reloads the local settings file on import and overwrites
+// these, so blank the service keys again. Without this a developer's real keys
+// send the test to live services.
+process.env.ANTHROPIC_API_KEY = ' ';
+process.env.HUNTER_API_KEY = ' ';
+process.env.BRAVE_API_KEY = ' ';
+process.env.MILLIONVERIFIER_API_KEY = ' ';
 
 const generate = async (prompt) => {
   if (prompt.includes('Zorblax Systems')) throw new Error('Invented model failure');
