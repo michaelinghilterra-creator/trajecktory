@@ -471,6 +471,7 @@ for (const suite of [
   'tests/no-live-dir-writes.test.mjs',
   'tests/discard.test.mjs',
   'tests/scan-core.test.mjs',
+  'tests/sourcer-watch.test.mjs',
   'tests/title-filter-consumers.test.mjs',
   'tests/scan-parsers.test.mjs',
   'tests/scan-coverage.test.mjs',

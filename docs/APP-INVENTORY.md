@@ -24,6 +24,7 @@ This reference describes the dashboard as implemented. It is intended for a desi
     - Pending
     - Gated
     - Evaluating
+    - Cyber watch
   - Analytics
   - Role Drawer (per-role panel)
     - Overview / Score explainer
@@ -131,6 +132,7 @@ The Social component currently opens on Posts and also exposes Influencers. The 
 | Pipeline: Discovery, Pending | Lists unchecked roles waiting for evaluation. | Makes the incoming queue visible before AI spend. | RevOps | Open the source. | `/api/pipeline/inbox` | `data/pipeline.md`, `data/scan-history.tsv` | Yes |
 | Pipeline: Discovery, Gated | Shows dead, uncertain, decided, or duplicate postings with reasons. | Prevents wasted evaluation effort while retaining an audit trail. | RevOps | Review the gate reason or resolve a manual item. | `/api/pipeline/inbox`<br>`/api/pipeline/needs-manual`<br>`/api/pipeline/needs-manual/resolve` | `data/pipeline.md`, `data/gate-history.tsv`, `data/needs-manual-jd.tsv` | Yes |
 | Pipeline: Discovery, Evaluating | Shows a deep-evaluation job in progress and its result state. | Makes long-running AI work observable. | RevOps | Start evaluation and monitor progress. | `/api/agent/:mode`<br>`/api/agent/status/:jobId` | `data/pipeline.md`, reports, tracker additions, derived/live job | Yes |
+| Pipeline: Discovery, Cyber watch | Shows each watched role from an optional nightly sourcer and whether it was evaluated, kept, or dropped. | Makes the external sourcer's nightly results visible without writing to its state. | RevOps | Choose a night and review roles, outcomes, and source health. | `/api/sourcer-watch/dates`<br>`/api/sourcer-watch` | `TJK_SOURCER_STATE_DIR` plain files | Yes |
 | Pipeline: Analytics | Breaks results down by response, compensation, source, archetype, flow, and interview stage. | Helps the user change targeting based on outcomes, not volume. | RevOps | Compare cohorts, sources, and conversion paths. | `/api/insights/response-progress`<br>`/api/insights/rejection-timing`<br>`/api/insights/stage-funnel` | `data/applications.md`, reports, `data/status-events.tsv`, `config/profile.yml` | Yes |
 | Role Drawer: Overview / Score explainer | Presents summary, stage track, score provenance, dimensions, recommendation, artifacts, and status actions. | Puts the decision packet and lifecycle controls around one role. | Shared | Inspect the score, then advance, close, or start application work. | `/api/report-body/:id`<br>`/api/artifacts/:id`<br>`/api/applications/:id` | `data/applications.md`, reports, output artifacts, status sidecars | Yes |
 | Role Drawer: Resume Match | Maps requirements to CV evidence, gaps, mitigation, and level fit. | Shows whether tailoring can close the important gaps. | Shared | Review evidence and decide whether to tailor. | `/api/cheatsheets/:id`<br>`/api/report-body/:id` | `cv.md`, reports | Unknown |
