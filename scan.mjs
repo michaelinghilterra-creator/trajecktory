@@ -28,7 +28,14 @@ import { createWorkdayPacer } from './lib/workday-pacer.mjs';
 import { createHostPacer, isRateBlock } from './lib/host-pacer.mjs';
 import { atomicWriteFileSync } from './lib/atomic-write.mjs';
 import { enforceArgs } from './lib/cli-args.mjs';
-import { readHistoryRows } from './lib/scan-history.mjs';
+import {
+  AGEABLE_STATUSES,
+  compactHistory,
+  isAgedOut,
+  readHistoryRows,
+} from './lib/scan-history.mjs';
+
+export { AGEABLE_STATUSES };
 const parseYaml = yaml.load;
 
 /** The scanner reads only locally tracked companies, never externally owned ones. */
@@ -501,9 +508,9 @@ async function fetchSmartRecruitersJobs(apiUrl, companyId, companyName) {
 
 // normalizeUrl now lives in lib/scan-core.mjs.
 
-function loadSeenUrls(maxHistoryDays = 30) {
+export function loadSeenUrls(maxHistoryDays = 30, nowMs = Date.now()) {
   const seen = new Set();
-  const cutoffMs = maxHistoryDays > 0 ? Date.now() - maxHistoryDays * 86400000 : 0;
+  const cutoffMs = maxHistoryDays > 0 ? nowMs - maxHistoryDays * 86400000 : 0;
 
   // scan-history.tsv — age out "added" and TRANSIENT skip statuses
   // (skipped_dup / skipped_title) older than maxHistoryDays, so a genuinely-new
@@ -513,17 +520,13 @@ function loadSeenUrls(maxHistoryDays = 30) {
   // suppressed forever (the scanner had ~115 URLs permanently trapped this way).
   // Genuinely-dead (skipped_expired) and geo-blocked (skipped_location, stable
   // policy) stay permanent.
-  const AGEABLE = new Set(['added', 'skipped_dup', 'skipped_title']);
   if (existsSync(SCAN_HISTORY_PATH)) {
     for (const row of readHistoryRows(SCAN_HISTORY_PATH)) {
       const url = row.url;
-      const dateStr = row.firstSeen;
-      const status = row.status;
       if (!url) continue;
-      if (cutoffMs > 0 && AGEABLE.has(status) && dateStr) {
-        const entryTime = new Date(dateStr).getTime();
-        if (!isNaN(entryTime) && entryTime < cutoffMs) continue; // aged out
-      }
+      if (cutoffMs > 0
+          && AGEABLE_STATUSES.includes(row.status)
+          && isAgedOut(row, cutoffMs)) continue;
       seen.add(normalizeUrl(url));
     }
   }
@@ -655,7 +658,14 @@ async function main() {
   const maxAgeDaysFlag = args.indexOf('--max-age-days');
   const flagAge = maxAgeDaysFlag !== -1 ? parseInt(args[maxAgeDaysFlag + 1], 10) : NaN;
   const maxHistoryDaysFlag = args.indexOf('--max-history-days');
-  const maxHistoryDays = maxHistoryDaysFlag !== -1 ? parseInt(args[maxHistoryDaysFlag + 1], 10) || 30 : 30;
+  const parsedHistoryDays = maxHistoryDaysFlag !== -1
+    ? parseInt(args[maxHistoryDaysFlag + 1], 10)
+    : NaN;
+  const maxHistoryDays = Number.isNaN(parsedHistoryDays) ? 30 : parsedHistoryDays;
+  const historyNowMs = Date.now();
+  const historyCutoffMs = maxHistoryDays > 0
+    ? historyNowMs - maxHistoryDays * 86400000
+    : 0;
 
   // Imports are read-only (the audit CLI reuses the parsers). Only an actual
   // scanner run should bootstrap its writable data directory.
@@ -720,7 +730,7 @@ async function main() {
   if (dryRun) console.log('(dry run — no files will be written)\n');
 
   // 3. Load dedup sets
-  const seenUrls = loadSeenUrls(maxHistoryDays);
+  const seenUrls = loadSeenUrls(maxHistoryDays, historyNowMs);
 
   // 4. Fetch all APIs
   const date = localToday();
@@ -856,6 +866,16 @@ async function main() {
   }
   if (!dryRun) {
     appendRejectsToScanHistory(rejects, date);
+  }
+  if (!dryRun && historyCutoffMs > 0 && process.env.TJK_HISTORY_COMPACT !== '0') {
+    try {
+      const result = compactHistory(SCAN_HISTORY_PATH, { cutoffMs: historyCutoffMs });
+      if (result.dropped > 0) {
+        console.log(`History: dropped ${result.dropped} skip records older than ${maxHistoryDays} days (already ignored by the scanner).`);
+      }
+    } catch (error) {
+      console.warn(`Warning: could not compact ${SCAN_HISTORY_PATH}: ${error.message}`);
+    }
   }
 
   // 6. Print summary

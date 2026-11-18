@@ -3,9 +3,10 @@
  * prune-history.mjs: Remove aged-out entries from scan-history.tsv
  *
  * Removes added rows older than --days (default 30). With
- * --skips-older-than, it also removes old skipped records. A pruned skip can be
- * seen, filtered, and logged again if the posting is still open. Dashboard
- * counts of historical skips drop when this option is used.
+ * --skips-older-than, it also removes old skipped_dup and skipped_title records.
+ * Other skipped statuses are permanent because they represent expired postings
+ * or stable policy filters. Dashboard counts of historical skips drop when this
+ * option is used.
  *
  * Usage:
  *   node prune-history.mjs
@@ -19,12 +20,21 @@ import { fileURLToPath } from 'node:url';
 import { atomicWriteFileSync } from './lib/atomic-write.mjs';
 import { enforceArgs } from './lib/cli-args.mjs';
 import { localToday } from './lib/local-date.mjs';
-import { readHistoryLines, readHistoryRawRows } from './lib/scan-history.mjs';
+import {
+  AGEABLE_STATUSES,
+  isAgedOut,
+  readHistoryLines,
+  readHistoryRawRows,
+} from './lib/scan-history.mjs';
+
+export { AGEABLE_STATUSES };
 
 const invokedDirectly = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 const SCAN_HISTORY_PATH = 'data/scan-history.tsv';
-const USAGE = 'Usage: node prune-history.mjs [--dry-run] [--days DAYS] [--skips-older-than DAYS]';
+const USAGE = 'Usage: node prune-history.mjs [--dry-run] [--days DAYS] [--skips-older-than DAYS]\n'
+  + '  --skips-older-than removes only skipped_dup and skipped_title; other skip statuses are permanent.';
 const DAY_MS = 86400000;
+const AGEABLE_SKIP_STATUSES = new Set(AGEABLE_STATUSES.filter(status => status.startsWith('skipped_')));
 
 function valueFor(args, flag) {
   const index = args.indexOf(flag);
@@ -39,10 +49,10 @@ function validDays(value, minimum = 1) {
 }
 
 export function decidePrune(row, { addedCutoffMs, skipCutoffMs = null }) {
-  const entryTime = new Date(row.firstSeen || '').getTime();
-  if (!Number.isFinite(entryTime)) return 'keep';
-  if (row.status === 'added' && entryTime < addedCutoffMs) return 'prune_added';
-  if (skipCutoffMs !== null && (row.status || '').startsWith('skipped_') && entryTime < skipCutoffMs) {
+  if (row.status === 'added' && isAgedOut(row, addedCutoffMs)) return 'prune_added';
+  if (skipCutoffMs !== null
+      && AGEABLE_SKIP_STATUSES.has(row.status)
+      && isAgedOut(row, skipCutoffMs)) {
     return 'prune_skip';
   }
   return 'keep';

@@ -4,7 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { decidePrune } from '../prune-history.mjs';
+import {
+  AGEABLE_STATUSES as PRUNE_AGEABLE_STATUSES,
+  decidePrune,
+} from '../prune-history.mjs';
+import { AGEABLE_STATUSES as SCAN_AGEABLE_STATUSES } from '../scan.mjs';
 import { makeRepoSandbox } from './helpers/sandbox.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -34,10 +38,20 @@ const run = args => spawnSync(process.execPath, [SCRIPT, ...args], {
 
 console.log('prune-history.test.mjs');
 
+check(PRUNE_AGEABLE_STATUSES === SCAN_AGEABLE_STATUSES
+  && PRUNE_AGEABLE_STATUSES.join(',') === 'added,skipped_dup,skipped_title',
+'the scanner and pruner export the same shared ageable status list');
+
 check(decide('2030-01-01', 'skipped_title') === 'keep',
   'old skip rows stay when skip pruning is not enabled');
 check(decide('2030-01-01', 'skipped_title', cutoff) === 'prune_skip',
   'old skip rows are pruned when skip pruning is enabled');
+check(decide('2030-01-01', 'skipped_dup', cutoff) === 'prune_skip',
+  'old duplicate skip rows are pruned when skip pruning is enabled');
+check(decide('2030-01-01', 'skipped_expired', cutoff) === 'keep'
+  && decide('2030-01-01', 'skipped_location', cutoff) === 'keep'
+  && decide('2030-01-01', 'skipped_other', cutoff) === 'keep',
+  'old permanent and unknown skip rows stay when skip pruning is enabled');
 check(decide('2039-01-01', 'skipped_title', cutoff) === 'keep',
   'newer skip rows stay when skip pruning is enabled');
 check(decide('2030-01-01', 'added') === 'prune_added'
