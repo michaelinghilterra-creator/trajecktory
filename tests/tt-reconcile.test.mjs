@@ -183,6 +183,25 @@ const mutedCap = reconcilePreview(tierApps, tierRows, {
 });
 check(mutedCap.cappedCompanies.length === 0, 'a muted company is not offered another try');
 
+// --- One half at a time ---
+// The two buttons each ask for their own half, so neither preview can carry the
+// other's items. No part still returns everything for existing callers.
+const halfApps = [...tierApps, { id: 412, company: 'Tavish Hollow', status: 'No Response', role: 'Ops Lead', date: '2031-03-12' }];
+const halfOpts = { attempts: { vexmoorworks: { talent: 2, lastSearched: '2031-04-01' } }, muted: tierMuted };
+const whole = reconcilePreview(halfApps, tierRows, halfOpts);
+const retireHalf = reconcilePreview(halfApps, tierRows, { ...halfOpts, part: 'retire' });
+const findHalf = reconcilePreview(halfApps, tierRows, { ...halfOpts, part: 'find' });
+check(whole.toArchive.length === 1 && whole.companiesNeedingContacts.length > 0 && whole.companiesNeedingPrincipal.length > 0, 'no part: both halves are returned, as before');
+check(JSON.stringify(retireHalf.toArchive) === JSON.stringify(whole.toArchive), 'retire part: the contacts to retire are the same as in the whole preview');
+check(retireHalf.companiesNeedingContacts.length === 0 && retireHalf.companiesNeedingPrincipal.length === 0
+  && retireHalf.cappedCompanies.length === 0 && retireHalf.searchCapped === 0 && retireHalf.searchMuted === 0, 'retire part: nothing to search is returned');
+check(findHalf.toArchive.length === 0, 'find part: nothing to retire is returned');
+check(JSON.stringify(findHalf.companiesNeedingContacts) === JSON.stringify(whole.companiesNeedingContacts)
+  && JSON.stringify(findHalf.companiesNeedingPrincipal) === JSON.stringify(whole.companiesNeedingPrincipal)
+  && JSON.stringify(findHalf.cappedCompanies) === JSON.stringify(whole.cappedCompanies), 'find part: the search lists are the same as in the whole preview');
+check(reconcilePreview(halfApps, tierRows, { ...halfOpts, part: 'retire', mode: 'principal' }).toArchive.length === 0
+  && reconcilePreview(halfApps, tierRows, { ...halfOpts, part: 'retire', mode: 'talent' }).toArchive.length === 1, 'retire part still honors the tab mode');
+
 // One company at a time: the status route calls this when a role goes No Response.
 const liveRows = ttRows.filter(r => r.status !== 'Archived');
 const ghostlyIds = contactIdsToArchiveForCompany(apps, liveRows, 'Ghostly');

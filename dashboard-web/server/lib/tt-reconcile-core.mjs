@@ -60,10 +60,11 @@ const DECIDER_TIERS = new Set(['hm', 'exec']);
 // apps: parseApplicationsMd() output. ttRows: parseTargetTalentMd() output ALREADY
 // filtered to non-Archived. `attempts` is the search try map and `muted` the
 // follow-up mute map ({ app: { id: true }, ta: { id: true } }); both are
-// optional. Returns { toArchive, companiesNeedingContacts,
+// optional. `part` ('retire' or 'find') narrows the answer to one half.
+// Returns { toArchive, companiesNeedingContacts,
 // companiesNeedingPrincipal, searchCapped, cappedCompanies, searchMuted }, the
 // exact shape the preview endpoint returns.
-export function reconcilePreview(apps, ttRows, { mode, attempts, muted } = {}) {
+export function reconcilePreview(apps, ttRows, { mode, attempts, muted, part } = {}) {
   const appsByCompany = new Map();
   let searchCapped = 0;
   for (const a of apps) {
@@ -185,5 +186,14 @@ export function reconcilePreview(apps, ttRows, { mode, attempts, muted } = {}) {
   companiesNeedingPrincipal.sort(newestFirst);
   cappedCompanies.sort((a, b) => a.company.localeCompare(b.company));
 
+  // `part` serves one half of the flow at a time. 'retire' answers only who to
+  // retire and 'find' only where to search, so neither screen can act on the
+  // other half's items. No part returns everything, as it always has.
+  if (part === 'retire') {
+    return { toArchive: scopedArchive, companiesNeedingContacts: [], companiesNeedingPrincipal: [], searchCapped: 0, cappedCompanies: [], searchMuted: 0 };
+  }
+  if (part === 'find') {
+    return { toArchive: [], companiesNeedingContacts, companiesNeedingPrincipal, searchCapped, cappedCompanies, searchMuted };
+  }
   return { toArchive: scopedArchive, companiesNeedingContacts, companiesNeedingPrincipal, searchCapped, cappedCompanies, searchMuted };
 }

@@ -271,7 +271,7 @@ router.post('/api/tt-reconcile/discover-run', (req, res) => {
   }
 });
 
-// GET /api/tt-reconcile/preview
+// GET /api/tt-reconcile/preview[?mode=talent|principal][&part=retire|find]
 // Returns:
 //   {
 //     toArchive: [{ id, first, last, company, title, reason, relatedApps:[{id,status,role}] }],
@@ -288,8 +288,12 @@ router.get('/api/tt-reconcile/preview', (req, res) => {
     const ttRows = parseTargetTalentMd().filter(r => r.status !== 'Archived');
     const mode = req.query.mode === 'talent' || req.query.mode === 'principal'
       ? req.query.mode : undefined;
+    // ?part=retire or ?part=find serves one half of the flow. Anything else
+    // (including no part) returns both halves, as existing callers expect.
+    const part = req.query.part === 'retire' || req.query.part === 'find'
+      ? req.query.part : undefined;
     const attempts = readAttempts();
-    res.json(reconcilePreview(apps, ttRows, { mode, attempts, muted: readMute() }));
+    res.json(reconcilePreview(apps, ttRows, { mode, attempts, muted: readMute(), part }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

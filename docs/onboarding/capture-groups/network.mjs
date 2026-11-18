@@ -271,7 +271,7 @@ export async function capture({ page }) {
   await clickSub(page, 'Decision Makers');
   await page.waitForTimeout(900);
   await shotBoxes(page, 'net-decision-makers', [page.locator('.fade-up:has(.ta-head h1:text-is("Decision Makers"))')], 12);
-  await btn(page.locator('.ta-head .act'), 'Reconcile').click();
+  await btn(page.locator('.ta-head .act'), 'Find contacts and emails').click();
   await page.locator('.modal').waitFor({ state: 'visible' });
   await page.waitForTimeout(1200);
   await shotEl(page, '.modal', 'net-decision-makers-reconcile');
@@ -299,7 +299,7 @@ export async function capture({ page }) {
   await clickSub(page, 'TA Outreach');
   await page.waitForTimeout(900);
   await shotBoxes(page, 'net-ta-outreach', [page.locator('.fade-up:has(.ta-head h1:text-is("TA Outreach"))')], 12);
-  await btn(page.locator('.ta-head .act'), 'Reconcile').click();
+  await btn(page.locator('.ta-head .act'), 'Find contacts and emails').click();
   await page.locator('.modal').waitFor({ state: 'visible' });
   await page.waitForTimeout(1200);
   await shotEl(page, '.modal', 'net-ta-reconcile');
