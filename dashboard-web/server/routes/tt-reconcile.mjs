@@ -138,12 +138,16 @@ async function runDiscoverJob(job, tasks, generate, search, concurrency = DISCOV
         job.results.push({
           company: task.company,
           search: task.search,
+          leftOut: result.leftOut || { no_title: 0, out_of_scope: 0, unclassified: 0 },
           // Never offer someone already on file, even under another company label.
           suggestions: (result.suggestions || []).filter(suggestion => !dismissed.has(dismissKey({ company: task.company, ...suggestion }))
             && !findExistingContact({ company: task.company, ...suggestion }, heldRows)),
           rejected: [],
           duplicates: 0,
         });
+        for (const reason of ['no_title', 'out_of_scope', 'unclassified']) {
+          job.leftOutTotal[reason] += result.leftOut?.[reason] || 0;
+        }
         // Only a search that finished and left nobody usable is a try toward
         // the cap. An answer that could not be read is not a finished search.
         const kept = job.results[job.results.length - 1].suggestions;
@@ -302,6 +306,7 @@ router.post('/api/tt-reconcile/discover-run', (req, res) => {
       done: 0,
       current: [],
       results: [],
+      leftOutTotal: { no_title: 0, out_of_scope: 0, unclassified: 0 },
       errors: [],
       engine,
       searchesUsed: 0,

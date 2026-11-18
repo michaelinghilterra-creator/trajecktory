@@ -6,11 +6,49 @@
 
 import { generateText, draftModel } from './anthropic.mjs';
 import { validateStakeholder } from '../../../lib/stakeholder-additions.mjs';
+import { classifyTitle } from '../../../lib/influence-tier.mjs';
 import { collectPeople } from '../../../lib/people-search.mjs';
-import { applyLabels, buildLabelPrompt, MAX_KEEP_PRINCIPAL, MAX_KEEP_TALENT } from '../../../lib/people-label.mjs';
+import {
+  applyLabelsWithDrops,
+  buildLabelPrompt,
+  cleanTitle,
+  isOutOfScopeExecutive,
+  MAX_KEEP_PRINCIPAL,
+  MAX_KEEP_TALENT,
+} from '../../../lib/people-label.mjs';
 
 const DEFAULT_TIMEOUT_MS = 90_000;
 const MIN_TIMEOUT_MS = 1_000;
+
+function emptyLeftOut() {
+  return { no_title: 0, out_of_scope: 0, unclassified: 0 };
+}
+
+function countDrops(dropped) {
+  const leftOut = emptyLeftOut();
+  for (const item of dropped) {
+    if (Object.hasOwn(leftOut, item.reason)) leftOut[item.reason] += 1;
+  }
+  return leftOut;
+}
+
+function screenSuggestions(suggestions, { company, track }) {
+  const kept = [];
+  const dropped = [];
+  for (const suggestion of Array.isArray(suggestions) ? suggestions : []) {
+    const title = cleanTitle(suggestion?.title, company);
+    let reason = '';
+    if (!title) reason = 'no_title';
+    else if (isOutOfScopeExecutive(title)) reason = 'out_of_scope';
+    else if (classifyTitle(title, { track }) === null) reason = 'unclassified';
+    if (reason) {
+      dropped.push({ name: `${suggestion?.first || ''} ${suggestion?.last || ''}`.trim(), reason });
+    } else {
+      kept.push({ ...suggestion, title });
+    }
+  }
+  return { suggestions: kept, dropped };
+}
 
 export function resolveTimeoutMs(timeoutMs) {
   if (!Number.isFinite(timeoutMs)) return DEFAULT_TIMEOUT_MS;
@@ -72,6 +110,7 @@ export async function discoverTalentAtCompany({
   const resolvedTimeoutMs = resolveTimeoutMs(timeoutMs);
   // Keep invalid model options on the configured draft model instead of passing unchecked values downstream.
   const resolvedModel = typeof model === 'string' && model.trim() ? model : draftModel();
+  const track = detectTrack(exampleRole);
   const prompt = `Find every relevant current Internal Talent Acquisition / People / Recruiting employee you can verify at ${company}, up to 3 people, for a candidate targeting business/GTM/RevOps/Operations roles (specifically: ${exampleRole}).
 
 INSTRUCTIONS:
@@ -107,18 +146,27 @@ If the search returns no reliable matches, return an empty array []. Never fabri
       const operation = (async () => {
         const collected = await collectPeople({ company, tier: 'talent', search });
         searchesUsed = collected.queriesRun;
-        if (collected.rateLimited) return { company, exampleRole, suggestions: [], error: 'Brave API HTTP 429', rateLimited: true, searchesUsed };
-        if (collected.people.length === 0) return { company, exampleRole, suggestions: [], searchesUsed };
+        if (collected.rateLimited) return { company, exampleRole, suggestions: [], error: 'Brave API HTTP 429', rateLimited: true, searchesUsed, leftOut: emptyLeftOut() };
+        if (collected.people.length === 0) return { company, exampleRole, suggestions: [], searchesUsed, leftOut: emptyLeftOut() };
         const labelPrompt = buildLabelPrompt({ company, tier: 'talent', exampleRole, people: collected.people });
         const fullText = await generate(labelPrompt, { model: resolvedModel, maxTokens: 3000 });
         const read = readSuggestions(fullText);
-        const suggestions = applyLabels({
+        const screened = applyLabelsWithDrops({
           people: collected.people,
           labels: read.suggestions,
           tier: 'talent',
           maxKeep: MAX_KEEP_TALENT,
+          company,
+          classify: title => classifyTitle(title, { track }),
         });
-        return { company, exampleRole, suggestions, searchesUsed, ...(read.unreadable ? { unreadable: true } : {}) };
+        return {
+          company,
+          exampleRole,
+          suggestions: screened.suggestions,
+          searchesUsed,
+          leftOut: countDrops(screened.dropped),
+          ...(read.unreadable ? { unreadable: true } : {}),
+        };
       })();
       const result = await Promise.race([operation, timer.promise]);
       console.log(`[discover] done:  ${company}`);
@@ -150,11 +198,19 @@ If the search returns no reliable matches, return an empty array []. Never fabri
     const fullText = await Promise.race([apiCall, timer.promise]);
     console.log(`[discover] done:  ${company}`);
     const read = readSuggestions(fullText);
-    return { company, exampleRole, suggestions: read.suggestions, searchesUsed, ...(read.unreadable ? { unreadable: true } : {}) };
+    const screened = screenSuggestions(read.suggestions, { company, track });
+    return {
+      company,
+      exampleRole,
+      suggestions: screened.suggestions,
+      searchesUsed,
+      leftOut: countDrops(screened.dropped),
+      ...(read.unreadable ? { unreadable: true } : {}),
+    };
   } catch (e) {
     console.log(`[discover] ERROR: ${company} — ${e.message}`);
     searchesUsed = e.queriesRun ?? searchesUsed;
-    return { company, exampleRole, suggestions: [], error: e.message, searchesUsed };
+    return { company, exampleRole, suggestions: [], error: e.message, searchesUsed, leftOut: emptyLeftOut() };
   } finally {
     timer?.clear();
   }
@@ -238,18 +294,28 @@ If the search returns no reliable matches, return []. Never fabricate names or t
       const operation = (async () => {
         const collected = await collectPeople({ company, tier: 'principal', track, search });
         searchesUsed = collected.queriesRun;
-        if (collected.rateLimited) return { company, exampleRole, suggestions: [], error: 'Brave API HTTP 429', rateLimited: true, searchesUsed };
-        if (collected.people.length === 0) return { company, exampleRole, suggestions: [], searchesUsed };
+        if (collected.rateLimited) return { company, exampleRole, suggestions: [], error: 'Brave API HTTP 429', rateLimited: true, searchesUsed, leftOut: emptyLeftOut() };
+        if (collected.people.length === 0) return { company, exampleRole, suggestions: [], searchesUsed, leftOut: emptyLeftOut() };
         const labelPrompt = buildLabelPrompt({ company, tier: 'principal', exampleRole, people: collected.people });
         const fullText = await generate(labelPrompt, { model: resolvedModel, maxTokens: 3000 });
         const read = readSuggestions(fullText);
-        const suggestions = decoratePrincipalSuggestions(applyLabels({
+        const screened = applyLabelsWithDrops({
           people: collected.people,
           labels: read.suggestions,
           tier: 'principal',
           maxKeep: MAX_KEEP_PRINCIPAL,
-        }), company);
-        return { company, exampleRole, suggestions, searchesUsed, ...(read.unreadable ? { unreadable: true } : {}) };
+          company,
+          classify: title => classifyTitle(title, { track }),
+        });
+        const suggestions = decoratePrincipalSuggestions(screened.suggestions, company);
+        return {
+          company,
+          exampleRole,
+          suggestions,
+          searchesUsed,
+          leftOut: countDrops(screened.dropped),
+          ...(read.unreadable ? { unreadable: true } : {}),
+        };
       })();
       const result = await Promise.race([operation, timer.promise]);
       console.log(`[discover-principal] done:  ${company}`);
@@ -269,12 +335,20 @@ If the search returns no reliable matches, return []. Never fabricate names or t
     const fullText = await Promise.race([apiCall, timer.promise]);
     console.log(`[discover-principal] done:  ${company}`);
     const read = readSuggestions(fullText);
-    const suggestions = decoratePrincipalSuggestions(read.suggestions, company);
-    return { company, exampleRole, suggestions, searchesUsed, ...(read.unreadable ? { unreadable: true } : {}) };
+    const screened = screenSuggestions(read.suggestions, { company, track });
+    const suggestions = decoratePrincipalSuggestions(screened.suggestions, company);
+    return {
+      company,
+      exampleRole,
+      suggestions,
+      searchesUsed,
+      leftOut: countDrops(screened.dropped),
+      ...(read.unreadable ? { unreadable: true } : {}),
+    };
   } catch (e) {
     console.log(`[discover-principal] ERROR: ${company} — ${e.message}`);
     searchesUsed = e.queriesRun ?? searchesUsed;
-    return { company, exampleRole, suggestions: [], error: e.message, searchesUsed };
+    return { company, exampleRole, suggestions: [], error: e.message, searchesUsed, leftOut: emptyLeftOut() };
   } finally {
     timer?.clear();
   }

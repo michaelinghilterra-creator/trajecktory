@@ -2061,6 +2061,13 @@ function ReconcileModal({ onClose, onApplied, initialMode, action } = {}) {
 
   const confColor = { High: "var(--green)", Medium: "var(--orange)", Low: "var(--red)" };
   const foundCount = discoveries.reduce((n, result) => n + (result.suggestions || []).length, 0);
+  const leftOut = discoverJob?.leftOutTotal || {};
+  const leftOutParts = [
+    leftOut.unclassified ? `${leftOut.unclassified} with a role outside your target functions` : null,
+    leftOut.out_of_scope ? `${leftOut.out_of_scope} technical or legal executive${leftOut.out_of_scope === 1 ? "" : "s"}` : null,
+    leftOut.no_title ? `${leftOut.no_title} with no clear title` : null,
+  ].filter(Boolean);
+  const leftOutCount = (leftOut.no_title || 0) + (leftOut.out_of_scope || 0) + (leftOut.unclassified || 0);
   const selectedCompanyCount = gapSel.size + principalGapSel.size;
   const plannedSearchCount = selectedCompanyCount * (preview.searchesPerCompany || 0);
 
@@ -2163,6 +2170,11 @@ function ReconcileModal({ onClose, onApplied, initialMode, action } = {}) {
               </div>}
               <div className="rec-section-label"><TIcon d={TI.users} size={12} /> Discovered contacts &middot; {discSel.size} selected</div>
               <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Found {foundCount} contacts{scanning ? " so far" : ""}.</div>
+              {findOnly && discoverJob?.status === "done" && leftOutCount > 0 && (
+                <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>
+                  {leftOutCount} left out before review: {leftOutParts.join(", ")}.
+                </div>
+              )}
               {discoveries.map(r => (r.suggestions || []).map((s, i) => {
                 const key = `${s.reconcileSearch}::${r.company}::${s.first || ""} ${s.last || ""}`;
                 const conf = s.confidence || "Medium";
