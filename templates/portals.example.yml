@@ -356,8 +356,7 @@ tracked_companies:
     enabled: true
 
   - name: Outschool
-    careers_url: https://job-boards.greenhouse.io/outschool
-    api: https://boards-api.greenhouse.io/v1/boards/outschool/jobs
+    careers_url: https://jobs.ashbyhq.com/outschool
     enabled: true
 
   - name: Udemy
@@ -424,9 +423,9 @@ tracked_companies:
     api: https://boards-api.greenhouse.io/v1/boards/coinbase/jobs
     enabled: true
 
-  - name: Marqeta
-    careers_url: https://job-boards.greenhouse.io/marqeta
-    api: https://boards-api.greenhouse.io/v1/boards/marqeta/jobs
+  - name: Carta
+    careers_url: https://job-boards.greenhouse.io/carta
+    api: https://boards-api.greenhouse.io/v1/boards/carta/jobs
     enabled: true
 
   - name: Mercury
@@ -538,9 +537,9 @@ tracked_companies:
     api: https://boards-api.greenhouse.io/v1/boards/cloverhealth/jobs
     enabled: true
 
-  - name: Curative
-    careers_url: https://job-boards.greenhouse.io/curative
-    api: https://boards-api.greenhouse.io/v1/boards/curative/jobs
+  - name: Flatiron Health
+    careers_url: https://job-boards.greenhouse.io/flatironhealth
+    api: https://boards-api.greenhouse.io/v1/boards/flatironhealth/jobs
     enabled: true
 
   - name: Doximity
@@ -597,9 +596,9 @@ tracked_companies:
 
   # -- Industrial & Manufacturing --
 
-  - name: Aerospike
-    careers_url: https://job-boards.greenhouse.io/aerospike
-    api: https://boards-api.greenhouse.io/v1/boards/aerospike/jobs
+  - name: SingleStore
+    careers_url: https://job-boards.greenhouse.io/singlestore
+    api: https://boards-api.greenhouse.io/v1/boards/singlestore/jobs
     enabled: true
 
   - name: Astranis
@@ -679,8 +678,7 @@ tracked_companies:
     enabled: true
 
   - name: Openly
-    careers_url: https://job-boards.greenhouse.io/openly
-    api: https://boards-api.greenhouse.io/v1/boards/openly/jobs
+    careers_url: https://jobs.ashbyhq.com/openly
     enabled: true
 
   - name: Pie Insurance
@@ -776,8 +774,7 @@ tracked_companies:
     enabled: true
 
   - name: Brooklinen
-    careers_url: https://job-boards.greenhouse.io/brooklinen
-    api: https://boards-api.greenhouse.io/v1/boards/brooklinen/jobs
+    careers_url: https://jobs.ashbyhq.com/brooklinen
     enabled: true
 
   - name: Faire
@@ -860,8 +857,7 @@ tracked_companies:
     enabled: true
 
   - name: Kayak
-    careers_url: https://job-boards.greenhouse.io/kayak
-    api: https://boards-api.greenhouse.io/v1/boards/kayak/jobs
+    careers_url: https://jobs.ashbyhq.com/kayak
     enabled: true
 
   - name: TripAdvisor
