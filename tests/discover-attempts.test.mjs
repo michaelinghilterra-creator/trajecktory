@@ -88,6 +88,8 @@ check(!Object.hasOwn(stored, 'foundexample'), 'a search that found someone recor
 
 const preview = await fetch(`${base}/api/tt-reconcile/preview`).then(response => response.json());
 check(Array.isArray(preview.toArchive), 'the preview still answers after the runs');
+check(preview.engine === 'model', 'preview reports the model fallback engine');
+check(preview.searchesPerCompany === 4, 'preview reports talent searches per company');
 
 server.closeAllConnections?.();
 await new Promise(resolve => server.close(resolve));

@@ -94,6 +94,8 @@ AI-powered job search, run from a local dashboard: pipeline tracking, offer scor
 | `liveness-core.mjs` | Shared liveness logic (expired signals win over generic Apply text) |
 | `reports/` | Evaluation reports (format: `{###}-{company-slug}-{YYYY-MM-DD}.md`). Blocks A-F + G (Posting Legitimacy). Header includes `**Legitimacy:** {tier}`. |
 
+Contact discovery uses Brave Search when `BRAVE_API_KEY` is configured: code collects LinkedIn profile results and the model only labels them. Without that key, the model uses its hosted web search tool. `TJK_CONTACT_SEARCH_MAX` limits Brave searches per run and defaults to 300.
+
 ### First Run — Onboarding (IMPORTANT)
 
 **Before doing ANYTHING else, check if the system is set up.** Run these checks silently every time a session starts:

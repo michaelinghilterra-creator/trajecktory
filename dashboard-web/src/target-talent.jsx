@@ -2060,6 +2060,8 @@ function ReconcileModal({ onClose, onApplied, initialMode, action } = {}) {
 
   const confColor = { High: "var(--green)", Medium: "var(--orange)", Low: "var(--red)" };
   const foundCount = discoveries.reduce((n, result) => n + (result.suggestions || []).length, 0);
+  const selectedCompanyCount = gapSel.size + principalGapSel.size;
+  const plannedSearchCount = selectedCompanyCount * (preview.searchesPerCompany || 0);
 
   return (
     <div className="modal-back" onClick={() => !scanning && !loading && onClose()}>
@@ -2103,6 +2105,11 @@ function ReconcileModal({ onClose, onApplied, initialMode, action } = {}) {
                   ))}
                 </>)}
                 {findOnly && <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 14 }}>Pick the companies to search. You choose who to add from the results, and an email is looked up for each person you add.{(preview.searchMuted || 0) > 0 ? ` ${preview.searchMuted} muted ${preview.searchMuted === 1 ? "company is" : "companies are"} left out.` : ""}</div>}
+                {!retireOnly && <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 14 }}>
+                  {preview.engine === "search"
+                    ? `This run will use about ${plannedSearchCount} web searches (your Brave Search allowance).`
+                    : "Add a Brave Search key in Launchpad to find more contacts per company."}
+                </div>}
                 {showTalentGaps && (<>
                 <div className="rec-section-label" style={{ marginTop: findOnly ? 0 : 22 }}><TIcon d={TI.building} size={12} /> Companies with no talent contact &middot; {gapSel.size} selected</div>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Live companies with no talent acquisition contact on file.</div>
@@ -2145,9 +2152,14 @@ function ReconcileModal({ onClose, onApplied, initialMode, action } = {}) {
                     <div>{discoverJob?.done || 0} of {discoverJob?.total || 0} companies searched</div>
                     <div>{(discoverJob?.current || []).length ? `Searching now: ${discoverJob.current.join(", ")}` : "Starting searches..."}</div>
                     <div>{foundCount} people found so far</div>
+                    <div>Searches used: {discoverJob?.searchesUsed || 0}</div>
                   </div>
                 </div>
               )}
+              {!scanning && <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Searches used: {discoverJob?.searchesUsed || 0}</div>}
+              {(discoverJob?.skippedForBudget || 0) > 0 && <div style={{ fontSize: 12, color: "var(--orange)", marginBottom: 10 }}>
+                {discoverJob.skippedForBudget} companies were left for the next run to stay under the search limit.
+              </div>}
               <div className="rec-section-label"><TIcon d={TI.users} size={12} /> Discovered contacts &middot; {discSel.size} selected</div>
               <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Found {foundCount} contacts{scanning ? " so far" : ""}.</div>
               {discoveries.map(r => (r.suggestions || []).map((s, i) => {
