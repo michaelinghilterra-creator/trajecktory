@@ -119,6 +119,70 @@ const withReset = reconcilePreview(apps, ttRows, { attempts: resetAttempts });
 const resetCos = withReset.companiesNeedingContacts.map(c => c.company);
 check(resetCos.includes('Brightwave'), 'Brightwave re-included when app date (2026-03-01) is newer than lastSearched');
 
+// --- Per-tier gap lists ---
+// Each tier is judged on its own: one exec must not hide a missing recruiter,
+// and a company with nobody on file needs a decision maker as much as talent.
+const tierApps = [
+  { id: 401, company: 'Zorblax Systems', status: 'Applied', role: 'Ops Lead', date: '2031-03-01' },
+  { id: 402, company: 'Quennox Labs', status: 'Applied', role: 'Ops Lead', date: '2031-03-02' },
+  { id: 403, company: 'Vexmoor Works', status: 'Phone Screen', role: 'Ops Lead', date: '2031-03-03' },
+  { id: 404, company: 'Plimbury Group', status: 'Applied', role: 'Ops Lead', date: '2031-03-04' },
+  { id: 405, company: 'Dravenholt Partners', status: 'Applied', role: 'Ops Lead', date: '2031-03-05' },
+  { id: 406, company: 'Brindlewick Foods', status: 'Applied', role: 'Ops Lead', date: '2031-03-06' },
+  { id: 407, company: 'Ostrand Mills', status: 'Applied', role: 'Ops Lead', date: '2031-03-07' },
+  { id: 408, company: 'Tavish Hollow', status: 'Rejected', role: 'Ops Lead', date: '2031-03-08' },
+  { id: 409, company: 'Kestrow Freight', status: 'Applied', role: 'Ops Lead', date: '2031-03-09' },
+  { id: 410, company: 'Marlowe Tidewater', status: 'Applied', role: 'Ops Lead', date: '2031-03-10' },
+];
+const tierRows = [
+  { id: 501, first: 'Avery', last: 'Example', company: 'Zorblax Systems', title: 'Chief Operating Officer', status: 'Not Contacted', notes: '[tier:exec]' },
+  { id: 502, first: 'Blake', last: 'Example', company: 'Quennox Labs', title: 'Talent Partner', status: 'Not Contacted', notes: '[tier:ta]' },
+  { id: 503, first: 'Casey', last: 'Example', company: 'Plimbury Group', title: 'Operations Manager', status: 'Not Contacted', notes: '[tier:peer]' },
+  { id: 504, first: 'Devon', last: 'Example', company: 'Dravenholt Partners', title: 'Chief Operating Officer', status: 'Not Contacted', notes: '[tier:exec]' },
+  { id: 505, first: 'Emery', last: 'Example', company: 'Brindlewick Foods', title: 'Talent Partner', status: 'Not Contacted', notes: '[tier:ta]' },
+  { id: 506, first: 'Finley', last: 'Example', company: 'Brindlewick Foods', title: 'VP Operations', status: 'Not Contacted', notes: '[tier:hm]' },
+  { id: 507, first: 'Gray', last: 'Example', company: 'Tavish Hollow', title: 'Talent Partner', status: 'Not Contacted', notes: '[tier:ta]' },
+  { id: 508, first: 'Harper', last: 'Example', company: 'Marlowe Tidewater', title: 'Search Consultant', status: 'Not Contacted', notes: '[tier:agency]' },
+];
+// Dravenholt is muted through a contact, Ostrand through its only application.
+const tierMuted = { app: { 407: true }, ta: { 504: true } };
+const tiers = reconcilePreview(tierApps, tierRows, { muted: tierMuted });
+const needTalent = tiers.companiesNeedingContacts.map(c => c.company);
+const needDecider = tiers.companiesNeedingPrincipal.map(c => c.company);
+check(needTalent.includes('Zorblax Systems') && !needDecider.includes('Zorblax Systems'), 'exec only: needs talent, already has a decision maker');
+check(!needTalent.includes('Quennox Labs') && needDecider.includes('Quennox Labs'), 'talent only: needs a decision maker, already has talent');
+check(needTalent.includes('Vexmoor Works') && needDecider.includes('Vexmoor Works'), 'zero contacts: needs both');
+check(tiers.companiesNeedingPrincipal.find(c => c.company === 'Vexmoor Works').contactCount === 0, 'zero contacts: the decision-maker item reports a contact count of 0');
+check(needTalent.includes('Plimbury Group') && needDecider.includes('Plimbury Group'), 'peer only: needs both, a peer is not coverage');
+check(needTalent.includes('Marlowe Tidewater') && needDecider.includes('Marlowe Tidewater'), 'agency only: needs both, an outside recruiter is not coverage');
+check(!needTalent.includes('Dravenholt Partners') && !needDecider.includes('Dravenholt Partners'), 'muted contact: the company is in neither list');
+check(!needTalent.includes('Ostrand Mills') && !needDecider.includes('Ostrand Mills'), 'muted application: the company is in neither list');
+check(tiers.searchMuted === 2, 'searchMuted counts the two muted companies');
+check(!needTalent.includes('Brindlewick Foods') && !needDecider.includes('Brindlewick Foods'), 'talent plus hiring manager: fully covered');
+check(!needTalent.includes('Tavish Hollow') && !needDecider.includes('Tavish Hollow'), 'closed company: in neither list');
+check(needTalent.includes('Kestrow Freight') && needDecider.includes('Kestrow Freight'), 'a second company with nobody on file also needs both');
+const unmutedTiers = reconcilePreview(tierApps, tierRows);
+check(unmutedTiers.companiesNeedingContacts.some(c => c.company === 'Dravenholt Partners'), 'without the mute map the same company is listed, so the mute is what hides it');
+// An archived contact never reaches this function (the caller filters), so a
+// company whose only decision maker is archived reads as having none.
+const archivedOut = reconcilePreview(tierApps, tierRows.filter(row => row.id !== 506));
+check(archivedOut.companiesNeedingPrincipal.some(c => c.company === 'Brindlewick Foods')
+  && !archivedOut.companiesNeedingContacts.some(c => c.company === 'Brindlewick Foods'), 'an archived decision maker leaves a decision-maker gap only');
+// The cap is per search type and names the companies it parked.
+const tierCap = reconcilePreview(tierApps, tierRows, {
+  attempts: { vexmoorworks: { talent: 2, principal: 1, lastSearched: '2031-04-01' } },
+});
+check(!tierCap.companiesNeedingContacts.some(c => c.company === 'Vexmoor Works')
+  && tierCap.companiesNeedingPrincipal.some(c => c.company === 'Vexmoor Works'), 'a company at the talent cap is still listed for a decision-maker search');
+check(tierCap.searchCapped === 1 && JSON.stringify(tierCap.cappedCompanies) === JSON.stringify([
+  { company: 'Vexmoor Works', search: 'talent', tries: 2, lastSearched: '2031-04-01' },
+]), 'cappedCompanies names the parked company, its search type and its tries');
+// A muted company is not reported as capped either.
+const mutedCap = reconcilePreview(tierApps, tierRows, {
+  muted: tierMuted, attempts: { ostrandmills: { talent: 2, principal: 2, lastSearched: '2031-04-01' } },
+});
+check(mutedCap.cappedCompanies.length === 0, 'a muted company is not offered another try');
+
 // One company at a time: the status route calls this when a role goes No Response.
 const liveRows = ttRows.filter(r => r.status !== 'Archived');
 const ghostlyIds = contactIdsToArchiveForCompany(apps, liveRows, 'Ghostly');

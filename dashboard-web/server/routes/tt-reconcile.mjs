@@ -14,7 +14,7 @@ import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { mergeStakeholderAdditions, validateStakeholder, knownDomainKey } from '../../../lib/stakeholder-additions.mjs';
 import { findExistingContact, heldContactRows } from '../../../lib/contact-match.mjs';
 import { parseReferralsMd } from '../lib/referrals.mjs';
-import { readReconcileDismissed, addReconcileDismissed } from '../lib/sidecars.mjs';
+import { readReconcileDismissed, addReconcileDismissed, readMute } from '../lib/sidecars.mjs';
 import { readAttempts, recordAttempt, recordSearchError, writeAttempts } from '../lib/contact-search-attempts.mjs';
 import { currentBatch } from '../lib/pricing.mjs';
 import { startCadences } from '../lib/cadence-start.mjs';
@@ -289,7 +289,7 @@ router.get('/api/tt-reconcile/preview', (req, res) => {
     const mode = req.query.mode === 'talent' || req.query.mode === 'principal'
       ? req.query.mode : undefined;
     const attempts = readAttempts();
-    res.json(reconcilePreview(apps, ttRows, { mode, attempts }));
+    res.json(reconcilePreview(apps, ttRows, { mode, attempts, muted: readMute() }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

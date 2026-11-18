@@ -1,8 +1,8 @@
 // tt-reconcile-core.mjs — the ONE decision for TA reconcile, shared by the
 // dashboard route (routes/tt-reconcile.mjs) and the headless CLI
 // (reconcile-ta.mjs) so the two can never drift. Pure: takes parsed apps + TA
-// rows, returns what to archive, which active companies lack a contact, and
-// which contacted companies still lack a hiring principal.
+// rows, returns what to archive, which active companies lack a talent contact,
+// and which lack a decision maker (each judged on its own).
 //
 // Rule: a TA contact is archived when their company has logged applications and
 // all of them are closed for outreach, including No Response. Recruiters are
@@ -54,10 +54,16 @@ function aliasSet(name) {
   return keys;
 }
 
+// The tiers that can decide a hire. A peer is deliberately absent.
+const DECIDER_TIERS = new Set(['hm', 'exec']);
+
 // apps: parseApplicationsMd() output. ttRows: parseTargetTalentMd() output ALREADY
-// filtered to non-Archived. Returns { toArchive, companiesNeedingContacts,
-// companiesNeedingPrincipal }, the exact shape the preview endpoint returns.
-export function reconcilePreview(apps, ttRows, { mode, attempts } = {}) {
+// filtered to non-Archived. `attempts` is the search try map and `muted` the
+// follow-up mute map ({ app: { id: true }, ta: { id: true } }); both are
+// optional. Returns { toArchive, companiesNeedingContacts,
+// companiesNeedingPrincipal, searchCapped, cappedCompanies, searchMuted }, the
+// exact shape the preview endpoint returns.
+export function reconcilePreview(apps, ttRows, { mode, attempts, muted } = {}) {
   const appsByCompany = new Map();
   let searchCapped = 0;
   for (const a of apps) {
@@ -113,52 +119,71 @@ export function reconcilePreview(apps, ttRows, { mode, attempts } = {}) {
       })
     : toArchive;
 
-  // Companies worth a contact (>=1 outreach-eligible, currently-live funnel app)
-  // that have no TA contact yet — the discover targets. An
-  // Evaluated-only company is excluded here: no application means no reason to
+  // The gap lists are per tier. A company worth a contact (>=1 outreach-eligible,
+  // currently-live funnel app) needs TALENT when it holds no live contact of
+  // tier 'ta', whoever else is on file, and needs a DECISION MAKER when it holds
+  // no live hiring manager or exec, including a company with nobody at all. A
+  // peer can vouch but cannot decide, so a peer covers neither. An earlier
+  // version asked "is there any contact at all", which let one exec hide a
+  // missing recruiter and left a company with no contacts out of the
+  // decision-maker list entirely.
+  //
+  // An Evaluated-only company is excluded: no application means no reason to
   // source a contact yet. Uses the SAME eligible set as the follow-up queues.
-  const ttCompaniesNorm = new Set(ttRows.map(c => normCompany(c.company)));
+  //
+  // A muted company is in neither list. Mute means "leave this alone for now",
+  // and a search that proposes new people there would undo it. A company is
+  // muted when any live contact there is muted, or every live application is.
+  const tierOf = row => row.influenceTier || parseInfluenceTier(row.notes);
+  const mutedContacts = (muted && muted.ta) || {};
+  const mutedApps = (muted && muted.app) || {};
+  const contactsByCompany = new Map();
+  for (const row of ttRows) {
+    const k = normCompany(row.company);
+    if (!k) continue;
+    if (!contactsByCompany.has(k)) contactsByCompany.set(k, []);
+    contactsByCompany.get(k).push(row);
+  }
   const companiesNeedingContacts = [];
-  for (const [k, companyApps] of appsByCompany.entries()) {
-    if (ttCompaniesNorm.has(k)) continue;
-    const active = companyApps.filter(a => OUTREACH_ELIGIBLE_STATUSES.includes(a.status));
-    if (active.length === 0) continue;
-    const mostRecent = active.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
-    if (attempts && isAtCap(mostRecent.company, 'talent', mostRecent.date, attempts)) { searchCapped++; continue; }
-    companiesNeedingContacts.push({
-      company: mostRecent.company,
-      exampleRole: mostRecent.role,
-      appCount: active.length,
-      mostRecentApp: { id: mostRecent.id, role: mostRecent.role, status: mostRecent.status, date: mostRecent.date },
-    });
-  }
-  companiesNeedingContacts.sort((a, b) => (b.mostRecentApp.date || '').localeCompare(a.mostRecentApp.date || ''));
-
-  // A mapped company still needs a principal when every known contact sits
-  // below the influence line. This is distinct from contact discovery because
-  // it records what is present while exposing the missing decision-maker.
   const companiesNeedingPrincipal = [];
+  const cappedCompanies = [];
+  let searchMuted = 0;
   for (const [k, companyApps] of appsByCompany.entries()) {
     const active = companyApps.filter(a => OUTREACH_ELIGIBLE_STATUSES.includes(a.status));
     if (active.length === 0) continue;
-    const contacts = ttRows.filter(row => normCompany(row.company) === k);
-    if (contacts.length === 0) continue;
-    const canInfluence = contacts.some(row => {
-      const tier = row.influenceTier || parseInfluenceTier(row.notes);
-      return (INFLUENCE_RANK[tier] ?? INFLUENCE_RANK.ta) >= INFLUENCE_RANK.peer;
-    });
-    if (canInfluence) continue;
+    const contacts = contactsByCompany.get(k) || [];
+    const hasTalent = contacts.some(row => tierOf(row) === 'ta');
+    const hasDecider = contacts.some(row => DECIDER_TIERS.has(tierOf(row)));
+    if (hasTalent && hasDecider) continue;
+    if (contacts.some(row => mutedContacts[String(row.id)]) || active.every(a => mutedApps[String(a.id)])) {
+      searchMuted++;
+      continue;
+    }
     const mostRecent = active.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
-    if (attempts && isAtCap(mostRecent.company, 'principal', mostRecent.date, attempts)) { searchCapped++; continue; }
-    companiesNeedingPrincipal.push({
+    const base = {
       company: mostRecent.company,
       exampleRole: mostRecent.role,
       appCount: active.length,
       mostRecentApp: { id: mostRecent.id, role: mostRecent.role, status: mostRecent.status, date: mostRecent.date },
-      contactCount: contacts.length,
-    });
+    };
+    const gaps = [
+      !hasTalent && { search: 'talent', list: companiesNeedingContacts, item: base },
+      !hasDecider && { search: 'principal', list: companiesNeedingPrincipal, item: { ...base, contactCount: contacts.length } },
+    ].filter(Boolean);
+    for (const gap of gaps) {
+      if (attempts && isAtCap(mostRecent.company, gap.search, mostRecent.date, attempts)) {
+        searchCapped++;
+        const entry = attempts[k] || {};
+        cappedCompanies.push({ company: mostRecent.company, search: gap.search, tries: entry[gap.search] || 0, lastSearched: entry.lastSearched || '' });
+        continue;
+      }
+      gap.list.push(gap.item);
+    }
   }
-  companiesNeedingPrincipal.sort((a, b) => (b.mostRecentApp.date || '').localeCompare(a.mostRecentApp.date || ''));
+  const newestFirst = (a, b) => (b.mostRecentApp.date || '').localeCompare(a.mostRecentApp.date || '');
+  companiesNeedingContacts.sort(newestFirst);
+  companiesNeedingPrincipal.sort(newestFirst);
+  cappedCompanies.sort((a, b) => a.company.localeCompare(b.company));
 
-  return { toArchive: scopedArchive, companiesNeedingContacts, companiesNeedingPrincipal, searchCapped };
+  return { toArchive: scopedArchive, companiesNeedingContacts, companiesNeedingPrincipal, searchCapped, cappedCompanies, searchMuted };
 }
