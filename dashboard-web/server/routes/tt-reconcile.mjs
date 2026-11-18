@@ -15,7 +15,7 @@ import { mergeStakeholderAdditions, validateStakeholder, knownDomainKey } from '
 import { findExistingContact, heldContactRows } from '../../../lib/contact-match.mjs';
 import { parseReferralsMd } from '../lib/referrals.mjs';
 import { readReconcileDismissed, addReconcileDismissed } from '../lib/sidecars.mjs';
-import { readAttempts, recordAttempt, writeAttempts } from '../lib/contact-search-attempts.mjs';
+import { readAttempts, recordAttempt, recordSearchError, writeAttempts } from '../lib/contact-search-attempts.mjs';
 import { currentBatch } from '../lib/pricing.mjs';
 import { startCadences } from '../lib/cadence-start.mjs';
 import { withWasTag } from '../lib/contact-revive.mjs';
@@ -114,11 +114,10 @@ async function runDiscoverJob(job, tasks, generate) {
           : await discoverTalentAtCompany({ company: task.company, exampleRole: task.exampleRole, generate });
         if (result.error) {
           job.errors.push({ company: task.company, error: result.error });
-          // Timeouts and persistent errors still count toward the cap.
-          // A company that errors every time is just as unlikely to yield
-          // contacts on retry as one that returns empty.
-          const appDate = appDateByCompany.get(normCompany(task.company)) || '';
-          recordAttempt(task.company, task.search, appDate, attempts);
+          // An error or a timeout says nothing about whether the company has
+          // anyone to find, so it never counts toward the cap. It is kept on
+          // the side for visibility only.
+          recordSearchError(task.company, task.search, result.error, attempts);
           continue;
         }
         job.results.push({
@@ -130,17 +129,19 @@ async function runDiscoverJob(job, tasks, generate) {
           rejected: [],
           duplicates: 0,
         });
-        // Record successful-but-empty searches as an attempt toward the cap.
+        // Only a search that finished and left nobody usable is a try toward
+        // the cap. An answer that could not be read is not a finished search.
         const kept = job.results[job.results.length - 1].suggestions;
-        if (kept.length === 0) {
+        if (result.unreadable) {
+          recordSearchError(task.company, task.search, 'The search answer could not be read.', attempts);
+        } else if (kept.length === 0) {
           const appDate = appDateByCompany.get(normCompany(task.company)) || '';
           recordAttempt(task.company, task.search, appDate, attempts);
         }
       } catch (err) {
         job.errors.push({ company: task.company, error: err.message });
-        // Thrown errors (timeouts) also count toward the cap.
-        const appDate = appDateByCompany.get(normCompany(task.company)) || '';
-        recordAttempt(task.company, task.search, appDate, attempts);
+        // A thrown error is not a try either.
+        recordSearchError(task.company, task.search, err.message, attempts);
       } finally {
         settled.add(taskIndex);
         active.delete(taskIndex);

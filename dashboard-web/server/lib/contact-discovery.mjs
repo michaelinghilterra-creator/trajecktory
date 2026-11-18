@@ -19,9 +19,18 @@ function localDate(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function parseSuggestions(fullText) {
-  const jsonMatch = fullText.match(/\[[\s\S]*\]/);
-  return jsonMatch ? (() => { try { return JSON.parse(jsonMatch[0]); } catch { return []; } })() : [];
+// Parse the answer, and say whether it held a list at all. "[]" is a real
+// empty result. Text with no list in it is an answer nobody could read, and the
+// try counter must not treat the two alike.
+function readSuggestions(fullText) {
+  const jsonMatch = String(fullText || '').match(/\[[\s\S]*\]/);
+  if (!jsonMatch) return { suggestions: [], unreadable: true };
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    return Array.isArray(parsed) ? { suggestions: parsed, unreadable: false } : { suggestions: [], unreadable: true };
+  } catch {
+    return { suggestions: [], unreadable: true };
+  }
 }
 
 // Injection is scoped to one call. A mutable module test seam can leak between
@@ -91,7 +100,8 @@ If the search returns no reliable matches, return an empty array []. Never fabri
     });
     const fullText = await Promise.race([apiCall, timeout]);
     console.log(`[discover] done:  ${company}`);
-    return { company, exampleRole, suggestions: parseSuggestions(fullText) };
+    const read = readSuggestions(fullText);
+    return { company, exampleRole, suggestions: read.suggestions, ...(read.unreadable ? { unreadable: true } : {}) };
   } catch (e) {
     console.log(`[discover] ERROR: ${company} — ${e.message}`);
     return { company, exampleRole, suggestions: [], error: e.message };
@@ -183,7 +193,8 @@ If the search returns no reliable matches, return []. Never fabricate names or t
     });
     const fullText = await Promise.race([apiCall, timeout]);
     console.log(`[discover-principal] done:  ${company}`);
-    let suggestions = parseSuggestions(fullText);
+    const read = readSuggestions(fullText);
+    let suggestions = read.suggestions;
     // Guarantee the [principal] tag is in every suggestion's notes (the model
     // is instructed to include it, but stamp it defensively on parse too).
     suggestions = suggestions.map(s => {
@@ -200,7 +211,7 @@ If the search returns no reliable matches, return []. Never fabricate names or t
         : { ok: false, reasons: validation.reasons };
       return suggestion;
     });
-    return { company, exampleRole, suggestions };
+    return { company, exampleRole, suggestions, ...(read.unreadable ? { unreadable: true } : {}) };
   } catch (e) {
     console.log(`[discover-principal] ERROR: ${company} — ${e.message}`);
     return { company, exampleRole, suggestions: [], error: e.message };

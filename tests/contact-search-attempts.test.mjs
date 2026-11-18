@@ -4,7 +4,7 @@
  * errors don't count, and atomic write. Invented companies only.
  */
 
-import { readAttempts, writeAttempts, recordAttempt, isAtCap } from '../dashboard-web/server/lib/contact-search-attempts.mjs';
+import { readAttempts, writeAttempts, recordAttempt, recordSearchError, resetAttempts, isAtCap } from '../dashboard-web/server/lib/contact-search-attempts.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
 
 let passed = 0, failed = 0;
@@ -45,6 +45,36 @@ check(!isAtCap('Acme Labs', 'talent', '2026-01-10', capAttempts, 5), 'not at cap
 const errorAttempts = {};
 // Not calling recordAttempt simulates an error being skipped.
 check(!isAtCap('ErrorCo', 'talent', '2026-01-01', errorAttempts), 'uncalled company is never at cap');
+
+// --- errors and timeouts are kept on the side and never count ---
+const sideAttempts = {};
+recordSearchError('Zorblax Systems', 'talent', 'Invented timeout', sideAttempts);
+recordSearchError('Zorblax Systems', 'talent', 'Invented timeout', sideAttempts);
+recordSearchError('Zorblax Systems', 'talent', 'Invented timeout', sideAttempts);
+check(!sideAttempts.zorblaxsystems.talent, 'three errors leave the try count untouched');
+check(sideAttempts.zorblaxsystems.errors.talent === 3, 'the errors are counted on their own');
+check(sideAttempts.zorblaxsystems.lastError.message === 'Invented timeout', 'the last error text is kept for visibility');
+check(!sideAttempts.zorblaxsystems.lastSearched, 'an error does not move lastSearched');
+check(!isAtCap('Zorblax Systems', 'talent', '2020-01-01', sideAttempts), 'a company with only errors is never at the cap');
+recordAttempt('Zorblax Systems', 'talent', '2020-01-01', sideAttempts);
+check(sideAttempts.zorblaxsystems.talent === 1 && sideAttempts.zorblaxsystems.confirmed.talent === 1, 'a real empty search counts once and is marked confirmed');
+check(!isAtCap('Zorblax Systems', 'talent', '2020-01-01', sideAttempts), 'one empty search plus three errors is still below the cap');
+recordAttempt('Zorblax Systems', 'talent', '2020-01-01', sideAttempts);
+check(isAtCap('Zorblax Systems', 'talent', '2020-01-01', sideAttempts), 'two real empty searches reach the cap');
+recordSearchError('__proto__', 'talent', 'Invented', sideAttempts);
+check(!Object.hasOwn(sideAttempts, '__proto__') && {}.errors === undefined, 'recordSearchError ignores a prototype key');
+
+// --- resetAttempts: give it another try ---
+const resetMap = {
+  quennoxlabs: { talent: 2, principal: 2, confirmed: { principal: 1 }, lastSearched: '2031-02-01' },
+};
+check(resetAttempts('Quennox Labs', 'talent', resetMap) === 2, 'reset reports the tries it removed');
+check(resetMap.quennoxlabs.talent === 0 && resetMap.quennoxlabs.principal === 2, 'reset of one search type leaves the other alone');
+check(!isAtCap('Quennox Labs', 'talent', '2031-01-01', resetMap), 'a reset company is no longer at the cap');
+check(resetAttempts('Quennox Labs', 'principal', resetMap, { unconfirmedOnly: true }) === 1, 'unconfirmedOnly removes only the tries that cannot be verified');
+check(resetMap.quennoxlabs.principal === 1 && resetMap.quennoxlabs.confirmed.principal === 1, 'unconfirmedOnly keeps the confirmed empty search');
+check(resetAttempts('Quennox Labs', null, resetMap) === 1 && resetMap.quennoxlabs.principal === 0, 'reset with no type clears every search type');
+check(resetAttempts('Nobody Example', 'talent', resetMap) === 0, 'reset of an unknown company removes nothing');
 
 // --- writeAttempts + readAttempts round-trip ---
 // Use a unique temp path so the test is safe.
