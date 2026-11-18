@@ -107,6 +107,7 @@ If the search returns no reliable matches, return an empty array []. Never fabri
       const operation = (async () => {
         const collected = await collectPeople({ company, tier: 'talent', search });
         searchesUsed = collected.queriesRun;
+        if (collected.rateLimited) return { company, exampleRole, suggestions: [], error: 'Brave API HTTP 429', rateLimited: true, searchesUsed };
         if (collected.people.length === 0) return { company, exampleRole, suggestions: [], searchesUsed };
         const labelPrompt = buildLabelPrompt({ company, tier: 'talent', exampleRole, people: collected.people });
         const fullText = await generate(labelPrompt, { model: resolvedModel, maxTokens: 3000 });
@@ -237,6 +238,7 @@ If the search returns no reliable matches, return []. Never fabricate names or t
       const operation = (async () => {
         const collected = await collectPeople({ company, tier: 'principal', track, search });
         searchesUsed = collected.queriesRun;
+        if (collected.rateLimited) return { company, exampleRole, suggestions: [], error: 'Brave API HTTP 429', rateLimited: true, searchesUsed };
         if (collected.people.length === 0) return { company, exampleRole, suggestions: [], searchesUsed };
         const labelPrompt = buildLabelPrompt({ company, tier: 'principal', exampleRole, people: collected.people });
         const fullText = await generate(labelPrompt, { model: resolvedModel, maxTokens: 3000 });

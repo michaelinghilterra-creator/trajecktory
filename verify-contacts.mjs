@@ -83,7 +83,12 @@ export function mapHunter(json) {
 export async function mvVerify(email, key) {
   const url = `https://api.millionverifier.com/api/v3/?api=${encodeURIComponent(key)}&email=${encodeURIComponent(email)}&timeout=20`;
   const res = await fetch(url, { signal: AbortSignal.timeout(25_000) });
-  if (!res.ok) throw new Error(`MillionVerifier HTTP ${res.status}`);
+  if (!res.ok) {
+    const error = new Error(`MillionVerifier HTTP ${res.status}`);
+    error.status = res.status;
+    error.service = 'millionVerifier';
+    throw error;
+  }
   const j = await res.json();
   if (j?.error) throw new Error(`MillionVerifier: ${j.error}`);
   return mapMillionVerifier(j);

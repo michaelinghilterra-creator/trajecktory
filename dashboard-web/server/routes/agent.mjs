@@ -94,7 +94,9 @@ function persistJobs() {
       .slice(0, MAX_PERSIST)
       .map(([id, job]) => [id, { ...job, output: (job.output || '').slice(-1000), toolCalls: (job.toolCalls || []).slice(-20) }]);
     atomicWriteFileSync(JOBS_FILE, JSON.stringify(entries), 'utf8');
-  } catch { /* best-effort */ }
+  } catch (error) {
+    console.warn(`[agent jobs] failed to write ${JOBS_FILE}: ${error.message}`);
+  }
 }
 
 let persistTimer = null;
@@ -116,7 +118,9 @@ function loadPersistedJobs() {
         ? { ...job, status: 'interrupted', error: 'Interrupted by a dashboard restart. Click Run to retry.', interruptedAt: Date.now() }
         : job);
     }
-  } catch { /* ignore a corrupt/partial snapshot */ }
+  } catch (error) {
+    console.warn(`[agent jobs] failed to read or parse ${JOBS_FILE}: ${error.message}`);
+  }
 }
 loadPersistedJobs();
 
@@ -1271,12 +1275,31 @@ async function runAgent(jobId, mode, target) {
     if (mode === 'interview' || mode === 'cheat-sheet' || mode === 'runsheet' || mode === 'interview-prep') {
       hygieneDirs.push(path.join(ROOT_DIR, 'interview-prep'));
     }
+    const warnHygiene = reason => {
+      const message = `Report text clean-up did not finish: ${reason}`;
+      const job = agentJobs.get(jobId) || {};
+      agentJobs.set(jobId, { ...job, warnings: [...(job.warnings || []), message] });
+      console.warn(`[hygiene] ${message}`);
+      schedulePersist();
+    };
     for (const d of hygieneDirs) {
+      let warned = false;
+      const warnOnce = reason => {
+        if (warned) return;
+        warned = true;
+        warnHygiene(reason);
+      };
       const child = spawn(process.execPath, ['clean-generated-text.mjs', d, '--apply'], { cwd: ROOT_DIR, stdio: 'ignore' });
-      child.on('error', () => {});   // never surface a spawn error
+      child.on('error', error => warnOnce(error.message));
+      child.on('close', code => { if (code !== 0) warnOnce(`process exited with code ${code}`); });
       child.unref();
     }
-  } catch { /* hygiene is best-effort; never break a run */ }
+  } catch (error) {
+    const message = `Report text clean-up did not finish: ${error.message}`;
+    const job = agentJobs.get(jobId) || {};
+    agentJobs.set(jobId, { ...job, warnings: [...(job.warnings || []), message] });
+    console.warn(`[hygiene] ${message}`);
+  }
 
   // Activation log: whether a run produced anything is the outcome worth
   // knowing, and the server already computed it just above. Counts and an enum

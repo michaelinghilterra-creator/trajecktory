@@ -25,6 +25,7 @@ import { sanitizeCell } from './lib/sanitize-cell.mjs';
 import { coverageKey, updateCoverage } from './lib/scan-coverage.mjs';
 import { localToday } from './lib/local-date.mjs';
 import { createWorkdayPacer } from './lib/workday-pacer.mjs';
+import { createHostPacer, isRateBlock } from './lib/host-pacer.mjs';
 import { atomicWriteFileSync } from './lib/atomic-write.mjs';
 import { enforceArgs } from './lib/cli-args.mjs';
 const parseYaml = yaml.load;
@@ -76,6 +77,37 @@ const workdayPacer = createWorkdayPacer({
   gapMs: readEnvInteger('TJK_WORKDAY_GAP_MS', 0),
   maxPagesPerBoard: readEnvInteger('TJK_WORKDAY_MAX_PAGES', 1),
 });
+
+const ATS_CONCURRENCY = readEnvInteger('TJK_ATS_CONCURRENCY', 1) ?? 4;
+const ATS_GAP_MS = readEnvInteger('TJK_ATS_GAP_MS', 0) ?? 150;
+const ATS_FAMILIES = ['greenhouse', 'ashby', 'lever', 'workable', 'smartrecruiters'];
+const atsPacers = Object.fromEntries(ATS_FAMILIES.map(name => [name, createHostPacer({
+  concurrency: ATS_CONCURRENCY,
+  gapMs: ATS_GAP_MS,
+  name,
+})]));
+
+export async function runAtsRequest(pacer, request) {
+  return pacer.run(async () => {
+    try {
+      return await request();
+    } catch (error) {
+      if (isRateBlock(error?.status)) pacer.trip(`HTTP ${error.status}`);
+      throw error;
+    }
+  });
+}
+
+export function scanFailureOutcome(error, type) {
+  const pausedFamily = ATS_FAMILIES.find(name => error.message.startsWith(`${name} paused for this run:`));
+  const workdayPaused = error.message.startsWith('Workday paused for this scan:');
+  return {
+    paused: workdayPaused || Boolean(pausedFamily),
+    pausedFamily,
+    result: workdayPaused || pausedFamily ? 'skipped_paused' : (/HTTP 404/.test(error.message) ? 'http_404' : 'error'),
+    ats: type,
+  };
+}
 
 // TEST CAP (temporary): when TJK_TEST_LIMIT is set (e.g. a line in
 // dashboard-web/.env), only the first N new offers are written to the pipeline,
@@ -375,12 +407,16 @@ const PARSERS = { greenhouse: parseGreenhouse, ashby: parseAshby, lever: parseLe
 
 // ── Fetch with timeout ──────────────────────────────────────────────
 
-async function fetchJson(url) {
+async function fetchJson(url, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { signal: controller.signal, headers: { accept: 'application/json' } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const error = new Error(`HTTP ${res.status}`);
+      error.status = res.status;
+      throw error;
+    }
     return await res.json();
   } finally {
     clearTimeout(timer);
@@ -425,26 +461,18 @@ async function fetchWorkdayJobs(apiUrl, baseUrl, companyName, site) {
 
 // SmartRecruiters paginates (100/page). Public read API, no auth.
 async function fetchSmartRecruitersJobs(apiUrl, companyId, companyName) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS * 3);
   const limit = 100;
   let offset = 0;
   let allContent = [];
 
-  try {
-    while (true) {
-      const res = await fetch(`${apiUrl}?limit=${limit}&offset=${offset}`, { signal: controller.signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
+  while (true) {
+      const json = await runAtsRequest(atsPacers.smartrecruiters, () => fetchJson(`${apiUrl}?limit=${limit}&offset=${offset}`, FETCH_TIMEOUT_MS * 3));
       const page = json.content || [];
       allContent = allContent.concat(page);
       if (page.length < limit || allContent.length >= (json.totalFound || 0)) break;
       offset += limit;
-    }
-    return parseSmartRecruiters({ content: allContent }, companyName, companyId);
-  } finally {
-    clearTimeout(timer);
   }
+  return parseSmartRecruiters({ content: allContent }, companyName, companyId);
 }
 
 // ── Title filter ────────────────────────────────────────────────────
@@ -707,6 +735,7 @@ async function main() {
   const rejects = [];            // title/location rejects, logged for false-negative auditing
   const coverageOutcomes = [];   // per-company result, for the durable coverage log
   let workdayBoardsSkipped = 0;
+  const atsBoardsSkipped = Object.fromEntries(ATS_FAMILIES.map(name => [name, 0]));
 
   const tasks = targets.map(company => async () => {
     const { type, url, meta } = company._api;
@@ -718,7 +747,9 @@ async function main() {
       } else if (type === 'smartrecruiters') {
         jobs = await fetchSmartRecruitersJobs(url, meta.companyId, company.name);
       } else {
-        const json = await fetchJson(url);
+        const json = atsPacers[type]
+          ? await runAtsRequest(atsPacers[type], () => fetchJson(url))
+          : await fetchJson(url);
         jobs = PARSERS[type](json, company.name, meta?.subdomain);
       }
       totalFound += jobs.length;
@@ -761,15 +792,17 @@ async function main() {
         newOffers.push({ ...job, source: `${type}-api` });
       }
     } catch (err) {
-      const paused = err.message.startsWith('Workday paused for this scan:');
+      const failure = scanFailureOutcome(err, type);
+      const { pausedFamily, paused } = failure;
       if (paused) {
-        workdayBoardsSkipped++;
+        if (pausedFamily) atsBoardsSkipped[pausedFamily] += 1;
+        else workdayBoardsSkipped++;
       } else {
         errors.push({ company: company.name, error: err.message });
       }
       coverageOutcomes.push({
         key: covKey, name: company.name, ats: type,
-        result: paused ? 'skipped_paused' : (/HTTP 404/.test(err.message) ? 'http_404' : 'error'),
+        result: failure.result,
       });
     }
   });
@@ -862,6 +895,15 @@ async function main() {
 
   if (workdayPacer.tripped) {
     console.log(`\nWorkday paused this scan after ${workdayPacer.reason}; ${workdayBoardsSkipped} boards skipped.`);
+  }
+  for (const family of ATS_FAMILIES) {
+    const pacer = atsPacers[family];
+    if (pacer.tripped) {
+      const label = family === 'smartrecruiters'
+        ? 'SmartRecruiters'
+        : family[0].toUpperCase() + family.slice(1);
+      console.log(`\n${label} paused this scan after ${pacer.reason}; ${atsBoardsSkipped[family]} boards skipped.`);
+    }
   }
 
   if (newOffers.length > 0) {

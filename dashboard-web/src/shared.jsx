@@ -1290,6 +1290,9 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
               {job?.warning && (
                 <div className="workflow-summary" style={{ color: 'var(--yellow)' }}>{job.warning}</div>
               )}
+              {(job?.warnings || []).map((warning, index) => (
+                <div key={`warning-${index}`} className="workflow-summary" style={{ color: 'var(--yellow)' }}>{warning}</div>
+              ))}
               {job?.status === 'interrupted' && (
                 <div className="workflow-summary" style={{ color: 'var(--orange)' }}>
                   Run interrupted{typeof job.progressTotal === 'number' && job.progressTotal > 0 && (job.evaluationsDone || 0) > 0 ? ` at ${Math.min(job.evaluationsDone, job.progressTotal)} of ${job.progressTotal}` : ''}. Click Run to retry.

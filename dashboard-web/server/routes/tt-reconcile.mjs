@@ -20,6 +20,8 @@ import { currentBatch } from '../lib/pricing.mjs';
 import { startCadences } from '../lib/cadence-start.mjs';
 import { withWasTag } from '../lib/contact-revive.mjs';
 import { braveProfileSearch, buildPeopleQueries, PEOPLE_QUERIES_PER_TIER } from '../../../lib/people-search.mjs';
+import { createHostPacer } from '../../../lib/host-pacer.mjs';
+import { runEmailLookupBatch } from '../../../lib/email-lookup-batch.mjs';
 
 export const router = express.Router();
 
@@ -72,6 +74,7 @@ function discoverRequestTimeoutMs() {
 // lose an in-flight record, but results are available to apply as each company
 // lands, so a long run does not strand all of its useful work until the end.
 const discoverJobs = new Map();
+let lastVerifyError = null;
 
 // The rows an add path must not duplicate: the whole TA book plus every live
 // referral (one bucket per contact), each read defensively.
@@ -99,6 +102,7 @@ async function runDiscoverJob(job, tasks, generate, search, concurrency = DISCOV
     if (!existing || (a.date || '') > existing) appDateByCompany.set(k, a.date || '');
   }
   let next = 0;
+  let rateLimited = false;
   const active = new Map();
   const settled = new Set();
   const refreshCurrent = () => { job.current = [...active.values()]; };
@@ -112,7 +116,7 @@ async function runDiscoverJob(job, tasks, generate, search, concurrency = DISCOV
     }
     : undefined;
   const worker = async () => {
-    while (next < tasks.length) {
+    while (!rateLimited && next < tasks.length) {
       const taskIndex = next++;
       const task = tasks[taskIndex];
       active.set(taskIndex, task.company);
@@ -128,6 +132,7 @@ async function runDiscoverJob(job, tasks, generate, search, concurrency = DISCOV
           // anyone to find, so it never counts toward the cap. It is kept on
           // the side for visibility only.
           recordSearchError(task.company, task.search, result.error, attempts);
+          if (result.rateLimited) rateLimited = true;
           continue;
         }
         job.results.push({
@@ -174,6 +179,7 @@ async function runDiscoverJob(job, tasks, generate, search, concurrency = DISCOV
       job.done += 1;
     });
   }
+  if (rateLimited) job.skippedForRateLimit = Math.max(0, tasks.length - settled.size);
   job.current = [];
   try { writeAttempts(attempts); } catch (err) { console.log(`[discover] failed to write attempts: ${err.message}`); }
   job.status = 'done';
@@ -231,6 +237,10 @@ router.get('/api/tt-reconcile/discover-run/:jobId', (req, res) => {
   const job = discoverJobs.get(req.params.jobId);
   if (!job) return res.status(404).json({ error: 'Discovery job not found.' });
   res.json(job);
+});
+
+router.get('/api/tt-reconcile/verify-status', (req, res) => {
+  res.json({ lastVerifyError });
 });
 
 // POST /api/tt-reconcile/discover-run
@@ -451,10 +461,22 @@ router.post('/api/tt-reconcile/find-emails', async (req, res) => {
     const cap = planFindBudget({ needed: rows.length, limit: wanted, creditsLeft });
     const toRun = rows.slice(0, cap);
 
+    const hunterPacer = createHostPacer({ concurrency: 2, gapMs: 250, name: 'hunter' });
+    const millionVerifierPacer = createHostPacer({ concurrency: 3, gapMs: 250, name: 'millionVerifier' });
+    const batch = await runEmailLookupBatch(toRun, r => findAndVerify(
+      r.company, r.first, r.last, hkey, mkey, undefined,
+      { hunterPacer, millionVerifierPacer },
+    ));
     const results = [];
-    for (const r of toRun) {
+    for (const item of batch.results) {
+      const r = item.row;
+      if (item.skipped) {
+        results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), company: r.company, email: null, state: 'skipped', reason: item.reason });
+        continue;
+      }
       try {
-        const f = await findAndVerify(r.company, r.first, r.last, hkey, mkey);
+        if (item.error) throw new Error(item.error);
+        const f = item.value;
         if (f.found && f.verify) {
           updateTTLine(r.id, { email: setVerifyTag(f.email, f.verify) });
           results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), company: r.company, email: f.email, state: f.verify.state });
@@ -469,6 +491,7 @@ router.post('/api/tt-reconcile/find-emails', async (req, res) => {
       ok: true, checked: toRun.length, written: results.filter(x => x.email).length,
       needing: rows.length, skippedForBudget: rows.length - toRun.length,
       creditsBefore: creditsLeft, creditsSpent: toRun.length, results,
+      ...(batch.rateLimited ? { rateLimited: batch.rateLimited } : {}),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -736,7 +759,10 @@ router.post('/api/tt-reconcile/bulk-add', async (req, res) => {
       verifierKeys: !!(hkey && mkey),
       emailVerification: (hkey && mkey) ? 'running' : 'skipped',
     });
-    if (hkey && mkey) verifyEmailsInBackground(written, toWrite, hkey, mkey).catch(() => {});
+    if (hkey && mkey) verifyEmailsInBackground(written, toWrite, hkey, mkey).catch(error => {
+      lastVerifyError = String(error?.message || error);
+      console.warn(`[verify] ${lastVerifyError}`);
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

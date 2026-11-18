@@ -100,10 +100,28 @@ export function planFindBudget({ needed, limit = 0, creditsLeft = null, defaultL
 //   { found:false }                                 — Hunter had nothing
 //   { found:true, email, score, verify:null, bad }  — found, but did not verify (do NOT write)
 //   { found:true, email, score, verify:{...} }      — found AND verified (write this)
-export async function findAndVerify(company, first, last, hkey, mkey, domain) {
-  const cand = await hunterFind(company, first, last, hkey, domain);
+export async function findAndVerify(company, first, last, hkey, mkey, domain, options = {}) {
+  let cand;
+  try {
+    const call = () => hunterFind(company, first, last, hkey, domain);
+    cand = options.hunterPacer ? await options.hunterPacer.run(call) : await call();
+  } catch (error) {
+    if (/Hunter rate limit \(429\)/.test(error?.message || '')) {
+      error.status = 429;
+      error.service = 'hunter';
+      options.hunterPacer?.trip('HTTP 429');
+    }
+    throw error;
+  }
   if (!cand) return { found: false };
-  const verdict = await mvVerify(cand.email, mkey);
+  let verdict;
+  try {
+    const call = () => mvVerify(cand.email, mkey);
+    verdict = options.millionVerifierPacer ? await options.millionVerifierPacer.run(call) : await call();
+  } catch (error) {
+    if (error?.status === 429) options.millionVerifierPacer?.trip('HTTP 429');
+    throw error;
+  }
   if (!verdict || verdict.state === 'invalid') {
     return { found: true, email: cand.email, score: cand.score, verify: null, bad: verdict?.state || 'error' };
   }

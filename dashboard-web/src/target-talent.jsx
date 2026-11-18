@@ -318,6 +318,7 @@ function ContactsTableView({ contacts, audience, otherCount, onOpen, selId, onRe
         const d = await r.json();
         if (!d.ok) { stopped = d.error || "Email lookup failed."; break; }
         checked += d.checked; written += d.written;
+        if (d.rateLimited) stopped = `${d.rateLimited === "hunter" ? "Hunter" : "MillionVerifier"} asked us to slow down. The remaining contacts were left for the next run.`;
         if (d.skippedForBudget > 0 || d.creditsBefore === 0) stopped = "Hunter is out of search credits.";
       }
     } catch (err) { stopped = err.message || "Email lookup failed."; }

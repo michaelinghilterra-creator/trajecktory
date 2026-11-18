@@ -506,18 +506,27 @@ async function createDraft({ to, subject, body, accessToken, fetchImpl = fetch }
 // from message content). A single unreadable message is skipped, never aborts the
 // sweep. getImpl is injectable for tests.
 async function fetchMessagesConcurrent(ids = [], {
-  accessToken, concurrency = 10, getImpl = getMessage, withFailures = false,
+  accessToken, concurrency = 4, getImpl = getMessage, withFailures = false,
 } = {}) {
   const out = [];
   const failedIds = [];
   let next = 0;
+  let rateBlocked = false;
+  const isRateBlock = error => error?.status === 429
+    || (error?.status === 403 && /(?:user)?rateLimitExceeded/i.test(String(error?.body || error?.message || '')));
   const worker = async () => {
-    while (next < ids.length) {
+    while (!rateBlocked && next < ids.length) {
       const id = ids[next++]?.id;
-      try { out.push(await getImpl({ id, accessToken })); } catch { failedIds.push(id); }
+      try { out.push(await getImpl({ id, accessToken })); } catch (error) {
+        failedIds.push(id);
+        if (isRateBlock(error)) rateBlocked = true;
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, ids.length || 1) }, worker));
+  if (rateBlocked) {
+    for (let index = next; index < ids.length; index++) failedIds.push(ids[index]?.id);
+  }
   return withFailures ? { messages: out, failedIds } : out;
 }
 
