@@ -501,6 +501,8 @@ for (const suite of [
   'tests/log-writes-maintenance.test.mjs',
   'tests/agent-edit.test.mjs',
   'tests/atomic-write.test.mjs',
+  'tests/cli-args.test.mjs',
+  'tests/process-scan-candidates.test.mjs',
   'tests/event-store-switch.test.mjs',
   'tests/event-store-flip.test.mjs',
   'tests/identity-store.test.mjs',

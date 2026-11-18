@@ -530,6 +530,11 @@ const getImpl = async ({ id }) => {
 const fetched = await fetchMessagesConcurrent(ids20, { accessToken: 'x', concurrency: 5, getImpl });
 check(fetched.length === 19, 'fetches every id, skipping the one that throws (20 → 19)');
 check(peak <= 5, `respects the concurrency cap (peak inflight ${peak} <= 5)`);
+const fetchedWithFailures = await fetchMessagesConcurrent(ids20, {
+  accessToken: 'x', concurrency: 5, getImpl, withFailures: true,
+});
+check(fetchedWithFailures.messages.length === 19 && fetchedWithFailures.failedIds[0] === 'id-7',
+  'failure-reporting mode returns loaded messages and the failed id');
 check((await fetchMessagesConcurrent([], { accessToken: 'x', getImpl })).length === 0, 'empty id list → empty result, no throw');
 
 // ── logReplyToContact: a detected reply lands on the CONTACT's timeline ────────

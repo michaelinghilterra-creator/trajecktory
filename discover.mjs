@@ -36,6 +36,20 @@ import { loadEnvKey as loadEnvKeyFromPaths } from './lib/env-key.mjs';
 import { buildPool, nextSlice } from './lib/discover-queries.mjs';
 import { loadCursor, saveCursor } from './lib/discover-rotation.mjs';
 import { checkDiscoveredJobs } from './lib/discover-liveness.mjs';
+import { enforceArgs } from './lib/cli-args.mjs';
+
+function isMain() {
+  try { return path.resolve(process.argv[1]) === fileURLToPath(import.meta.url); }
+  catch { return false; }
+}
+
+if (isMain()) {
+  const exitCode = enforceArgs(process.argv.slice(2), {
+    flags: ['--dry-run', '--verbose'],
+    usage: 'Usage: node discover.mjs [--dry-run] [--verbose]',
+  });
+  if (exitCode !== null) process.exit(exitCode);
+}
 
 const DRY_RUN   = process.argv.includes('--dry-run');
 const VERBOSE   = process.argv.includes('--verbose');
@@ -492,11 +506,6 @@ async function main() {
   }
 
   console.log('\n✨ Discovery complete.\n');
-}
-
-function isMain() {
-  try { return path.resolve(process.argv[1]) === fileURLToPath(import.meta.url); }
-  catch { return false; }
 }
 
 if (isMain()) main().catch(err => {

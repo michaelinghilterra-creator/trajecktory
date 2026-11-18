@@ -58,7 +58,8 @@ if (mH) {
   const idx = pipe.indexOf(mH[0]) + mH[0].length;
   pipe = pipe.slice(0, idx) + '\n' + addLines + (pipe[idx] === '\n' ? '' : '\n') + pipe.slice(idx);
 } else {
-  pipe += (pipe.endsWith('\n') ? '' : '\n') + addLines + '\n';
+  const prefix = pipe.endsWith('\n') ? '' : '\n';
+  pipe += `${prefix}\n## Pendientes\n\n${addLines}\n`;
 }
 if (out.added.length) fs.writeFileSync('data/pipeline.md', pipe);
 

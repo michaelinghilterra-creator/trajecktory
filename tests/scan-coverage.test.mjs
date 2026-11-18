@@ -8,6 +8,11 @@
  */
 
 import { updateCoverage, GONE_QUIET_THRESHOLD } from '../lib/scan-coverage.mjs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -151,4 +156,28 @@ console.log('scan-coverage.test.mjs');
 }
 
 console.log(`\n${failed === 0 ? '✅' : '❌'} ${passed} passed, ${failed} failed`);
+{
+  const dir = makeSandbox('scan-coverage-corrupt');
+  try {
+    mkdirSync(join(dir, 'data'));
+    writeFileSync(join(dir, 'portals.yml'), 'tracked_companies: []\n');
+    const corrupt = '{not valid json';
+    writeFileSync(join(dir, 'data', 'scan-coverage.json'), corrupt);
+    const root = dirname(dirname(fileURLToPath(import.meta.url)));
+    const run = spawnSync(process.execPath, [join(root, 'scan.mjs')], {
+      cwd: dir, encoding: 'utf8', timeout: 5000,
+    });
+    const preserved = readdirSync(join(dir, 'data')).filter(name => name.startsWith('scan-coverage.json.unreadable-'));
+    check(run.status === 0, 'scan continues after corrupt coverage JSON');
+    check(preserved.length === 1, 'corrupt coverage JSON is copied aside once');
+    check(preserved.length === 1 && readFileSync(join(dir, 'data', preserved[0]), 'utf8') === corrupt,
+      'the preserved corrupt coverage copy is byte-identical');
+    check(/could not parse data\/scan-coverage\.json/.test(run.stderr),
+      'scan prints a clear warning for corrupt coverage JSON');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

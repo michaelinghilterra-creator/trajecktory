@@ -505,17 +505,25 @@ async function createDraft({ to, subject, body, accessToken, fetchImpl = fetch }
 // run a small pool instead. Order is not preserved (callers re-derive everything
 // from message content). A single unreadable message is skipped, never aborts the
 // sweep. getImpl is injectable for tests.
-async function fetchMessagesConcurrent(ids = [], { accessToken, concurrency = 10, getImpl = getMessage } = {}) {
+async function fetchMessagesConcurrent(ids = [], {
+  accessToken, concurrency = 10, getImpl = getMessage, withFailures = false,
+} = {}) {
   const out = [];
+  const failedIds = [];
   let next = 0;
   const worker = async () => {
     while (next < ids.length) {
       const id = ids[next++]?.id;
-      try { out.push(await getImpl({ id, accessToken })); } catch { /* skip unreadable */ }
+      try { out.push(await getImpl({ id, accessToken })); } catch { failedIds.push(id); }
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, ids.length || 1) }, worker));
-  return out;
+  return withFailures ? { messages: out, failedIds } : out;
+}
+
+function loadedUnheldMessageIds(ids, { failedIds = [], heldBack = new Set() } = {}) {
+  const failed = new Set(failedIds);
+  return ids.map(item => item?.id).filter(id => id && !failed.has(id) && !heldBack.has(id));
 }
 
 // ── Pure parsing + classification ────────────────────────────────────────────
@@ -1125,7 +1133,7 @@ function logReplyToContact(contact, { subject, body, timestamp, advanceStatus = 
 
 export {
   readTokens, writeTokens, readSync, writeSync, replyDecisionsViaEvents, tokenScopes,
-  clientConfigured, googleStatus, getAccessToken, checkHealth, listMessages, getMessage, fetchMessagesConcurrent,
+  clientConfigured, googleStatus, getAccessToken, checkHealth, listMessages, getMessage, fetchMessagesConcurrent, loadedUnheldMessageIds,
   parseGmailMessage, extractEmail, parseFromHeader, isAtsRelayAddress, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, matchByFromHeader, scanDecisions, heldBackBounceIds,
   exchangeCode, fetchProfileEmail, candidateAppsFor, rankCandidateApps, createDraft, logReplyToContact, previewEntry,
 };

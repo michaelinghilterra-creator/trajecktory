@@ -14,6 +14,18 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { localToday } from './lib/local-date.mjs';
+import { fileURLToPath } from 'url';
+import { enforceArgs } from './lib/cli-args.mjs';
+
+const invokedDirectly = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (invokedDirectly) {
+  const exitCode = enforceArgs(process.argv.slice(2), {
+    flags: ['--dry-run'],
+    valueFlags: ['--days'],
+    usage: 'Usage: node prune-history.mjs [--dry-run] [--days DAYS]',
+  });
+  if (exitCode !== null) process.exit(exitCode);
+}
 
 const SCAN_HISTORY_PATH = 'data/scan-history.tsv';
 

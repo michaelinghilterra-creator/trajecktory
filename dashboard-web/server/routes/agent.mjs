@@ -20,6 +20,7 @@ import { validateReportMarkdown } from '../v1-loader.mjs';
 import { localToday } from '../../../lib/local-date.mjs';
 import { agentTail } from '../lib/agent-summary.mjs';
 import { checkSelfDuplicate } from '../../../lib/self-dup-check.mjs';
+import { atomicWriteFileSync } from '../../../lib/atomic-write.mjs';
 
 export const router = express.Router();
 
@@ -92,7 +93,7 @@ function persistJobs() {
       .sort((a, b) => (b[1].startedAt || 0) - (a[1].startedAt || 0))
       .slice(0, MAX_PERSIST)
       .map(([id, job]) => [id, { ...job, output: (job.output || '').slice(-1000), toolCalls: (job.toolCalls || []).slice(-20) }]);
-    fs.writeFileSync(JOBS_FILE, JSON.stringify(entries), 'utf8');
+    atomicWriteFileSync(JOBS_FILE, JSON.stringify(entries), 'utf8');
   } catch { /* best-effort */ }
 }
 

@@ -30,6 +30,7 @@ import { updatePipelineRows } from './lib/pipeline.mjs';
 import { appendGateHistory } from './lib/gate-history.mjs';
 import { localToday } from './lib/local-date.mjs';
 import { canonicalUrl, sourceUrlFromSnapshot } from './lib/identity.mjs';
+import { enforceArgs } from './lib/cli-args.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PIPELINE = join(__dirname, 'data/pipeline.md');
@@ -144,19 +145,27 @@ export function repointPipeline(md, resolved) {
 //     retrying never changes the outcome).
 //   - a `failed` row gates once its count EXCEEDS retryLimit; otherwise its count
 //     is carried forward for the next run to check again.
-export function computeGating({ unrecognized, failed, priorFailCounts, retryLimit }) {
+export function classifyFetchFailure(error) {
+  const reason = String(error?.message || error || 'unknown error');
+  return { kind: /\bHTTP\s+(404|410)\b/i.test(reason) ? 'gone' : 'transient', reason };
+}
+
+export function computeGating({ unrecognized, failed = [], gone = failed, transient = [], priorFailCounts, retryLimit }) {
   const toGate = [];
   for (const r of unrecognized) {
     toGate.push({ url: r.url, reason: 'unsupported ATS platform — needs manual JD paste' });
   }
   const nextFailCounts = {};
-  for (const r of failed) {
+  for (const r of gone) {
     const count = (priorFailCounts[r.url] || 0) + 1;
     if (count > retryLimit) {
       toGate.push({ url: r.url, reason: `unreadable after ${count} attempts — ${r.reason}` });
     } else {
       nextFailCounts[r.url] = count;
     }
+  }
+  for (const r of transient) {
+    if (priorFailCounts[r.url]) nextFailCounts[r.url] = priorFailCounts[r.url];
   }
   return { toGate, nextFailCounts };
 }
@@ -170,7 +179,8 @@ async function main() {
 
   const pending = md.split('\n').map(parsePendingRow).filter(Boolean);
   const resolved = new Map();     // url -> local:jds/… (for the repoint)
-  const report = { resolved: [], alreadyLocal: 0, unrecognized: [], failed: [] };
+  const report = { resolved: [], alreadyLocal: 0, unrecognized: [], gone: [], transient: [] };
+  report.failed = report.gone;
 
   for (const row of pending) {
     if (row.url.startsWith('local:')) { report.alreadyLocal++; continue; }
@@ -189,10 +199,10 @@ async function main() {
       resolved.set(row.url, `local:${file}`);
       report.resolved.push({ company: row.company, title: row.title, ats: desc.ats, chars: text.length, file, reused: selected.reused });
     } catch (e) {
-      // url is REQUIRED here: computeGating keys the retry/gate counter by r.url,
-      // so a failed row without it never advances past retry 1 and never gates
-      // (the fetch-failure retry logic was silently inert before this).
-      report.failed.push({ url: row.url, company: row.company, title: row.title, ats: desc.ats, reason: e.message });
+      const failure = classifyFetchFailure(e);
+      report[failure.kind].push({
+        url: row.url, company: row.company, title: row.title, ats: desc.ats, reason: failure.reason,
+      });
     }
   }
 
@@ -206,7 +216,7 @@ async function main() {
   const failCounts = loadFailCounts();
   const stillPendingUrls = new Set(pending.map(r => r.url));
   const { toGate, nextFailCounts } = computeGating({
-    unrecognized: report.unrecognized, failed: report.failed,
+    unrecognized: report.unrecognized, gone: report.gone, transient: report.transient,
     priorFailCounts: failCounts, retryLimit: RETRY_LIMIT,
   });
   // Drop counters for URLs no longer pending (resolved, gated, or removed elsewhere).
@@ -230,7 +240,7 @@ async function main() {
     // Log each gated row as 'uncertain': we could not READ it, which is NOT a
     // confirmed-dead liveness verdict (the posting may be live but unreadable).
     const meta = new Map();
-    for (const r of [...report.unrecognized, ...report.failed]) meta.set(r.url, r);
+    for (const r of [...report.unrecognized, ...report.gone]) meta.set(r.url, r);
     appendGateHistory(GATE_HISTORY, toGate.map(g => {
       const m = meta.get(g.url) || {};
       return { url: g.url, company: m.company, role: m.title, result: 'uncertain', reason: g.reason };
@@ -244,21 +254,32 @@ async function main() {
   console.log(`  ${report.resolved.length} resolved · ${report.alreadyLocal} already local · ${report.unrecognized.length} unrecognized · ${report.failed.length} failed · ${report.gated} gated (retry limit ${RETRY_LIMIT})\n`);
   for (const r of report.resolved) console.log(`  ✅ ${r.ats.padEnd(15)} ${r.company} — ${r.title}  (${r.chars}ch → ${r.file})`);
   if (report.failed.length) {
-    console.log('\n  Recognized ATS but could not fetch (needs a board/site hint, or the posting is gone):');
+    console.log('\n  Recognized ATS reports the posting is gone:');
     for (const r of report.failed) {
       const gated = toGate.some(g => g.url === r.url);
       console.log(`  ⚠ ${r.ats.padEnd(15)} ${r.company} — ${r.title}  (${r.reason})${gated ? '  [GATED — retry limit reached]' : '  [will retry once more next run]'}`);
+    }
+  }
+  if (report.transient.length) {
+    console.log('\n  Transient fetch failures (left pending; retry counter unchanged):');
+    for (const r of report.transient) {
+      console.log(`  ! ${r.ats.padEnd(15)} ${r.company} - ${r.title}  (${r.reason})`);
     }
   }
   if (report.unrecognized.length) {
     console.log('\n  Unrecognized platform (no public JD API — paste the JD or supply a specific job URL):');
     for (const r of report.unrecognized) console.log(`  · ${r.company} — ${r.title}  [GATED — no retry]`);
   }
-  if (dryRun && (report.failed.length || report.unrecognized.length)) {
+  if (dryRun && (report.failed.length || report.transient.length || report.unrecognized.length)) {
     console.log('\n  (dry run: no rows were actually gated or written)');
   }
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const exitCode = enforceArgs(process.argv.slice(2), {
+    flags: ['--dry-run'],
+    usage: 'Usage: node resolve-jds.mjs [--dry-run]',
+  });
+  if (exitCode !== null) process.exit(exitCode);
   main().catch(e => { console.error(e); process.exit(1); });
 }

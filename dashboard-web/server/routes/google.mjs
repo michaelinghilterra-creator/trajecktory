@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import {
   readTokens, writeTokens, readSync, writeSync, replyDecisionsViaEvents, googleStatus, checkHealth, clientConfigured,
-  getAccessToken, listMessages, fetchMessagesConcurrent, scanDecisions, heldBackBounceIds,
+  getAccessToken, listMessages, fetchMessagesConcurrent, loadedUnheldMessageIds, scanDecisions, heldBackBounceIds,
   buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState, rankCandidateApps, createDraft,
   getMessage, parseGmailMessage, extractEmail, parseFromHeader, isAtsRelayAddress, logReplyToContact, previewEntry,
   getThread, getTodayCalendarEvents,
@@ -331,7 +331,10 @@ router.post('/api/google/scan-bounces', async (req, res) => {
     // so a diagnostic sweep can show the full picture without advancing state.
     const fresh = dryRun ? ids : ids.filter(m => !seen.has(m.id));
 
-    const raws = await fetchMessagesConcurrent(fresh, { accessToken });
+    const { messages: raws, failedIds } = await fetchMessagesConcurrent(fresh, {
+      accessToken, withFailures: true,
+    });
+    console.log(`[scan-bounces] ${failedIds.length} message load failures left unseen.`);
 
     const taRows = parseTargetTalentMd();
     const { bounces } = scanDecisions({ messages: raws, taRows });
@@ -401,7 +404,7 @@ router.post('/api/google/scan-bounces', async (req, res) => {
       const latest = readSync();
       latest.seenMessageIds = [...new Set([
         ...latest.seenMessageIds,
-        ...fresh.map(m => m.id).filter(id => !heldBack.has(id)),
+        ...loadedUnheldMessageIds(fresh, { failedIds, heldBack }),
       ])].slice(-3000);
       latest.lastCheckedAt = new Date().toISOString();
       writeSync(latest);
@@ -410,6 +413,7 @@ router.post('/api/google/scan-bounces', async (req, res) => {
     res.json({
       dryRun,
       scanned: fresh.length,
+      failedLoadCount: failedIds.length,
       hardBounces: bounces.filter(b => b.kind === 'hard').length,
       softBounces: bounces.filter(b => b.kind === 'soft').length,
       [dryRun ? 'wouldFlip' : 'flipped']: dryRun ? proposals.length : applied.length,

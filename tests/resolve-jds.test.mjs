@@ -13,7 +13,7 @@
  * Run: node tests/resolve-jds.test.mjs   (exit 0 = pass, 1 = fail)
  */
 import { htmlToText, parsePostingUrl, fetchJdText } from '../lib/ats-jd.mjs';
-import { buildHintIndex, parsePendingRow, repointPipeline, computeGating, saveSnapshot } from '../resolve-jds.mjs';
+import { buildHintIndex, parsePendingRow, repointPipeline, computeGating, saveSnapshot, classifyFetchFailure } from '../resolve-jds.mjs';
 import { readFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { makeSandbox } from './helpers/sandbox.mjs';
@@ -224,6 +224,32 @@ check(adpShortThrew, 'fetchJdText ADP rejects a short description');
   // this by intersecting with the still-pending set), not computeGating's.
   const g = computeGating({ unrecognized: [], failed: [], priorFailCounts: { 'https://old.example/x': 3 }, retryLimit: 1 });
   check(g.toGate.length === 0 && Object.keys(g.nextFailCounts).length === 0, 'a URL with no failure this run produces no gate and no carried-forward count');
+}
+
+check(classifyFetchFailure(new Error('HTTP 404 from example.test')).kind === 'gone',
+  'HTTP 404 is classified as gone');
+check(classifyFetchFailure(new Error('HTTP 410 from example.test')).kind === 'gone',
+  'HTTP 410 is classified as gone');
+check(classifyFetchFailure(new Error('request timed out')).kind === 'transient',
+  'a timeout is classified as transient');
+check(classifyFetchFailure(new Error('HTTP 429 from example.test')).kind === 'transient',
+  'HTTP 429 is classified as transient');
+{
+  const url = 'https://jobs.example.test/zorblax/timeout-role';
+  const first = computeGating({
+    unrecognized: [], gone: [],
+    transient: [{ url, company: 'Zorblax Systems', title: 'Widget Lead', reason: 'request timed out' }],
+    priorFailCounts: {}, retryLimit: 1,
+  });
+  const second = computeGating({
+    unrecognized: [], gone: [],
+    transient: [{ url, company: 'Zorblax Systems', title: 'Widget Lead', reason: 'request timed out' }],
+    priorFailCounts: first.nextFailCounts, retryLimit: 1,
+  });
+  check(first.toGate.length === 0 && second.toGate.length === 0,
+    'two timeouts never gate a posting');
+  check(Object.keys(second.nextFailCounts).length === 0,
+    'timeouts do not create a gone-failure counter');
 }
 
 // ── done ─────────────────────────────────────────────────────────────────────

@@ -51,7 +51,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { parseTrackerLine } from './lib/tracker.mjs';
+import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
 import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs';
 import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
 
@@ -76,15 +76,8 @@ const INVARIANT = ['num', 'date', 'company', 'role', 'status', 'pdf', 'resume',
  * create, so its cell 4 (score) is split index 5 in the raw line.
  */
 export function replaceScoreCell(line, newCell) {
-  const parts = String(line).split('|');
-  if (parts.length < 11) return null;          // 9 inner cells + 2 empties
-  const i = 5;
-  const old = parts[i];
-  // Preserve whatever padding the row already used around the value.
-  const lead = (old.match(/^\s*/) || [''])[0];
-  const tail = (old.match(/\s*$/) || [''])[0];
-  parts[i] = `${lead}${newCell}${tail}`;
-  return parts.join('|');
+  const row = parseTrackerLine(String(line));
+  return row ? formatTrackerLine({ ...row, score: newCell, preserveColumns: true }) : null;
 }
 
 /**

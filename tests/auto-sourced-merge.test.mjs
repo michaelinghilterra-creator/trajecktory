@@ -37,7 +37,7 @@ function runCase({ num, url, company = 'Quennox Ratchet Works', role = 'Revenue 
   for (const module of [
     'discard.mjs', 'tracker.mjs', 'scan-core.mjs', 'identity.mjs', 'pipeline.mjs',
     'log-writes.mjs', 'local-date.mjs', 'event-store.mjs', 'event-store-switch.mjs',
-    'legacy-files.mjs', 'atomic-write.mjs', 'void-events.mjs', 'passed.mjs',
+    'legacy-files.mjs', 'atomic-write.mjs', 'void-events.mjs', 'passed.mjs', 'cli-args.mjs',
   ]) {
     fs.copyFileSync(path.join(root, 'lib', module), path.join(sandbox, 'lib', module));
   }

@@ -17,7 +17,7 @@
  *   node scan.mjs --no-age-filter        # disable age filter entirely
  */
 
-import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, copyFileSync } from 'fs';
 import { pathToFileURL } from 'url';
 import yaml from 'js-yaml';
 import { buildTitleFilter, buildLocationFilter, normalizeUrl, scoreOffer } from './lib/scan-core.mjs';
@@ -25,6 +25,8 @@ import { sanitizeCell } from './lib/sanitize-cell.mjs';
 import { coverageKey, updateCoverage } from './lib/scan-coverage.mjs';
 import { localToday } from './lib/local-date.mjs';
 import { createWorkdayPacer } from './lib/workday-pacer.mjs';
+import { atomicWriteFileSync } from './lib/atomic-write.mjs';
+import { enforceArgs } from './lib/cli-args.mjs';
 const parseYaml = yaml.load;
 
 /** The scanner reads only locally tracked companies, never externally owned ones. */
@@ -564,7 +566,7 @@ function appendToPipeline(offers) {
   // insertOffersIntoPipeline create the "## Pendientes" section. (Reading it
   // unguarded ENOENT'd a brand-new install the moment the first scan found one.)
   const text = existsSync(PIPELINE_PATH) ? readFileSync(PIPELINE_PATH, 'utf-8') : '';
-  writeFileSync(PIPELINE_PATH, insertOffersIntoPipeline(text, offers), 'utf-8');
+  atomicWriteFileSync(PIPELINE_PATH, insertOffersIntoPipeline(text, offers), 'utf-8');
 }
 
 function ensureScanHistory() {
@@ -800,11 +802,19 @@ async function main() {
     }
     let prevCoverage = {};
     if (existsSync(SCAN_COVERAGE_PATH)) {
-      try { prevCoverage = JSON.parse(readFileSync(SCAN_COVERAGE_PATH, 'utf-8')); } catch { prevCoverage = {}; }
+      try {
+        prevCoverage = JSON.parse(readFileSync(SCAN_COVERAGE_PATH, 'utf-8'));
+      } catch (error) {
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const preserved = `${SCAN_COVERAGE_PATH}.unreadable-${stamp}`;
+        copyFileSync(SCAN_COVERAGE_PATH, preserved);
+        console.warn(`Warning: could not parse ${SCAN_COVERAGE_PATH}; preserved it as ${preserved} and continued with empty coverage. ${error.message}`);
+        prevCoverage = {};
+      }
     }
     const { coverage, alerts } = updateCoverage(prevCoverage, coverageOutcomes, date);
     coverageAlerts = alerts;
-    if (!dryRun) writeFileSync(SCAN_COVERAGE_PATH, JSON.stringify(coverage, null, 2), 'utf-8');
+    if (!dryRun) atomicWriteFileSync(SCAN_COVERAGE_PATH, JSON.stringify(coverage, null, 2), 'utf-8');
   }
 
   // 5. Write results
@@ -884,6 +894,12 @@ export {
 
 const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invokedDirectly) {
+  const exitCode = enforceArgs(process.argv.slice(2), {
+    flags: ['--dry-run', '--no-age-filter'],
+    valueFlags: ['--company', '--max-age-days', '--max-history-days'],
+    usage: 'Usage: node scan.mjs [--dry-run] [--no-age-filter] [--company NAME] [--max-age-days DAYS] [--max-history-days DAYS]',
+  });
+  if (exitCode !== null) process.exit(exitCode);
   main().catch(err => {
     console.error('Fatal:', err.message);
     process.exit(1);

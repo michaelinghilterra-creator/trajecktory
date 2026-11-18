@@ -16,6 +16,16 @@ import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
 import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
+import { enforceArgs } from './lib/cli-args.mjs';
+
+const invokedDirectly = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (invokedDirectly) {
+  const exitCode = enforceArgs(process.argv.slice(2), {
+    flags: ['--dry-run'],
+    usage: 'Usage: node normalize-statuses.mjs [--dry-run]',
+  });
+  if (exitCode !== null) process.exit(exitCode);
+}
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate) and applications.md (original)
