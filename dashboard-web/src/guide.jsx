@@ -295,8 +295,9 @@ const CHAPTERS = [
           <li><b>Decision Makers</b> and <b>TA Outreach</b> are two views of the same contact book, split by the
           contact's role in the hire. Decision Makers holds hiring managers, executives and peers. TA Outreach
           holds talent acquisition and agency recruiters, who move you through the process but do not decide. Both
-          have Import CSV, a CSV Template and a <b>Reconcile</b> that retires contacts at closed companies and finds
-          people for the companies where you have nobody. Only Decision Makers has <b>Find decision-makers</b>.</li>
+          have Import CSV, a CSV Template and two separate actions. <b>Retire contacts</b> retires contacts at
+          companies where every application is closed. <b>Find contacts and emails</b> searches the live companies
+          that have nobody of that kind on file. Neither one does the other's job.</li>
           <li>Open any contact to see where they sit in a six-step pipeline, whether you are connected on LinkedIn,
           and an outreach sequence you can start. Each step is a draft you approve. Nothing sends automatically.</li>
         </ul>

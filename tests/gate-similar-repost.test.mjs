@@ -59,6 +59,7 @@ copyFileSync(join(ROOT, 'liveness-core.mjs'), join(sandbox, 'liveness-core.mjs')
 for (const file of [
   'sandboxed-chromium.mjs', 'safe-url.mjs', 'identity.mjs', 'gate-history.mjs',
   'local-date.mjs', 'jd-fingerprint.mjs', 'jd-similarity.mjs', 'tracker.mjs',
+  'cli-args.mjs',
 ]) {
   copyFileSync(join(ROOT, 'lib', file), join(sandbox, 'lib', file));
 }

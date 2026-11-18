@@ -35,6 +35,17 @@ import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs'
 import { canonicalUrl, normalizeCompany, sameRole, urlFromReport, urlForRow, buildDecidedIndex, canonicalPostingUrl } from './lib/identity.mjs';
 import { markDone, sourceUrlOf } from './lib/pipeline.mjs';
 import { localToday, logWritesEnabled, openDataStore, writeTableText } from './lib/log-writes.mjs';
+import { atomicWriteFileSync } from './lib/atomic-write.mjs';
+import { enforceArgs } from './lib/cli-args.mjs';
+
+const invokedDirectly = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (invokedDirectly) {
+  const exitCode = enforceArgs(process.argv.slice(2), {
+    flags: ['--dry-run', '--verify'],
+    usage: 'Usage: node merge-tracker.mjs [--dry-run] [--verify]',
+  });
+  if (exitCode !== null) process.exit(exitCode);
+}
 // next-jd.mjs (persistent JD counter) can be one update cycle behind on installs
 // updating from a pre-counter version. Load it defensively so a missing file
 // degrades to max+1 numbering instead of crashing merge-tracker at module load.
@@ -259,7 +270,7 @@ function parseTsvContent(content, filename) {
 // dropped every result on the floor ("No applications.md found. Nothing to merge").
 if (!existsSync(APPS_FILE)) {
   mkdirSync(dirname(APPS_FILE), { recursive: true });
-  writeFileSync(APPS_FILE,
+  atomicWriteFileSync(APPS_FILE,
     '# Applications Tracker\n\n' + TRACKER_HEADER + '\n' + TRACKER_SEPARATOR + '\n');
   console.log(`Created ${APPS_FILE} (fresh install).`);
 }
@@ -840,7 +851,7 @@ if (!DRY_RUN) {
       }
     }
   } else {
-    writeFileSync(APPS_FILE, newText);
+    atomicWriteFileSync(APPS_FILE, newText, 'utf8');
   }
 
   // Flip evaluated URLs' pipeline.md rows to done so re-running Evaluate advances

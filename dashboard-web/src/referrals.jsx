@@ -277,6 +277,7 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
         setFindingId(null);
         if (!d.ok) { toast(d.error || 'Email lookup failed', 'error'); return; }
         const res = (d.results || [])[0];
+        if (d.rateLimited) toast(`${d.rateLimited === 'hunter' ? 'Hunter' : 'MillionVerifier'} asked us to slow down. The remaining contacts were left for the next run.`, 'warn');
         if (res && res.email) toast(`Found ${res.email} · ${res.state}`, 'success');
         else toast(res ? `No verified email (${res.state})` : 'No email found', 'warn');
         load();
@@ -292,6 +293,7 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
       .then(r => r.json()).then(d => {
         setFindingBulk(false);
         if (!d.ok) { toast(d.error || 'Email lookup failed', 'error'); return; }
+        if (d.rateLimited) toast(`${d.rateLimited === 'hunter' ? 'Hunter' : 'MillionVerifier'} asked us to slow down. The remaining contacts were left for the next run.`, 'warn');
         toast(`Checked ${d.checked} · ${d.written} verified email${d.written === 1 ? '' : 's'}`, 'success');
         load();
       }).catch(() => { setFindingBulk(false); toast('Email lookup failed', 'error'); });

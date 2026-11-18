@@ -91,16 +91,19 @@ const reconcileRows = [
 const preview = reconcilePreview(reconcileApps, reconcileRows);
 check(preview.companiesNeedingPrincipal.map(row => row.company).includes('Talent Reconcile.example'), 'reconcile includes talent-only live company');
 check(!preview.companiesNeedingPrincipal.map(row => row.company).includes('Manager Reconcile.example'), 'reconcile excludes company with hiring manager');
-check(!preview.companiesNeedingPrincipal.map(row => row.company).includes('Missing Reconcile.example'), 'reconcile excludes company with no contacts');
+check(preview.companiesNeedingPrincipal.map(row => row.company).includes('Missing Reconcile.example'), 'reconcile includes a company with no contacts in the decision-maker list');
 check(JSON.stringify(preview.toArchive) === JSON.stringify([{
   id: 'rc', first: 'Alex', last: 'Morgan', company: 'Closed Reconcile.example', title: 'Contact',
   reason: '1 application closed (Rejected)',
   relatedApps: [{ id: 14, status: 'Rejected', role: 'Role 14', date: '2026-08-17' }],
 }]), 'existing toArchive result is unchanged');
 check(JSON.stringify(preview.companiesNeedingContacts) === JSON.stringify([{
+  company: 'Manager Reconcile.example', exampleRole: 'Role 12', appCount: 1,
+  mostRecentApp: { id: 12, role: 'Role 12', status: 'Applied', date: '2026-08-19' },
+}, {
   company: 'Missing Reconcile.example', exampleRole: 'Role 13', appCount: 1,
   mostRecentApp: { id: 13, role: 'Role 13', status: 'Applied', date: '2026-08-18' },
-}]), 'existing companiesNeedingContacts result is unchanged');
+}]), 'companiesNeedingContacts lists every live company with no talent contact, in the same item shape');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

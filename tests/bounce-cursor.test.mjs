@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { heldBackBounceIds } = await import('../dashboard-web/server/lib/google.mjs');
+const { heldBackBounceIds, loadedUnheldMessageIds } = await import('../dashboard-web/server/lib/google.mjs');
 
 let passed = 0, failed = 0;
 const check = (cond, msg) => {
@@ -45,6 +45,13 @@ const reported = heldBackBounceIds([
 ], { confirmSet: new Set(['ta:10']), isFlippable });
 check(!reported.has('mA'), 'confirmed message in a multi-bounce sweep advances');
 check(reported.has('mB'), 'another unconfirmed message in the same sweep stays unseen');
+
+const advanceable = loadedUnheldMessageIds(
+  [{ id: 'loaded' }, { id: 'failed' }, { id: 'held' }],
+  { failedIds: ['failed'], heldBack: new Set(['held']) },
+);
+check(advanceable.length === 1 && advanceable[0] === 'loaded',
+  'only loaded and unheld messages advance the seen cursor');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

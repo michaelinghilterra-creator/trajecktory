@@ -212,7 +212,7 @@ function CreditBalances() {
   );
 }
 
-function ContactsTableView({ contacts, audience, otherCount, onOpen, selId, onReconcile, onFindDecisionMakers, search, onImported }) {
+function ContactsTableView({ contacts, audience, otherCount, onOpen, selId, onRetire, onFind, search, onImported }) {
   const [showArchived, setShowArchived] = useState(false);
   const [statusFilter, setStatusFilter] = useState(null);
   const [companyFilter, setCompanyFilter] = useState("");
@@ -318,6 +318,7 @@ function ContactsTableView({ contacts, audience, otherCount, onOpen, selId, onRe
         const d = await r.json();
         if (!d.ok) { stopped = d.error || "Email lookup failed."; break; }
         checked += d.checked; written += d.written;
+        if (d.rateLimited) stopped = `${d.rateLimited === "hunter" ? "Hunter" : "MillionVerifier"} asked us to slow down. The remaining contacts were left for the next run.`;
         if (d.skippedForBudget > 0 || d.creditsBefore === 0) stopped = "Hunter is out of search credits.";
       }
     } catch (err) { stopped = err.message || "Email lookup failed."; }
@@ -355,7 +356,7 @@ function ContactsTableView({ contacts, audience, otherCount, onOpen, selId, onRe
           <div className="sub">{active.length} active contacts &middot; {companies.length} companies &middot; {archivedCount} archived</div>
           <CreditBalances />
         </div>
-        <div className="act">
+        <div className="act" style={{ flexWrap: "wrap", justifyContent: "flex-end" }}>
           <label className="btn" style={{ cursor: "pointer" }}>
             {/* Real checkbox, visually hidden: clicking the label (icon or text)
                 toggles it natively, it is keyboard-operable (Space), and screen
@@ -377,11 +378,16 @@ function ContactsTableView({ contacts, audience, otherCount, onOpen, selId, onRe
             title="Look up and verify an email for each contact on this tab that has none.">
             {findingEmails ? "Finding emails…" : `Find emails (${needEmail.length})`}
           </button>}
-          {decisionMakers && <button className="btn" onClick={onFindDecisionMakers}
-            title="Search every live application that has contacts but nobody who can decide, and propose people to add.">
-            <TIcon d={TI.users} size={14} /> Find decision-makers
-          </button>}
-          <button className="btn primary" onClick={onReconcile}><TIcon d={TI.refresh} size={14} /> Reconcile</button>
+          <button className="btn" onClick={onRetire}
+            title="Review and retire contacts at companies where every application is closed. Nothing is searched.">
+            <TIcon d={TI.flag} size={14} /> Retire contacts
+          </button>
+          <button className="btn primary" onClick={onFind}
+            title={decisionMakers
+              ? "Search live companies that have no decision maker on file, and look up an email for each person you add. Nothing is retired."
+              : "Search live companies that have no talent contact on file, and look up an email for each person you add. Nothing is retired."}>
+            <TIcon d={TI.users} size={14} /> Find contacts and emails
+          </button>
         </div>
       </div>
       {importMsg && <div style={{ fontSize: 12, color: "var(--text-mute)", margin: "0 0 10px" }}>{importMsg}</div>}
@@ -1805,8 +1811,40 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel, initialMod
 window.FindContactsPanel = FindContactsPanel;
 
 const STEPS = ["Preview", "Discover", "Apply"];
+const RETIRE_STEPS = ["Preview", "Done"];
 
-function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
+// Companies parked after two searches that found nobody, each with a way back
+// into the list. Errors and timeouts never park a company, so everything here
+// had two finished searches (or was parked before that rule existed).
+function CappedCompanies({ items, busyKey, onRetry }) {
+  if (!items.length) return null;
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ color: "var(--orange)", fontSize: 11, marginBottom: 4 }}>{items.length} {items.length === 1 ? "company was" : "companies were"} skipped: searched twice with no results.</div>
+      {items.map(c => (
+        <div key={c.search + "::" + c.company} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "3px 0" }}>
+          <span style={{ flex: 1 }}>{c.company}</span>
+          <button className="btn sm" disabled={busyKey === c.search + "::" + c.company} onClick={() => onRetry(c)}
+            title="Clear the two empty searches so this company is searched again.">Give it another try</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// One modal, two separate jobs. action "retire" only retires contacts at closed
+// companies; action "find" only searches for new contacts (their emails are
+// looked up when they are added). Each asks the server for its own half of the
+// preview, so nothing from the other half can be ticked or applied. With no
+// action it is the old combined flow, kept for the legacy window export.
+function ReconcileModal({ onClose, onApplied, initialMode, action } = {}) {
+  const retireOnly = action === "retire";
+  const findOnly = action === "find";
+  const steps = retireOnly ? RETIRE_STEPS : STEPS;
+  const lastStep = steps.length - 1;
+  const showTalentGaps = !retireOnly && initialMode !== "principal";
+  const showPrincipalGaps = !retireOnly && initialMode !== "talent";
+  const [confirmRetire, setConfirmRetire] = useState(false);
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1820,11 +1858,13 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
   const [scanning, setScanning] = useState(false);
   const [discoverJob, setDiscoverJob] = useState(null);
   const [discoverJobId, setDiscoverJobId] = useState(null);
+  const [retryKey, setRetryKey] = useState(null);
   const seenSuggestions = useRef(new Set());
   const dismissedSuggestions = useRef(new Set());
   const reloadTimer = useRef(null);
 
   useEffect(() => () => clearTimeout(reloadTimer.current), []);
+  const previewUrl = `/api/tt-reconcile/preview?mode=${initialMode}${action ? `&part=${action}` : ""}`;
 
   const absorbDiscoverJob = useCallback(job => {
     if (!job?.jobId) return;
@@ -1860,25 +1900,28 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
   }, []);
 
   useEffect(() => {
-    fetch(`/api/tt-reconcile/preview?mode=${initialMode}`)
+    fetch(previewUrl)
       .then(r => r.json())
       .then(d => {
         if (d.error) { setError(d.error); setLoading(false); return; }
         setPreview(d);
-        // Each reconcile is scoped to ONE contact type so it never queues the
-        // other: 'talent' works the TA list (archive + companies needing contacts)
-        // and 'principal' works decision-makers only. Clearing the out-of-scope
-        // selections keeps the bulk action from making unrelated edits. 'all' (the
-        // legacy global reconcile) still selects everything.
-        setArchSel(new Set((d.toArchive || []).map(x => x.id)));
-        setGapSel(initialMode === "principal" ? new Set() : new Set((d.companiesNeedingContacts || []).map(c => c.company)));
-        setPrincipalGapSel(initialMode === "talent" ? new Set() : new Set((d.companiesNeedingPrincipal || []).map(c => c.company)));
+        // Each run is scoped to ONE contact type and ONE job, so it never queues
+        // the other: 'talent' works the TA list and 'principal' works decision
+        // makers; "retire" ticks only contacts to retire and "find" ticks only
+        // companies to search. The server already sends just the asked half; the
+        // guards here keep an older or combined answer from ticking anything
+        // the screen does not show.
+        setArchSel(findOnly ? new Set() : new Set((d.toArchive || []).map(x => x.id)));
+        setGapSel(showTalentGaps ? new Set((d.companiesNeedingContacts || []).map(c => c.company)) : new Set());
+        setPrincipalGapSel(showPrincipalGaps ? new Set((d.companiesNeedingPrincipal || []).map(c => c.company)) : new Set());
         setLoading(false);
       })
       .catch(e => { setError(e.message); setLoading(false); });
-  }, [initialMode]);
+  }, [previewUrl, findOnly, showTalentGaps, showPrincipalGaps]);
 
   useEffect(() => {
+    // Retiring never searches, so it has no running search to reattach to.
+    if (retireOnly) return undefined;
     let cancelled = false;
     const modeParam = initialMode === "principal" ? "principal" : "talent";
     fetch(`/api/tt-reconcile/discover-run?mode=${modeParam}`)
@@ -1891,7 +1934,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [absorbDiscoverJob, initialMode]);
+  }, [absorbDiscoverJob, initialMode, retireOnly]);
 
   useEffect(() => {
     if (!discoverJobId) return undefined;
@@ -1914,6 +1957,25 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
   }, [discoverJobId, absorbDiscoverJob]);
 
   const toggleSet = (setter, key) => setter(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
+
+  // "Give it another try": clear the parked company's empty searches, then
+  // re-read the preview so it moves from the skipped list into the gap list,
+  // ticked, without disturbing what is already ticked.
+  const retryCapped = async (c) => {
+    const key = c.search + "::" + c.company;
+    setRetryKey(key); setError(null);
+    try {
+      const r = await window.tjkMutate("/api/tt-reconcile/reset-attempts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ company: c.company, search: c.search }) });
+      const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+      if (!r.ok || d.error) throw new Error(d.error || `HTTP ${r.status}`);
+      const fresh = await fetch(previewUrl).then(x => x.json());
+      if (fresh.error) throw new Error(fresh.error);
+      setPreview(fresh);
+      (c.search === "principal" ? setPrincipalGapSel : setGapSel)(sel => new Set(sel).add(c.company));
+    } catch (e) { setError(e.message); }
+    setRetryKey(null);
+  };
+  const cappedFor = search => (preview.cappedCompanies || []).filter(c => c.search === search);
 
   const runDiscover = async () => {
     setStep(1); setScanning(true); setError(null);
@@ -1951,16 +2013,17 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
   };
 
   const apply = async () => {
-    setStep(2); setLoading(true);
+    setStep(lastStep); setLoading(true);
     try {
       let archived = 0, added = 0, skipped = 0, emailVerification = "skipped", rejected = [];
-      if (archSel.size > 0) {
+      // Each job writes only its own half, whatever the selections hold.
+      if (!findOnly && archSel.size > 0) {
         const r = await window.tjkMutate("/api/tt-reconcile/archive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: Array.from(archSel) }) });
         const d = await r.json();
         archived = d.archived || 0;
       }
       const toAdd = [];
-      for (const r of discoveries) {
+      for (const r of (retireOnly ? [] : discoveries)) {
         for (const s of (r.suggestions || [])) {
           const key = `${s.reconcileSearch}::${r.company}::${s.first || ""} ${s.last || ""}`;
           if (!discSel.has(key)) continue;
@@ -1998,6 +2061,8 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
 
   const confColor = { High: "var(--green)", Medium: "var(--orange)", Low: "var(--red)" };
   const foundCount = discoveries.reduce((n, result) => n + (result.suggestions || []).length, 0);
+  const selectedCompanyCount = gapSel.size + principalGapSel.size;
+  const plannedSearchCount = selectedCompanyCount * (preview.searchesPerCompany || 0);
 
   return (
     <div className="modal-back" onClick={() => !scanning && !loading && onClose()}>
@@ -2005,17 +2070,20 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
         <div className="modal-head">
           <div className="modal-head-top">
             <span className="mono-av sm" style={{ background: "var(--accent-bg)", color: "var(--accent)", borderRadius: 7, borderColor: "rgba(167,139,250,0.4)" }}><TIcon d={TI.refresh} size={14} /></span>
-            <div><h2>Reconcile contacts</h2><div className="sub">{initialMode === "principal" ? "find decision-makers for companies in your live pipeline" : "sync your TA list against the live application pipeline"}</div></div>
+            <div><h2>{retireOnly ? "Retire contacts" : findOnly ? "Find contacts and emails" : "Reconcile contacts"}</h2><div className="sub">{retireOnly
+              ? "retire contacts at companies where every application is closed"
+              : initialMode === "principal" ? "find decision makers for companies in your live pipeline"
+                : findOnly ? "find talent contacts for companies in your live pipeline" : "sync your TA list against the live application pipeline"}</div></div>
             <button className="icon-btn" style={{ marginLeft: "auto" }} onClick={onClose}><TIcon d={TI.x} size={15} /></button>
           </div>
           <div className="stepper">
-            {STEPS.map((label, i) => (
+            {steps.map((label, i) => (
               <React.Fragment key={label}>
                 <div className={"step" + (i === step ? " active" : i < step ? " done" : "")}>
                   <span className="step-dot">{i < step ? <TIcon d={TI.check} size={13} stroke={3} /> : i + 1}</span>
                   <span className="step-lbl">{label}</span>
                 </div>
-                {i < STEPS.length - 1 && <span className={"step-line" + (i < step ? " done" : "")} />}
+                {i < steps.length - 1 && <span className={"step-line" + (i < step ? " done" : "")} />}
               </React.Fragment>
             ))}
           </div>
@@ -2026,41 +2094,49 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
           {step === 0 && (
             <div className="fade-up">
               {loading ? <div className="ai-loading"><span className="scan-ring" style={{ width: 16, height: 16, borderWidth: 2 }} /> Analyzing applications + TA contacts…</div> : <>
-                {(<>
-                <div className="rec-section-label"><TIcon d={TI.flag} size={12} /> Archive candidates &middot; {archSel.size} selected</div>
-                <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Contacts at companies with no active applications.</div>
+                {!findOnly && (<>
+                <div className="rec-section-label"><TIcon d={TI.flag} size={12} /> Contacts to retire &middot; {archSel.size} selected</div>
+                <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Contacts at companies where every application is closed. Retired contacts are not deleted: they stay behind Show archived.</div>
                 {preview.toArchive.length === 0
-                  ? <div className="empty" style={{ padding: "12px 0" }}>No contacts to archive.</div>
+                  ? <div className="empty" style={{ padding: "12px 0" }}>No contacts to retire.</div>
                   : preview.toArchive.map(c => (
-                    <RecRow key={c.id} checked={archSel.has(c.id)} onToggle={() => toggleSet(setArchSel, c.id)}
+                    <RecRow key={c.id} checked={archSel.has(c.id)} onToggle={() => { setConfirmRetire(false); toggleSet(setArchSel, c.id); }}
                       av={ttInitials((c.first || "") + " " + (c.last || ""))} name={`${c.first} ${c.last}`}
-                      meta={`${c.title} · ${c.company}`} right={<StatusBadge status={c.status || "Dormant"} size="sm" />} />
+                      meta={`${c.title} · ${c.company}`} reason={c.reason} right={<StatusBadge status={c.status || "Dormant"} size="sm" />} />
                   ))}
-                <div className="rec-section-label" style={{ marginTop: 22 }}><TIcon d={TI.building} size={12} /> Companies with nobody to talk to &middot; {gapSel.size} selected</div>
-                <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Companies in your pipeline with no contact yet.</div>
-                {(preview.searchCapped || 0) > 0 && <div style={{ color: "var(--orange)", fontSize: 11, marginBottom: 6 }}>{preview.searchCapped} company{preview.searchCapped === 1 ? " was" : "ies were"} skipped: searched twice with no results.</div>}
+                </>)}
+                {findOnly && <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 14 }}>Pick the companies to search. You choose who to add from the results, and an email is looked up for each person you add.{(preview.searchMuted || 0) > 0 ? ` ${preview.searchMuted} muted ${preview.searchMuted === 1 ? "company is" : "companies are"} left out.` : ""}</div>}
+                {!retireOnly && <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 14 }}>
+                  {preview.engine === "search"
+                    ? `This run will use about ${plannedSearchCount} web searches (your Brave Search allowance).`
+                    : "Add a Brave Search key in Launchpad to find more contacts per company."}
+                </div>}
+                {showTalentGaps && (<>
+                <div className="rec-section-label" style={{ marginTop: findOnly ? 0 : 22 }}><TIcon d={TI.building} size={12} /> Companies with no talent contact &middot; {gapSel.size} selected</div>
+                <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Live companies with no talent acquisition contact on file.</div>
+                <CappedCompanies items={cappedFor("talent")} busyKey={retryKey} onRetry={retryCapped} />
                 {preview.companiesNeedingContacts.length === 0
                   ? <div className="empty" style={{ padding: "12px 0" }}>All companies covered.</div>
                   : preview.companiesNeedingContacts.map(c => (
                     <RecRow key={c.company} checked={gapSel.has(c.company)} onToggle={() => toggleSet(setGapSel, c.company)}
                       av={<TIcon d={TI.building} size={13} />} name={c.company}
                       meta={`${c.exampleRole} (${c.mostRecentApp?.status || "?"} · ${c.mostRecentApp?.date || "?"})`}
-                      reason={`${c.appCount} active app${c.appCount === 1 ? "" : "s"}, nobody to talk to`}
+                      reason={`${c.appCount} active app${c.appCount === 1 ? "" : "s"}, no talent contact`}
                       right={<span className="tag accent">{c.appCount} app{c.appCount !== 1 ? "s" : ""}</span>} />
                   ))}
                 </>)}
-                {initialMode !== "talent" && Array.isArray(preview.companiesNeedingPrincipal) && (
+                {showPrincipalGaps && Array.isArray(preview.companiesNeedingPrincipal) && (
                   <>
-                    <div className="rec-section-label" style={{ marginTop: 22 }}><TIcon d={TI.users} size={12} /> Companies where nobody can make the decision &middot; {principalGapSel.size} selected</div>
-                    <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>These companies have contacts, but nobody who can influence the hire.</div>
-                    {(preview.searchCapped || 0) > 0 && <div style={{ color: "var(--orange)", fontSize: 11, marginBottom: 6 }}>{preview.searchCapped} company{preview.searchCapped === 1 ? " was" : "ies were"} skipped: searched twice with no results.</div>}
+                    <div className="rec-section-label" style={{ marginTop: findOnly && !showTalentGaps ? 0 : 22 }}><TIcon d={TI.users} size={12} /> Companies with no decision maker &middot; {principalGapSel.size} selected</div>
+                    <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Live companies with no hiring manager or executive on file.</div>
+                    <CappedCompanies items={cappedFor("principal")} busyKey={retryKey} onRetry={retryCapped} />
                     {preview.companiesNeedingPrincipal.length === 0
                       ? <div className="empty" style={{ padding: "12px 0" }}>Every company has a decision-maker.</div>
                       : preview.companiesNeedingPrincipal.map(c => (
                         <RecRow key={c.company} checked={principalGapSel.has(c.company)} onToggle={() => toggleSet(setPrincipalGapSel, c.company)}
                           av={<TIcon d={TI.users} size={13} />} name={c.company}
                           meta={`${c.exampleRole} (${c.mostRecentApp?.status || "?"} · ${c.mostRecentApp?.date || "?"})`}
-                          reason={`${c.appCount} active app${c.appCount === 1 ? "" : "s"}, nobody can make the decision`}
+                          reason={`${c.appCount} active app${c.appCount === 1 ? "" : "s"}, no decision maker`}
                           right={<span className="tag accent">{c.appCount} app{c.appCount !== 1 ? "s" : ""}</span>} />
                       ))}
                   </>
@@ -2068,7 +2144,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
               </>}
             </div>
           )}
-          {step === 1 && (
+          {step === 1 && !retireOnly && (
             <div className="fade-up">
               {scanning && (
                 <div className="scan">
@@ -2077,9 +2153,14 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
                     <div>{discoverJob?.done || 0} of {discoverJob?.total || 0} companies searched</div>
                     <div>{(discoverJob?.current || []).length ? `Searching now: ${discoverJob.current.join(", ")}` : "Starting searches..."}</div>
                     <div>{foundCount} people found so far</div>
+                    <div>Searches used: {discoverJob?.searchesUsed || 0}</div>
                   </div>
                 </div>
               )}
+              {!scanning && <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Searches used: {discoverJob?.searchesUsed || 0}</div>}
+              {(discoverJob?.skippedForBudget || 0) > 0 && <div style={{ fontSize: 12, color: "var(--orange)", marginBottom: 10 }}>
+                {discoverJob.skippedForBudget} companies were left for the next run to stay under the search limit.
+              </div>}
               <div className="rec-section-label"><TIcon d={TI.users} size={12} /> Discovered contacts &middot; {discSel.size} selected</div>
               <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Found {foundCount} contacts{scanning ? " so far" : ""}.</div>
               {discoveries.map(r => (r.suggestions || []).map((s, i) => {
@@ -2095,19 +2176,19 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
               }))}
             </div>
           )}
-          {step === 2 && (
+          {step === lastStep && (
             <div className="fade-up" style={{ textAlign: "center", padding: "12px 0" }}>
               {loading ? <div className="ai-loading" style={{ justifyContent: "center" }}><span className="scan-ring" style={{ width: 16, height: 16, borderWidth: 2 }} /> Applying changes…</div> : <>
                 <div className="apply-done-icon"><TIcon d={TI.check} size={26} stroke={3} /></div>
-                <h2 style={{ fontSize: 17, margin: "0 0 6px" }}>Reconcile complete</h2>
+                <h2 style={{ fontSize: 17, margin: "0 0 6px" }}>{retireOnly ? "Contacts retired" : findOnly ? "Contacts added" : "Reconcile complete"}</h2>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 18 }}>
-                  Your TA list is now in sync with the application pipeline.
+                  {retireOnly ? "Nothing was searched and nobody was added." : findOnly ? "Nobody was retired." : "Your TA list is now in sync with the application pipeline."}
                 </div>
                 {outcome && (
                   <div className="apply-grid" style={{ maxWidth: 480, margin: "0 auto" }}>
-                    <div className="apply-tile"><div className="at-v" style={{ color: "var(--orange)" }}>{outcome.archived}</div><div className="at-k">Archived</div></div>
-                    <div className="apply-tile"><div className="at-v" style={{ color: "var(--green)" }}>{outcome.added}</div><div className="at-k">Contacts added</div></div>
-                    <div className="apply-tile"><div className="at-v" style={{ color: "var(--accent)" }}>{outcome.skipped || 0}</div><div className="at-k">Already on your list</div></div>
+                    {!findOnly && <div className="apply-tile"><div className="at-v" style={{ color: "var(--orange)" }}>{outcome.archived}</div><div className="at-k">Retired</div></div>}
+                    {!retireOnly && <div className="apply-tile"><div className="at-v" style={{ color: "var(--green)" }}>{outcome.added}</div><div className="at-k">Contacts added</div></div>}
+                    {!retireOnly && <div className="apply-tile"><div className="at-v" style={{ color: "var(--accent)" }}>{outcome.skipped || 0}</div><div className="at-k">Already on your list</div></div>}
                   </div>
                 )}
                 {outcome && outcome.emailVerification === "running" && (
@@ -2128,10 +2209,10 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
                 ))}
                 {outcome && (outcome.archived > 0 || outcome.added > 0) && (
                   <div style={{ fontSize: 11, color: "var(--text-mute)", maxWidth: 440, margin: "16px auto 0", lineHeight: 1.65 }}>
-                    These changes are saved. New contacts got a <b>verified</b> email wherever one could be
+                    These changes are saved. {!retireOnly && <>New contacts got a <b>verified</b> email wherever one could be
                     found and confirmed deliverable (Hunter into MillionVerifier); anyone without one goes
-                    to the LinkedIn fallback. Archived contacts are not deleted: they stay behind <b>Show
-                    archived</b>. To change either, open the contact and set its stage.
+                    to the LinkedIn fallback. </>}{!findOnly && <>Retired contacts are not deleted: they stay behind <b>Show
+                    archived</b>. </>}To change a contact, open it and set its stage.
                   </div>
                 )}
               </>}
@@ -2139,17 +2220,23 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
           )}
         </div>
         <div className="modal-foot">
-          {step > 0 && step < 2 && <button className="btn" onClick={() => setStep(s => s - 1)}><TIcon d={TI.undo} size={13} /> Back</button>}
+          {step > 0 && step < lastStep && <button className="btn" onClick={() => setStep(s => s - 1)}><TIcon d={TI.undo} size={13} /> Back</button>}
           {step === 0 && !loading && <span className="mono" style={{ fontSize: 11, color: "var(--text-mute)" }}>{[
-            initialMode !== "principal" && archSel.size > 0 ? `${archSel.size} to retire` : null,
-            initialMode !== "principal" && gapSel.size > 0 ? `${gapSel.size} contact searches` : null,
-            initialMode !== "talent" && principalGapSel.size > 0 ? `${principalGapSel.size} decision-maker searches` : null,
-          ].filter(Boolean).join(" · ") || "Nothing to do"}</span>}
+            !findOnly && archSel.size > 0 ? `${archSel.size} to retire` : null,
+            showTalentGaps && gapSel.size > 0 ? `${gapSel.size} talent searches` : null,
+            showPrincipalGaps && principalGapSel.size > 0 ? `${principalGapSel.size} decision maker searches` : null,
+          ].filter(Boolean).join(" · ") || (retireOnly ? "Nothing to retire" : findOnly ? "Nothing to search" : "Nothing to do")}</span>}
           <div className="right" style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
-            {step === 0 && !loading && archSel.size > 0 && (gapSel.size === 0 && principalGapSel.size === 0) && <button className="btn primary" onClick={apply}>Retire {archSel.size} contact{archSel.size !== 1 ? "s" : ""} <TIcon d={TI.arrowR} size={13} /></button>}
-            {step === 0 && !loading && (gapSel.size > 0 || principalGapSel.size > 0) && <button className="btn primary" onClick={runDiscover} disabled={scanning}>{scanning ? "Discovery already running" : "Discover contacts"} <TIcon d={TI.arrowR} size={13} /></button>}
-            {step === 1 && <button className="btn primary" onClick={apply} disabled={scanning}>
-              {discSel.size > 0 ? `Add selected (${discSel.size})` : archSel.size > 0 ? `Retire ${archSel.size} contact${archSel.size !== 1 ? "s" : ""}` : "Apply"} <TIcon d={TI.arrowR} size={13} />
+            {/* Retiring is its own two-click confirm: the first click arms it, the second writes. */}
+            {step === 0 && !loading && retireOnly && archSel.size > 0 && !confirmRetire && <button className="btn primary" onClick={() => setConfirmRetire(true)}>Retire {archSel.size} contact{archSel.size !== 1 ? "s" : ""} <TIcon d={TI.arrowR} size={13} /></button>}
+            {step === 0 && !loading && retireOnly && archSel.size > 0 && confirmRetire && <>
+              <button className="btn" onClick={() => setConfirmRetire(false)}>Cancel</button>
+              <button className="btn primary" onClick={apply}>Yes, retire {archSel.size} contact{archSel.size !== 1 ? "s" : ""}</button>
+            </>}
+            {step === 0 && !loading && !retireOnly && !findOnly && archSel.size > 0 && (gapSel.size === 0 && principalGapSel.size === 0) && <button className="btn primary" onClick={apply}>Retire {archSel.size} contact{archSel.size !== 1 ? "s" : ""} <TIcon d={TI.arrowR} size={13} /></button>}
+            {step === 0 && !loading && !retireOnly && (gapSel.size > 0 || principalGapSel.size > 0) && <button className="btn primary" onClick={runDiscover} disabled={scanning}>{scanning ? "Discovery already running" : "Discover contacts"} <TIcon d={TI.arrowR} size={13} /></button>}
+            {step === 1 && !retireOnly && <button className="btn primary" onClick={apply} disabled={scanning || (findOnly && discSel.size === 0)}>
+              {discSel.size > 0 ? `Add selected (${discSel.size})` : findOnly ? "Nobody selected" : archSel.size > 0 ? `Retire ${archSel.size} contact${archSel.size !== 1 ? "s" : ""}` : "Apply"} <TIcon d={TI.arrowR} size={13} />
             </button>}
             {/* No Undo. It used to flip a local boolean and assert "Changes
                 reverted" while the archive and bulk-add writes stayed on disk;
@@ -2157,7 +2244,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
                 invert two different writes against a user-layer file. The
                 completion panel now states plainly what changed and where to
                 adjust it instead. */}
-            {step === 2 && !loading && <button className="btn primary" onClick={onClose}>Done</button>}
+            {step === lastStep && !loading && <button className="btn primary" onClick={onClose}>Done</button>}
           </div>
         </div>
       </div>
@@ -2172,7 +2259,8 @@ window.TargetTalentTab = function TargetTalentTab({ audience, initialOpenId, onI
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [drawerId, setDrawerId] = useState(null);
-  const [reconcileMode, setReconcileMode] = useState(null);
+  // { mode: "talent" | "principal", action: "retire" | "find" } while a modal is open.
+  const [reconcile, setReconcile] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -2220,11 +2308,13 @@ window.TargetTalentTab = function TargetTalentTab({ audience, initialOpenId, onI
   return (
     <div style={{ flex: 1, maxWidth: "none", marginLeft: 0, marginRight: 0 }}>
       <ContactsTableView contacts={viewContacts} audience={audience} otherCount={otherCount}
-        onOpen={setDrawerId} selId={drawerId} onReconcile={() => setReconcileMode(audience === "decision-makers" ? "principal" : "talent")}
-        onFindDecisionMakers={() => setReconcileMode("principal")} search={search} onImported={load} />
+        onOpen={setDrawerId} selId={drawerId}
+        onRetire={() => setReconcile({ mode: audience === "decision-makers" ? "principal" : "talent", action: "retire" })}
+        onFind={() => setReconcile({ mode: audience === "decision-makers" ? "principal" : "talent", action: "find" })}
+        search={search} onImported={load} />
 
       {drawerId != null && <TTDrawer id={drawerId} onClose={() => setDrawerId(null)} onUpdate={load} />}
-      {reconcileMode && <ReconcileModal initialMode={reconcileMode} onClose={() => setReconcileMode(null)} onApplied={load} />}
+      {reconcile && <ReconcileModal key={reconcile.action} initialMode={reconcile.mode} action={reconcile.action} onClose={() => setReconcile(null)} onApplied={load} />}
     </div>
   );
 };

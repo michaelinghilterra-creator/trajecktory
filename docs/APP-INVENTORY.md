@@ -24,6 +24,7 @@ This reference describes the dashboard as implemented. It is intended for a desi
     - Pending
     - Gated
     - Evaluating
+    - Cyber watch
   - Analytics
   - Role Drawer (per-role panel)
     - Overview / Score explainer
@@ -46,8 +47,8 @@ This reference describes the dashboard as implemented. It is intended for a desi
     - All
     - LinkedIn import
   - Decision Makers
-    - Reconcile
-    - Find decision-makers
+    - Retire contacts
+    - Find contacts and emails
   - TA Outreach
     - Contact drawer
     - Sequence
@@ -131,6 +132,7 @@ The Social component currently opens on Posts and also exposes Influencers. The 
 | Pipeline: Discovery, Pending | Lists unchecked roles waiting for evaluation. | Makes the incoming queue visible before AI spend. | RevOps | Open the source. | `/api/pipeline/inbox` | `data/pipeline.md`, `data/scan-history.tsv` | Yes |
 | Pipeline: Discovery, Gated | Shows dead, uncertain, decided, or duplicate postings with reasons. | Prevents wasted evaluation effort while retaining an audit trail. | RevOps | Review the gate reason or resolve a manual item. | `/api/pipeline/inbox`<br>`/api/pipeline/needs-manual`<br>`/api/pipeline/needs-manual/resolve` | `data/pipeline.md`, `data/gate-history.tsv`, `data/needs-manual-jd.tsv` | Yes |
 | Pipeline: Discovery, Evaluating | Shows a deep-evaluation job in progress and its result state. | Makes long-running AI work observable. | RevOps | Start evaluation and monitor progress. | `/api/agent/:mode`<br>`/api/agent/status/:jobId` | `data/pipeline.md`, reports, tracker additions, derived/live job | Yes |
+| Pipeline: Discovery, Cyber watch | Shows each watched role from an optional nightly sourcer and whether it was evaluated, kept, or dropped. | Makes the external sourcer's nightly results visible without writing to its state. | RevOps | Choose a night and review roles, outcomes, and source health. | `/api/sourcer-watch/dates`<br>`/api/sourcer-watch` | `TJK_SOURCER_STATE_DIR` plain files | Yes |
 | Pipeline: Analytics | Breaks results down by response, compensation, source, archetype, flow, and interview stage. | Helps the user change targeting based on outcomes, not volume. | RevOps | Compare cohorts, sources, and conversion paths. | `/api/insights/response-progress`<br>`/api/insights/rejection-timing`<br>`/api/insights/stage-funnel` | `data/applications.md`, reports, `data/status-events.tsv`, `config/profile.yml` | Yes |
 | Role Drawer: Overview / Score explainer | Presents summary, stage track, score provenance, dimensions, recommendation, artifacts, and status actions. | Puts the decision packet and lifecycle controls around one role. | Shared | Inspect the score, then advance, close, or start application work. | `/api/report-body/:id`<br>`/api/artifacts/:id`<br>`/api/applications/:id` | `data/applications.md`, reports, output artifacts, status sidecars | Yes |
 | Role Drawer: Resume Match | Maps requirements to CV evidence, gaps, mitigation, and level fit. | Shows whether tailoring can close the important gaps. | Shared | Review evidence and decide whether to tailor. | `/api/cheatsheets/:id`<br>`/api/report-body/:id` | `cv.md`, reports | Unknown |
@@ -148,8 +150,8 @@ The Social component currently opens on Posts and also exposes Influencers. The 
 | Network: Referrals, Stage 2 | Tracks referral-ready relationships and follow-ups. | Focuses attention on contacts where an ask is appropriate. | Sales Dev | Draft or log the referral ask. | `/api/referrals/followups`<br>`/api/referrals/:id/correspondence` | `data/referrals.md`, referral correspondence, snooze sidecar | Yes |
 | Network: Referrals, All | Shows active and archived referral records with detail. | Preserves the relationship history behind referral outcomes. | Sales Dev | Filter, update, archive, or open a referral. | `/api/referrals`<br>`/api/referrals/:id/detail`<br>`/api/referrals/:id` | `data/referrals.md`, target talent links, correspondence | Yes |
 | Network: Referrals, LinkedIn import | Imports connection data and reconciles it with referral records. | Turns manual LinkedIn state into durable workflow state. | Sales Dev | Upload an export and reconcile matches. | `/api/referrals/import-linkedin`<br>`/api/referrals/reconcile`<br>`/api/referrals/linkedin-status` | `data/referrals.md`, LinkedIn connection import and status sidecars | Yes |
-| Network: Decision Makers, Reconcile | Previews suggested additions, archives stale records, and merges contacts. | Keeps the contact book accurate without silent identity changes. | RevOps | Review suggestions and confirm selected changes. | `/api/tt-reconcile/preview`<br>`/api/tt-reconcile/bulk-add`<br>`/api/tt-reconcile/archive` | `data/target-talent.md`, `data/applications.md`, reconcile sidecars | Yes |
-| Network: Decision Makers, Find decision-makers | Searches target companies for hiring principals and ranks them by influence. | Helps the user reach people who can affect the hiring decision. | Sales Dev | Run discovery, review provenance, and add selected people. | `/api/tt-reconcile/discover-run`<br>`/api/tt-reconcile/discover-principal`<br>`/api/tt-reconcile/find-emails` | `data/applications.md`, `data/target-talent.md`, derived/live provider results | Yes |
+| Network: Decision Makers, Retire contacts | Previews and retires contacts at companies where every application is closed. | Keeps the contact book accurate without silent identity changes. | RevOps | Review suggestions and confirm selected changes. | `/api/tt-reconcile/preview`<br>`/api/tt-reconcile/bulk-add`<br>`/api/tt-reconcile/archive` | `data/target-talent.md`, `data/applications.md`, reconcile sidecars | Yes |
+| Network: Decision Makers, Find contacts and emails | Searches target companies for hiring principals and ranks them by influence. | Helps the user reach people who can affect the hiring decision. | Sales Dev | Run discovery, review provenance, and add selected people. | `/api/tt-reconcile/discover-run`<br>`/api/tt-reconcile/discover-principal`<br>`/api/tt-reconcile/find-emails` | `data/applications.md`, `data/target-talent.md`, derived/live provider results | Yes |
 | Network: TA Outreach, Contact drawer | Shows a recruiter or TA contact, related roles, shared timeline, and draft actions. | Gives each person one context-rich workspace. | Sales Dev | Open a contact and choose the next touch. | `/api/target-talent/:id`<br>`/api/target-talent/:id/correspondence` | `data/target-talent.md`, target-talent correspondence, applications | Yes |
 | Network: TA Outreach, Sequence | Starts, advances, pauses, or resumes a channel-specific outreach sequence. | Makes multi-touch outreach deliberate and bounded. | Sales Dev | Start or advance the selected sequence. | `/api/sequences/:source/:id`<br>`/api/sequences/:source/:id/start`<br>`/api/sequences/:source/:id/advance` | `templates/outreach-sequences.json`, contact and correspondence state | Yes |
 | Network: TA Outreach, Log message | Records sent or received correspondence and optional cross-links. | Keeps reachability and cadence based on real touches. | Sales Dev | Log a message with direction and related records. | `/api/target-talent/:id/correspondence`<br>`/api/followups` | target-talent correspondence, `data/follow-ups.md`, applications | Yes |

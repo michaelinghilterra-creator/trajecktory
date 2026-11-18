@@ -3,7 +3,7 @@ import fs from 'fs';
 import { randomUUID } from 'node:crypto';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { parseTargetTalentMd, appendTTRows, updateTTLine, maxTTId, setNewBaselineId } from '../lib/target-talent.mjs';
-import { discoverTalentAtCompany, discoverPrincipalAtCompany } from '../lib/contact-discovery.mjs';
+import { detectTrack, discoverTalentAtCompany, discoverPrincipalAtCompany } from '../lib/contact-discovery.mjs';
 import { normCompany, reconcilePreview } from '../lib/tt-reconcile-core.mjs';
 import { TARGET_TALENT_MD } from '../config.mjs';
 import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
@@ -14,11 +14,14 @@ import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { mergeStakeholderAdditions, validateStakeholder, knownDomainKey } from '../../../lib/stakeholder-additions.mjs';
 import { findExistingContact, heldContactRows } from '../../../lib/contact-match.mjs';
 import { parseReferralsMd } from '../lib/referrals.mjs';
-import { readReconcileDismissed, addReconcileDismissed } from '../lib/sidecars.mjs';
-import { readAttempts, recordAttempt, writeAttempts } from '../lib/contact-search-attempts.mjs';
+import { readReconcileDismissed, addReconcileDismissed, readMute } from '../lib/sidecars.mjs';
+import { readAttempts, recordAttempt, recordSearchError, resetAttempts, writeAttempts, SEARCH_TYPES } from '../lib/contact-search-attempts.mjs';
 import { currentBatch } from '../lib/pricing.mjs';
 import { startCadences } from '../lib/cadence-start.mjs';
 import { withWasTag } from '../lib/contact-revive.mjs';
+import { braveProfileSearch, buildPeopleQueries, PEOPLE_QUERIES_PER_TIER } from '../../../lib/people-search.mjs';
+import { createHostPacer } from '../../../lib/host-pacer.mjs';
+import { runEmailLookupBatch } from '../../../lib/email-lookup-batch.mjs';
 
 export const router = express.Router();
 
@@ -71,6 +74,7 @@ function discoverRequestTimeoutMs() {
 // lose an in-flight record, but results are available to apply as each company
 // lands, so a long run does not strand all of its useful work until the end.
 const discoverJobs = new Map();
+let lastVerifyError = null;
 
 // The rows an add path must not duplicate: the whole TA book plus every live
 // referral (one bucket per contact), each read defensively.
@@ -84,7 +88,7 @@ function dismissKey({ company, first, last }) {
   return `${normCompany(company)}|${(last || '').toLowerCase().trim()}|${(first || '').toLowerCase().trim()}`;
 }
 
-async function runDiscoverJob(job, tasks, generate) {
+async function runDiscoverJob(job, tasks, generate, search, concurrency = DISCOVER_CONCURRENCY) {
   const dismissed = readReconcileDismissed();
   const heldRows = heldBookRows();
   const attempts = readAttempts();
@@ -98,11 +102,21 @@ async function runDiscoverJob(job, tasks, generate) {
     if (!existing || (a.date || '') > existing) appDateByCompany.set(k, a.date || '');
   }
   let next = 0;
+  let rateLimited = false;
   const active = new Map();
   const settled = new Set();
   const refreshCurrent = () => { job.current = [...active.values()]; };
+  const trackedSearch = search
+    ? async query => {
+      try {
+        return await search(query);
+      } finally {
+        job.searchesUsed += 1;
+      }
+    }
+    : undefined;
   const worker = async () => {
-    while (next < tasks.length) {
+    while (!rateLimited && next < tasks.length) {
       const taskIndex = next++;
       const task = tasks[taskIndex];
       active.set(taskIndex, task.company);
@@ -110,15 +124,15 @@ async function runDiscoverJob(job, tasks, generate) {
       try {
         // Request data never spreads into options, or future options would become externally settable.
         const result = task.search === 'principal'
-          ? await discoverPrincipalAtCompany({ company: task.company, exampleRole: task.exampleRole, generate })
-          : await discoverTalentAtCompany({ company: task.company, exampleRole: task.exampleRole, generate });
+          ? await discoverPrincipalAtCompany({ company: task.company, exampleRole: task.exampleRole, generate, search: trackedSearch })
+          : await discoverTalentAtCompany({ company: task.company, exampleRole: task.exampleRole, generate, search: trackedSearch });
         if (result.error) {
           job.errors.push({ company: task.company, error: result.error });
-          // Timeouts and persistent errors still count toward the cap.
-          // A company that errors every time is just as unlikely to yield
-          // contacts on retry as one that returns empty.
-          const appDate = appDateByCompany.get(normCompany(task.company)) || '';
-          recordAttempt(task.company, task.search, appDate, attempts);
+          // An error or a timeout says nothing about whether the company has
+          // anyone to find, so it never counts toward the cap. It is kept on
+          // the side for visibility only.
+          recordSearchError(task.company, task.search, result.error, attempts);
+          if (result.rateLimited) rateLimited = true;
           continue;
         }
         job.results.push({
@@ -130,17 +144,19 @@ async function runDiscoverJob(job, tasks, generate) {
           rejected: [],
           duplicates: 0,
         });
-        // Record successful-but-empty searches as an attempt toward the cap.
+        // Only a search that finished and left nobody usable is a try toward
+        // the cap. An answer that could not be read is not a finished search.
         const kept = job.results[job.results.length - 1].suggestions;
-        if (kept.length === 0) {
+        if (result.unreadable) {
+          recordSearchError(task.company, task.search, 'The search answer could not be read.', attempts);
+        } else if (kept.length === 0) {
           const appDate = appDateByCompany.get(normCompany(task.company)) || '';
           recordAttempt(task.company, task.search, appDate, attempts);
         }
       } catch (err) {
         job.errors.push({ company: task.company, error: err.message });
-        // Thrown errors (timeouts) also count toward the cap.
-        const appDate = appDateByCompany.get(normCompany(task.company)) || '';
-        recordAttempt(task.company, task.search, appDate, attempts);
+        // A thrown error is not a try either.
+        recordSearchError(task.company, task.search, err.message, attempts);
       } finally {
         settled.add(taskIndex);
         active.delete(taskIndex);
@@ -153,7 +169,7 @@ async function runDiscoverJob(job, tasks, generate) {
   // There is no batch here because no HTTP request waits for completion. The
   // three workers exist only to respect the upstream rate limit.
   try {
-    await Promise.all(Array.from({ length: Math.min(DISCOVER_CONCURRENCY, tasks.length) }, () => worker()));
+    await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker()));
   } catch (err) {
     // Company failures are handled inside each worker. This fallback accounts
     // for every untouched task if the worker machinery itself ever fails.
@@ -163,6 +179,7 @@ async function runDiscoverJob(job, tasks, generate) {
       job.done += 1;
     });
   }
+  if (rateLimited) job.skippedForRateLimit = Math.max(0, tasks.length - settled.size);
   job.current = [];
   try { writeAttempts(attempts); } catch (err) { console.log(`[discover] failed to write attempts: ${err.message}`); }
   job.status = 'done';
@@ -222,6 +239,10 @@ router.get('/api/tt-reconcile/discover-run/:jobId', (req, res) => {
   res.json(job);
 });
 
+router.get('/api/tt-reconcile/verify-status', (req, res) => {
+  res.json({ lastVerifyError });
+});
+
 // POST /api/tt-reconcile/discover-run
 // Starts the whole reconcile discovery and returns before model work finishes.
 // Pass mode in the body so jobs from different subtabs don't collide.
@@ -233,7 +254,7 @@ router.post('/api/tt-reconcile/discover-run', (req, res) => {
     if (!Array.isArray(talent) || !Array.isArray(principal)) {
       return res.status(400).json({ error: 'talent[] and principal[] are required.' });
     }
-    const tasks = [
+    let tasks = [
       ...talent.filter(item => item?.company).map(item => ({ ...item, search: 'talent' })),
       ...principal.filter(item => item?.company).map(item => ({ ...item, search: 'principal' })),
     ];
@@ -241,6 +262,35 @@ router.post('/api/tt-reconcile/discover-run', (req, res) => {
     const maxCompanies = currentBatch('reconcile_max');
     if (tasks.length > maxCompanies) {
       tasks.splice(maxCompanies);
+    }
+
+    const braveKey = String(process.env.BRAVE_API_KEY || '').trim();
+    const search = braveKey ? braveProfileSearch(braveKey) : undefined;
+    const engine = search ? 'search' : 'model';
+    const configuredCap = Number.parseInt(process.env.TJK_CONTACT_SEARCH_MAX, 10);
+    const searchCap = Number.isFinite(configuredCap) && configuredCap >= 0 ? configuredCap : 300;
+    const plannedFor = task => buildPeopleQueries({
+      company: task.company,
+      tier: task.search,
+      track: task.search === 'principal' ? detectTrack(task.exampleRole) : undefined,
+    }).length;
+    let searchesPlanned = 0;
+    let skippedForBudget = 0;
+    if (search) {
+      const withinBudget = [];
+      for (let index = 0; index < tasks.length; index++) {
+        const task = tasks[index];
+        const nextCost = plannedFor(task);
+        if (searchesPlanned + nextCost > searchCap) {
+          skippedForBudget = tasks.length - index;
+          break;
+        }
+        searchesPlanned += nextCost;
+        withinBudget.push(task);
+      }
+      tasks = withinBudget;
+    } else {
+      searchesPlanned = tasks.reduce((sum, task) => sum + plannedFor(task), 0);
     }
 
     const jobId = randomUUID();
@@ -253,12 +303,16 @@ router.post('/api/tt-reconcile/discover-run', (req, res) => {
       current: [],
       results: [],
       errors: [],
+      engine,
+      searchesUsed: 0,
+      searchesPlanned,
+      skippedForBudget,
       startedAt: Date.now(),
       finishedAt: null,
     };
     discoverJobs.set(jobId, job);
     try {
-      void runDiscoverJob(job, tasks, req.app.locals.generate);
+      void runDiscoverJob(job, tasks, req.app.locals.generate, search, search ? 1 : DISCOVER_CONCURRENCY);
     } catch (err) {
       job.status = 'error';
       job.errors.push({ company: '', error: err.message });
@@ -270,7 +324,7 @@ router.post('/api/tt-reconcile/discover-run', (req, res) => {
   }
 });
 
-// GET /api/tt-reconcile/preview
+// GET /api/tt-reconcile/preview[?mode=talent|principal][&part=retire|find]
 // Returns:
 //   {
 //     toArchive: [{ id, first, last, company, title, reason, relatedApps:[{id,status,role}] }],
@@ -287,8 +341,42 @@ router.get('/api/tt-reconcile/preview', (req, res) => {
     const ttRows = parseTargetTalentMd().filter(r => r.status !== 'Archived');
     const mode = req.query.mode === 'talent' || req.query.mode === 'principal'
       ? req.query.mode : undefined;
+    // ?part=retire or ?part=find serves one half of the flow. Anything else
+    // (including no part) returns both halves, as existing callers expect.
+    const part = req.query.part === 'retire' || req.query.part === 'find'
+      ? req.query.part : undefined;
     const attempts = readAttempts();
-    res.json(reconcilePreview(apps, ttRows, { mode, attempts }));
+    const engine = String(process.env.BRAVE_API_KEY || '').trim() ? 'search' : 'model';
+    const searchesPerCompany = mode === 'principal'
+      ? PEOPLE_QUERIES_PER_TIER.principal
+      : PEOPLE_QUERIES_PER_TIER.talent;
+    res.json({
+      ...reconcilePreview(apps, ttRows, { mode, attempts, muted: readMute(), part }),
+      engine,
+      searchesPerCompany,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/tt-reconcile/reset-attempts
+// body: { company, search? }  search is 'talent' or 'principal'; omit for both.
+// "Give it another try": clears the empty-search count that parked a company,
+// so it returns to the gap list on the next preview. Nothing else is touched.
+router.post('/api/tt-reconcile/reset-attempts', (req, res) => {
+  try {
+    const { company, search } = req.body || {};
+    if (typeof company !== 'string' || !normCompany(company)) {
+      return res.status(400).json({ error: 'company required' });
+    }
+    if (search != null && !SEARCH_TYPES.includes(search)) {
+      return res.status(400).json({ error: `search must be one of: ${SEARCH_TYPES.join(', ')}` });
+    }
+    const attempts = readAttempts();
+    const removed = resetAttempts(company, search || null, attempts);
+    if (removed > 0) writeAttempts(attempts);
+    res.json({ ok: true, removed });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -373,10 +461,22 @@ router.post('/api/tt-reconcile/find-emails', async (req, res) => {
     const cap = planFindBudget({ needed: rows.length, limit: wanted, creditsLeft });
     const toRun = rows.slice(0, cap);
 
+    const hunterPacer = createHostPacer({ concurrency: 2, gapMs: 250, name: 'hunter' });
+    const millionVerifierPacer = createHostPacer({ concurrency: 3, gapMs: 250, name: 'millionVerifier' });
+    const batch = await runEmailLookupBatch(toRun, r => findAndVerify(
+      r.company, r.first, r.last, hkey, mkey, undefined,
+      { hunterPacer, millionVerifierPacer },
+    ));
     const results = [];
-    for (const r of toRun) {
+    for (const item of batch.results) {
+      const r = item.row;
+      if (item.skipped) {
+        results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), company: r.company, email: null, state: 'skipped', reason: item.reason });
+        continue;
+      }
       try {
-        const f = await findAndVerify(r.company, r.first, r.last, hkey, mkey);
+        if (item.error) throw new Error(item.error);
+        const f = item.value;
         if (f.found && f.verify) {
           updateTTLine(r.id, { email: setVerifyTag(f.email, f.verify) });
           results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), company: r.company, email: f.email, state: f.verify.state });
@@ -391,6 +491,7 @@ router.post('/api/tt-reconcile/find-emails', async (req, res) => {
       ok: true, checked: toRun.length, written: results.filter(x => x.email).length,
       needing: rows.length, skippedForBudget: rows.length - toRun.length,
       creditsBefore: creditsLeft, creditsSpent: toRun.length, results,
+      ...(batch.rateLimited ? { rateLimited: batch.rateLimited } : {}),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -658,7 +759,10 @@ router.post('/api/tt-reconcile/bulk-add', async (req, res) => {
       verifierKeys: !!(hkey && mkey),
       emailVerification: (hkey && mkey) ? 'running' : 'skipped',
     });
-    if (hkey && mkey) verifyEmailsInBackground(written, toWrite, hkey, mkey).catch(() => {});
+    if (hkey && mkey) verifyEmailsInBackground(written, toWrite, hkey, mkey).catch(error => {
+      lastVerifyError = String(error?.message || error);
+      console.warn(`[verify] ${lastVerifyError}`);
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

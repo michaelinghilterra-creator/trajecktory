@@ -30,6 +30,21 @@ export function scanHistoryFirstSeen(text) {
   return index;
 }
 
+export function scanHistoryRowsFirstSeen(rows) {
+  const index = {};
+  for (const row of rows || []) {
+    const raw = String(row?.url || '').trim();
+    const date = String(row?.firstSeen || '').trim();
+    if (!raw || !ISO_DATE.test(date)) continue;
+    const key = firstSeenKey(raw);
+    for (const candidate of new Set([key, raw])) {
+      if (!candidate) continue;
+      if (!index[candidate] || date < index[candidate]) index[candidate] = date;
+    }
+  }
+  return index;
+}
+
 export function readPipelineFirstSeen(file) {
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));

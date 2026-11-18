@@ -12,6 +12,7 @@ const sandbox = makeSandbox('discover-job');
 process.env.TJK_DATA_DIR = sandbox;
 process.env.ANTHROPIC_API_KEY = ' ';
 process.env.HUNTER_API_KEY = ' ';
+process.env.BRAVE_API_KEY = ' ';
 process.env.MILLIONVERIFIER_API_KEY = ' ';
 
 const header = '# Target Talent\n\n| # | Company | Last | First | Salute | Title | City | State | Zip | Phone | Email | LinkedIn | Status | Last Touch | Notes | Website |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n';
@@ -22,6 +23,7 @@ const express = (await import('express')).default;
 const routeModule = await import('../dashboard-web/server/routes/tt-reconcile.mjs');
 process.env.ANTHROPIC_API_KEY = ' ';
 process.env.HUNTER_API_KEY = ' ';
+process.env.BRAVE_API_KEY = ' ';
 process.env.MILLIONVERIFIER_API_KEY = ' ';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));

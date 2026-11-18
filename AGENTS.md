@@ -87,10 +87,14 @@ AI-powered job search, run from a local dashboard: pipeline tracking, offer scor
 | `data/follow-ups.md` | Follow-up history tracker |
 | `scan.mjs` | Zero-token portal scanner — hits Greenhouse/Ashby/Lever APIs directly, zero LLM cost |
 | `repair-workday-urls.mjs` | Restores the careers-site segment in stored Workday links that the scanner saved without one before v5.13.1 (`node repair-workday-urls.mjs` dry run, then `--apply`). The site is read from `portals.yml`; a tenant with several sites, or none known, is reported and left alone. Only the url cell is written, with a timestamped backup and a byte-identical check of every other cell. |
+| `reset-contact-search-attempts.mjs` | Gives companies parked by the contact search cap (two empty searches) another try. Dry run by default, `--apply` writes after a timestamped backup; `--tier talent` or `--tier principal` narrows it. Tries counted before errors stopped counting cannot be told apart from real empty searches, so it clears every unconfirmed try and keeps confirmed ones unless `--all` is passed. |
 | `check-liveness.mjs` | Job posting liveness checker |
+| `lib/sourcer-watch.mjs` | Read-only parser for opt-in nightly sourcer candidates, outcomes, and health shown in Discovery's Cyber watch view. |
 | `data/liveness-observations.tsv` | Every verdict `verify-actionable.mjs` reached while liveness discarding is off, for measuring the checker against reality |
 | `liveness-core.mjs` | Shared liveness logic (expired signals win over generic Apply text) |
 | `reports/` | Evaluation reports (format: `{###}-{company-slug}-{YYYY-MM-DD}.md`). Blocks A-F + G (Posting Legitimacy). Header includes `**Legitimacy:** {tier}`. |
+
+Contact discovery uses Brave Search when `BRAVE_API_KEY` is configured: code collects LinkedIn profile results and the model only labels them. Without that key, the model uses its hosted web search tool. `TJK_CONTACT_SEARCH_MAX` limits Brave searches per run and defaults to 300.
 
 ### First Run — Onboarding (IMPORTANT)
 

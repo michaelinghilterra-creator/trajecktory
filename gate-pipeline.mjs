@@ -28,6 +28,17 @@ import { appendGateHistory } from './lib/gate-history.mjs';
 import { localToday } from './lib/local-date.mjs';
 import { buildFingerprintIndex, findDuplicateJd, snapshotFingerprint } from './lib/jd-fingerprint.mjs';
 import { buildSimilarityIndex, similarRepostFor } from './lib/jd-similarity.mjs';
+import { enforceArgs } from './lib/cli-args.mjs';
+
+const invokedDirectly = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (invokedDirectly) {
+  const exitCode = enforceArgs(process.argv.slice(2), {
+    flags: ['--dry-run', '--suppress-only', '--allow-reeval'],
+    valueFlags: ['--concurrency'],
+    usage: 'Usage: node gate-pipeline.mjs [--dry-run] [--suppress-only] [--allow-reeval] [--concurrency COUNT]',
+  });
+  if (exitCode !== null) process.exit(exitCode);
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PIPELINE = join(__dirname, 'data/pipeline.md');

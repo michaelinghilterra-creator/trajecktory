@@ -6,6 +6,8 @@
 
 import { generateText, draftModel } from './anthropic.mjs';
 import { validateStakeholder } from '../../../lib/stakeholder-additions.mjs';
+import { collectPeople } from '../../../lib/people-search.mjs';
+import { applyLabels, buildLabelPrompt, MAX_KEEP_PRINCIPAL, MAX_KEEP_TALENT } from '../../../lib/people-label.mjs';
 
 const DEFAULT_TIMEOUT_MS = 90_000;
 const MIN_TIMEOUT_MS = 1_000;
@@ -19,9 +21,41 @@ function localDate(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function parseSuggestions(fullText) {
-  const jsonMatch = fullText.match(/\[[\s\S]*\]/);
-  return jsonMatch ? (() => { try { return JSON.parse(jsonMatch[0]); } catch { return []; } })() : [];
+function decoratePrincipalSuggestions(suggestions, company) {
+  return suggestions.map(s => {
+    const suggestion = {
+      ...s,
+      source: 'agent',
+      notes: /\[principal\]/i.test(s.notes || '') ? s.notes : `${s.notes || ''}${s.notes ? ' ' : ''}[principal]`.trim(),
+    };
+    const validation = validateStakeholder({ ...suggestion, company }, { today: localDate() });
+    suggestion.validation = validation.ok
+      ? { ok: true }
+      : { ok: false, reasons: validation.reasons };
+    return suggestion;
+  });
+}
+
+function timeoutPromise(message, timeoutMs) {
+  let timeoutId;
+  const promise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return { promise, clear: () => clearTimeout(timeoutId) };
+}
+
+// Parse the answer, and say whether it held a list at all. "[]" is a real
+// empty result. Text with no list in it is an answer nobody could read, and the
+// try counter must not treat the two alike.
+function readSuggestions(fullText) {
+  const jsonMatch = String(fullText || '').match(/\[[\s\S]*\]/);
+  if (!jsonMatch) return { suggestions: [], unreadable: true };
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    return Array.isArray(parsed) ? { suggestions: parsed, unreadable: false } : { suggestions: [], unreadable: true };
+  } catch {
+    return { suggestions: [], unreadable: true };
+  }
 }
 
 // Injection is scoped to one call. A mutable module test seam can leak between
@@ -32,12 +66,13 @@ export async function discoverTalentAtCompany({
   model,
   timeoutMs,
   generate = generateText,
+  search,
 }) {
   // Bound timers so a bad option cannot cause resource exhaustion by extending a search indefinitely.
   const resolvedTimeoutMs = resolveTimeoutMs(timeoutMs);
   // Keep invalid model options on the configured draft model instead of passing unchecked values downstream.
   const resolvedModel = typeof model === 'string' && model.trim() ? model : draftModel();
-  const prompt = `Find 2-3 Internal Talent Acquisition / People / Recruiting employees CURRENTLY employed at ${company} who would be relevant for a candidate targeting business/GTM/RevOps/Operations roles (specifically: ${exampleRole}).
+  const prompt = `Find every relevant current Internal Talent Acquisition / People / Recruiting employee you can verify at ${company}, up to 3 people, for a candidate targeting business/GTM/RevOps/Operations roles (specifically: ${exampleRole}).
 
 INSTRUCTIONS:
 1. USE THE web_search TOOL to search for current TA employees at ${company}. Try queries like:
@@ -48,6 +83,8 @@ INSTRUCTIONS:
 2. Prioritize people whose LinkedIn profile shows ${company} as their CURRENT employer.
 3. Prefer: Talent Acquisition Partners / Recruiters / TA Business Partners / HR Business Partners (HRBPs) / People-team members focused on business, GTM, or commercial hiring, at any seniority (at a small company the Head of Talent may be the right person). Do NOT return revenue-function leaders (VP/Head/Director of Revenue Operations, Sales Operations, GTM, Sales, or Marketing): those belong to the decision-maker search, not here.
 4. Verify each person's current employer before including them — recent job changes are common.
+
+Each linkedin value must be copied exactly from a search result. Use an empty string when no profile link was seen.
 
 Output ONLY a JSON array (your final response after searching), no prose, no markdown:
 [
@@ -61,9 +98,32 @@ Confidence rules:
 
 If the search returns no reliable matches, return an empty array []. Never fabricate names.`;
 
-  let timeoutId;
+  let timer;
+  let searchesUsed = 0;
   try {
     console.log(`[discover] start: ${company}`);
+    if (search) {
+      timer = timeoutPromise(`discover timeout after 90s for ${company}`, resolvedTimeoutMs);
+      const operation = (async () => {
+        const collected = await collectPeople({ company, tier: 'talent', search });
+        searchesUsed = collected.queriesRun;
+        if (collected.rateLimited) return { company, exampleRole, suggestions: [], error: 'Brave API HTTP 429', rateLimited: true, searchesUsed };
+        if (collected.people.length === 0) return { company, exampleRole, suggestions: [], searchesUsed };
+        const labelPrompt = buildLabelPrompt({ company, tier: 'talent', exampleRole, people: collected.people });
+        const fullText = await generate(labelPrompt, { model: resolvedModel, maxTokens: 3000 });
+        const read = readSuggestions(fullText);
+        const suggestions = applyLabels({
+          people: collected.people,
+          labels: read.suggestions,
+          tier: 'talent',
+          maxKeep: MAX_KEEP_TALENT,
+        });
+        return { company, exampleRole, suggestions, searchesUsed, ...(read.unreadable ? { unreadable: true } : {}) };
+      })();
+      const result = await Promise.race([operation, timer.promise]);
+      console.log(`[discover] done:  ${company}`);
+      return result;
+    }
     // Haiku 4.5 chosen over Sonnet 4.6 for the discover task: the hosted
     // web_search tool pulls full page snippets into input context, which
     // makes a single call blow past entry-tier Sonnet rate limits (30K
@@ -82,27 +142,27 @@ If the search returns no reliable matches, return an empty array []. Never fabri
       tools: [{
         type: 'web_search_20260209',
         name: 'web_search',
-        max_uses: 2,
+        max_uses: 4,
         allowed_callers: ['direct'],
       }],
     });
-    const timeout = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error(`discover timeout after 90s for ${company}`)), resolvedTimeoutMs);
-    });
-    const fullText = await Promise.race([apiCall, timeout]);
+    timer = timeoutPromise(`discover timeout after 90s for ${company}`, resolvedTimeoutMs);
+    const fullText = await Promise.race([apiCall, timer.promise]);
     console.log(`[discover] done:  ${company}`);
-    return { company, exampleRole, suggestions: parseSuggestions(fullText) };
+    const read = readSuggestions(fullText);
+    return { company, exampleRole, suggestions: read.suggestions, searchesUsed, ...(read.unreadable ? { unreadable: true } : {}) };
   } catch (e) {
     console.log(`[discover] ERROR: ${company} — ${e.message}`);
-    return { company, exampleRole, suggestions: [], error: e.message };
+    searchesUsed = e.queriesRun ?? searchesUsed;
+    return { company, exampleRole, suggestions: [], error: e.message, searchesUsed };
   } finally {
-    clearTimeout(timeoutId);
+    timer?.clear();
   }
 }
 
 /**
  * Two static query sets keyed by track. The model's web_search tool is capped at
- * max_uses: 2, so order matters: the top titles do the work.
+ * The model fallback is limited, so order matters: the top titles do the work.
  */
 const DM_QUERIES = {
   revops: [
@@ -121,7 +181,7 @@ const DM_QUERIES = {
   ],
 };
 
-function detectTrack(exampleRole) {
+export function detectTrack(exampleRole) {
   const lower = (exampleRole || '').toLowerCase();
   if (/\b(sdr|bdr|sales development|business development)\b/.test(lower)) return 'salesdev';
   return 'revops';
@@ -133,6 +193,7 @@ export async function discoverPrincipalAtCompany({
   model,
   timeoutMs,
   generate = generateText,
+  search,
 }) {
   // Bound timers so a bad option cannot cause resource exhaustion by extending a search indefinitely.
   const resolvedTimeoutMs = resolveTimeoutMs(timeoutMs);
@@ -153,6 +214,8 @@ ${queryLines}
 4. Do NOT include TA, People, HR, or Recruiting people — only functional leaders.
 5. Verify each person's current employer before including.
 
+Each linkedin value must be copied exactly from a search result. Use an empty string when no profile link was seen.
+
 Output ONLY a JSON array (your final response after searching), no prose, no markdown:
 [
   { "first": "First", "last": "Last", "title": "${track === 'salesdev' ? 'VP Sales' : 'VP Revenue Operations'}", "city": "New York", "state": "NY", "linkedin": "https://www.linkedin.com/in/example/", "confidence": "high|medium|low", "notes": "One line on source and recency. [principal]" }
@@ -163,48 +226,56 @@ Confidence rules:
 - medium = found on third-party source (ZoomInfo, RocketReach, press release) but not verified on LinkedIn
 - low    = inferred or weak evidence
 
-If the search returns no reliable matches, return []. Never fabricate names or titles.`;
+If the search returns no reliable matches, return []. Never fabricate names or titles.`
+    .replace('Find 2-3 people who currently LEAD', 'Find every relevant current employee you can verify, up to 5 people, who leads');
 
-  let timeoutId;
+  let timer;
+  let searchesUsed = 0;
   try {
     console.log(`[discover-principal] start: ${company}`);
+    if (search) {
+      timer = timeoutPromise(`discover-principal timeout after 90s for ${company}`, resolvedTimeoutMs);
+      const operation = (async () => {
+        const collected = await collectPeople({ company, tier: 'principal', track, search });
+        searchesUsed = collected.queriesRun;
+        if (collected.rateLimited) return { company, exampleRole, suggestions: [], error: 'Brave API HTTP 429', rateLimited: true, searchesUsed };
+        if (collected.people.length === 0) return { company, exampleRole, suggestions: [], searchesUsed };
+        const labelPrompt = buildLabelPrompt({ company, tier: 'principal', exampleRole, people: collected.people });
+        const fullText = await generate(labelPrompt, { model: resolvedModel, maxTokens: 3000 });
+        const read = readSuggestions(fullText);
+        const suggestions = decoratePrincipalSuggestions(applyLabels({
+          people: collected.people,
+          labels: read.suggestions,
+          tier: 'principal',
+          maxKeep: MAX_KEEP_PRINCIPAL,
+        }), company);
+        return { company, exampleRole, suggestions, searchesUsed, ...(read.unreadable ? { unreadable: true } : {}) };
+      })();
+      const result = await Promise.race([operation, timer.promise]);
+      console.log(`[discover-principal] done:  ${company}`);
+      return result;
+    }
     const apiCall = generate(prompt, {
       model: resolvedModel,
       maxTokens: 3000,
       tools: [{
         type: 'web_search_20260209',
         name: 'web_search',
-        max_uses: 2,
+        max_uses: 4,
         allowed_callers: ['direct'],
       }],
     });
-    const timeout = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error(`discover-principal timeout after 90s for ${company}`)), resolvedTimeoutMs);
-    });
-    const fullText = await Promise.race([apiCall, timeout]);
+    timer = timeoutPromise(`discover-principal timeout after 90s for ${company}`, resolvedTimeoutMs);
+    const fullText = await Promise.race([apiCall, timer.promise]);
     console.log(`[discover-principal] done:  ${company}`);
-    let suggestions = parseSuggestions(fullText);
-    // Guarantee the [principal] tag is in every suggestion's notes (the model
-    // is instructed to include it, but stamp it defensively on parse too).
-    suggestions = suggestions.map(s => {
-      const suggestion = {
-        ...s,
-        source: 'agent',
-        notes: /\[principal\]/i.test(s.notes || '') ? s.notes : `${s.notes || ''}${s.notes ? ' ' : ''}[principal]`.trim(),
-      };
-      const validation = validateStakeholder({ ...suggestion, company }, {
-        today: localDate(),
-      });
-      suggestion.validation = validation.ok
-        ? { ok: true }
-        : { ok: false, reasons: validation.reasons };
-      return suggestion;
-    });
-    return { company, exampleRole, suggestions };
+    const read = readSuggestions(fullText);
+    const suggestions = decoratePrincipalSuggestions(read.suggestions, company);
+    return { company, exampleRole, suggestions, searchesUsed, ...(read.unreadable ? { unreadable: true } : {}) };
   } catch (e) {
     console.log(`[discover-principal] ERROR: ${company} — ${e.message}`);
-    return { company, exampleRole, suggestions: [], error: e.message };
+    searchesUsed = e.queriesRun ?? searchesUsed;
+    return { company, exampleRole, suggestions: [], error: e.message, searchesUsed };
   } finally {
-    clearTimeout(timeoutId);
+    timer?.clear();
   }
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readdirSync, readFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
-import { writeFileAtomic } from '../lib/atomic-write.mjs';
+import { writeFileAtomic, atomicWriteFileSync } from '../lib/atomic-write.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
 
 let passed = 0, failed = 0;
@@ -17,6 +17,10 @@ const content = 'Example first\r\nExample second\n';
 writeFileAtomic(target, content);
 check(readFileSync(target, 'utf8') === content, 'content round-trips with CRLF bytes intact');
 check(!readdirSync(dir).some(name => name.includes('.tmp-')), 'success leaves no temporary file');
+
+const syncTarget = join(dir, 'sync-name.txt');
+atomicWriteFileSync(syncTarget, 'whole file', 'utf8');
+check(readFileSync(syncTarget, 'utf8') === 'whole file', 'sync-compatible atomic writer preserves UTF-8 content');
 
 let attempts = 0;
 const retryTarget = join(dir, 'retry.txt');

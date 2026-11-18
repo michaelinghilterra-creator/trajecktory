@@ -101,5 +101,15 @@ const ROW = (num, score, reportRel) =>
     'a line that is too short to be a tracker row is refused, not mangled');
 }
 
+{
+  const before = '| 7409 | 2032-04-02 | Zorblax Systems | Widget Lead | 2.9/5 | Applied | PDF | Resume | [7409](reports/7409-x.md) | invented left \\| right note | https://jobs.example.test/7409 |';
+  const after = replaceScoreCell(before, '3.7/5');
+  const parsed = parseTrackerLine(after);
+  check(parsed?.score === '3.7/5', 'a row with an escaped pipe gets its score rewritten');
+  check(parsed?.notes === 'invented left \\| right note', 'an escaped pipe in notes remains in the notes cell');
+  check(after.replace('3.7/5', '2.9/5') === before,
+    'every non-score byte remains unchanged for an escaped-pipe row');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

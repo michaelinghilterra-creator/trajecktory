@@ -17,6 +17,7 @@ process.env.TJK_DATA_DIR = sandbox;
 // A truthy whitespace override prevents a developer's local API keys from
 // turning this hermetic route test into an email lookup.
 process.env.HUNTER_API_KEY = ' ';
+process.env.BRAVE_API_KEY = ' ';
 process.env.MILLIONVERIFIER_API_KEY = ' ';
 
 const header = '# Target Talent\n\n| # | Company | Last | First | Salute | Title | City | State | Zip | Phone | Email | LinkedIn | Status | Last Touch | Notes | Website |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n';

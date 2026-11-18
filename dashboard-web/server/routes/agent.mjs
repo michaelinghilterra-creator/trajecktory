@@ -20,6 +20,7 @@ import { validateReportMarkdown } from '../v1-loader.mjs';
 import { localToday } from '../../../lib/local-date.mjs';
 import { agentTail } from '../lib/agent-summary.mjs';
 import { checkSelfDuplicate } from '../../../lib/self-dup-check.mjs';
+import { atomicWriteFileSync } from '../../../lib/atomic-write.mjs';
 
 export const router = express.Router();
 
@@ -92,8 +93,10 @@ function persistJobs() {
       .sort((a, b) => (b[1].startedAt || 0) - (a[1].startedAt || 0))
       .slice(0, MAX_PERSIST)
       .map(([id, job]) => [id, { ...job, output: (job.output || '').slice(-1000), toolCalls: (job.toolCalls || []).slice(-20) }]);
-    fs.writeFileSync(JOBS_FILE, JSON.stringify(entries), 'utf8');
-  } catch { /* best-effort */ }
+    atomicWriteFileSync(JOBS_FILE, JSON.stringify(entries), 'utf8');
+  } catch (error) {
+    console.warn(`[agent jobs] failed to write ${JOBS_FILE}: ${error.message}`);
+  }
 }
 
 let persistTimer = null;
@@ -111,11 +114,16 @@ function loadPersistedJobs() {
     const cutoff = Date.now() - 6 * 60 * 60 * 1000;   // drop anything older than 6h
     for (const [id, job] of entries) {
       if (!job || (job.startedAt && job.startedAt < cutoff)) continue;
+      const interruptedMessage = job.mode === 'pipeline'
+        ? 'Interrupted by a dashboard restart. Finished evaluations were kept. Click Run to continue with the rest.'
+        : 'Interrupted by a dashboard restart. Click Run to retry.';
       agentJobs.set(id, job.status === 'running'
-        ? { ...job, status: 'interrupted', error: 'Interrupted by a dashboard restart. Click Run to retry.', interruptedAt: Date.now() }
+        ? { ...job, status: 'interrupted', error: interruptedMessage, interruptedAt: Date.now() }
         : job);
     }
-  } catch { /* ignore a corrupt/partial snapshot */ }
+  } catch (error) {
+    console.warn(`[agent jobs] failed to read or parse ${JOBS_FILE}: ${error.message}`);
+  }
 }
 loadPersistedJobs();
 
@@ -1270,12 +1278,31 @@ async function runAgent(jobId, mode, target) {
     if (mode === 'interview' || mode === 'cheat-sheet' || mode === 'runsheet' || mode === 'interview-prep') {
       hygieneDirs.push(path.join(ROOT_DIR, 'interview-prep'));
     }
+    const warnHygiene = reason => {
+      const message = `Report text clean-up did not finish: ${reason}`;
+      const job = agentJobs.get(jobId) || {};
+      agentJobs.set(jobId, { ...job, warnings: [...(job.warnings || []), message] });
+      console.warn(`[hygiene] ${message}`);
+      schedulePersist();
+    };
     for (const d of hygieneDirs) {
+      let warned = false;
+      const warnOnce = reason => {
+        if (warned) return;
+        warned = true;
+        warnHygiene(reason);
+      };
       const child = spawn(process.execPath, ['clean-generated-text.mjs', d, '--apply'], { cwd: ROOT_DIR, stdio: 'ignore' });
-      child.on('error', () => {});   // never surface a spawn error
+      child.on('error', error => warnOnce(error.message));
+      child.on('close', code => { if (code !== 0) warnOnce(`process exited with code ${code}`); });
       child.unref();
     }
-  } catch { /* hygiene is best-effort; never break a run */ }
+  } catch (error) {
+    const message = `Report text clean-up did not finish: ${error.message}`;
+    const job = agentJobs.get(jobId) || {};
+    agentJobs.set(jobId, { ...job, warnings: [...(job.warnings || []), message] });
+    console.warn(`[hygiene] ${message}`);
+  }
 
   // Activation log: whether a run produced anything is the outcome worth
   // knowing, and the server already computed it just above. Counts and an enum

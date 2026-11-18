@@ -1,4 +1,6 @@
 import express from 'express';
+import { createHostPacer } from '../../../lib/host-pacer.mjs';
+import { runEmailLookupBatch } from '../../../lib/email-lookup-batch.mjs';
 import { DATA_DIR, ROOT_DIR } from '../config.mjs';
 import { parseReferralsMd, referralTitle, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence, resolveReferralLink } from '../lib/referrals.mjs';
 import { reconcile, cleanupStale, parseConnectionsCsv, saveConnections, linkedinStatus, stageForRow, activeFormSet } from '../lib/linkedin-referrals.mjs';
@@ -223,23 +225,20 @@ router.post('/api/referrals/find-emails', async (req, res) => {
     // → MillionVerifier round-trip), then apply the writes SEQUENTIALLY: updateReferralLine
     // does a read-modify-write of referrals.md, so parallel writes would race and drop
     // rows. The network is the slow part, and that is what the pool parallelizes.
-    const CONCURRENCY = 6;
-    const found = new Array(toRun.length);
-    let next = 0;
-    const worker = async () => {
-      while (next < toRun.length) {
-        const i = next++;
-        const r = toRun[i];
-        try { found[i] = { r, f: await findAndVerify(r.where, r._n.first, r._n.last, hkey, mkey) }; }
-        catch (e) { found[i] = { r, err: e.message }; }
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, toRun.length || 1) }, worker));
+    const hunterPacer = createHostPacer({ concurrency: 2, gapMs: 250, name: 'hunter' });
+    const millionVerifierPacer = createHostPacer({ concurrency: 3, gapMs: 250, name: 'millionVerifier' });
+    const batch = await runEmailLookupBatch(toRun, r => findAndVerify(
+      r.where, r._n.first, r._n.last, hkey, mkey, undefined,
+      { hunterPacer, millionVerifierPacer },
+    ));
 
     const results = [];
-    for (const item of found) {
+    for (const item of batch.results) {
       if (!item) continue;
-      const { r, f, err } = item;
+      const r = item.row;
+      const f = item.value;
+      const err = item.error;
+      if (item.skipped) { results.push({ id: r.id, name: r.name, company: r.where, email: null, state: 'skipped', reason: item.reason }); continue; }
       if (err) { results.push({ id: r.id, name: r.name, company: r.where, email: null, state: 'error', error: err }); continue; }
       if (f.found && f.verify) {
         updateReferralLine(r.id, { email: setVerifyTag(f.email, f.verify) });
@@ -251,6 +250,7 @@ router.post('/api/referrals/find-emails', async (req, res) => {
     res.json({
       ok: true, checked: toRun.length, written: results.filter(x => x.email).length,
       needing: rows.length, creditsBefore: creditsLeft, results,
+      ...(batch.rateLimited ? { rateLimited: batch.rateLimited } : {}),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

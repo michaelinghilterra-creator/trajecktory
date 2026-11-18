@@ -17,13 +17,18 @@
  *   node scan.mjs --no-age-filter        # disable age filter entirely
  */
 
-import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, copyFileSync } from 'fs';
 import { pathToFileURL } from 'url';
 import yaml from 'js-yaml';
 import { buildTitleFilter, buildLocationFilter, normalizeUrl, scoreOffer } from './lib/scan-core.mjs';
 import { sanitizeCell } from './lib/sanitize-cell.mjs';
 import { coverageKey, updateCoverage } from './lib/scan-coverage.mjs';
 import { localToday } from './lib/local-date.mjs';
+import { createWorkdayPacer } from './lib/workday-pacer.mjs';
+import { createHostPacer, isRateBlock } from './lib/host-pacer.mjs';
+import { atomicWriteFileSync } from './lib/atomic-write.mjs';
+import { enforceArgs } from './lib/cli-args.mjs';
+import { readHistoryRows } from './lib/scan-history.mjs';
 const parseYaml = yaml.load;
 
 /** The scanner reads only locally tracked companies, never externally owned ones. */
@@ -61,6 +66,49 @@ const SCAN_COVERAGE_PATH = 'data/scan-coverage.json';
 
 const CONCURRENCY = 10;
 const FETCH_TIMEOUT_MS = 10_000;
+
+function readEnvInteger(name, minimum) {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return undefined;
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= minimum ? value : undefined;
+}
+
+const workdayPacer = createWorkdayPacer({
+  gapMs: readEnvInteger('TJK_WORKDAY_GAP_MS', 0),
+  maxPagesPerBoard: readEnvInteger('TJK_WORKDAY_MAX_PAGES', 1),
+});
+
+const ATS_CONCURRENCY = readEnvInteger('TJK_ATS_CONCURRENCY', 1) ?? 4;
+const ATS_GAP_MS = readEnvInteger('TJK_ATS_GAP_MS', 0) ?? 150;
+const ATS_FAMILIES = ['greenhouse', 'ashby', 'lever', 'workable', 'smartrecruiters'];
+const atsPacers = Object.fromEntries(ATS_FAMILIES.map(name => [name, createHostPacer({
+  concurrency: ATS_CONCURRENCY,
+  gapMs: ATS_GAP_MS,
+  name,
+})]));
+
+export async function runAtsRequest(pacer, request) {
+  return pacer.run(async () => {
+    try {
+      return await request();
+    } catch (error) {
+      if (isRateBlock(error?.status)) pacer.trip(`HTTP ${error.status}`);
+      throw error;
+    }
+  });
+}
+
+export function scanFailureOutcome(error, type) {
+  const pausedFamily = ATS_FAMILIES.find(name => error.message.startsWith(`${name} paused for this run:`));
+  const workdayPaused = error.message.startsWith('Workday paused for this scan:');
+  return {
+    paused: workdayPaused || Boolean(pausedFamily),
+    pausedFamily,
+    result: workdayPaused || pausedFamily ? 'skipped_paused' : (/HTTP 404/.test(error.message) ? 'http_404' : 'error'),
+    ats: type,
+  };
+}
 
 // TEST CAP (temporary): when TJK_TEST_LIMIT is set (e.g. a line in
 // dashboard-web/.env), only the first N new offers are written to the pipeline,
@@ -360,12 +408,16 @@ const PARSERS = { greenhouse: parseGreenhouse, ashby: parseAshby, lever: parseLe
 
 // ── Fetch with timeout ──────────────────────────────────────────────
 
-async function fetchJson(url) {
+async function fetchJson(url, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { signal: controller.signal, headers: { accept: 'application/json' } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const error = new Error(`HTTP ${res.status}`);
+      error.status = res.status;
+      throw error;
+    }
     return await res.json();
   } finally {
     clearTimeout(timer);
@@ -374,55 +426,54 @@ async function fetchJson(url) {
 
 // Workday requires POST + pagination (returns max 20 per page by default)
 async function fetchWorkdayJobs(apiUrl, baseUrl, companyName, site) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS * 3);
   const limit = 20;  // Workday rejects limit > 20 on most tenants
   let offset = 0;
   let allPostings = [];
 
-  try {
-    while (true) {
-      const res = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appliedFacets: {}, limit, offset, searchText: '' }),
-        signal: controller.signal,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const page = json.jobPostings || [];
-      allPostings = allPostings.concat(page);
-      if (page.length < limit || allPostings.length >= (json.total || 0)) break;
-      offset += limit;
-    }
-    return parseWorkday({ jobPostings: allPostings }, companyName, baseUrl, site);
-  } finally {
-    clearTimeout(timer);
+  for (let pageNumber = 0; pageNumber < workdayPacer.maxPagesPerBoard; pageNumber++) {
+    const json = await workdayPacer.run(async () => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS * 3);
+      try {
+        const res = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appliedFacets: {}, limit, offset, searchText: '' }),
+          signal: controller.signal,
+        });
+        if ([403, 429, 503].includes(res.status)) {
+          workdayPacer.trip(`HTTP ${res.status}`);
+          throw new Error(`HTTP ${res.status}`);
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } finally {
+        clearTimeout(timer);
+      }
+    });
+    const page = json.jobPostings || [];
+    allPostings = allPostings.concat(page);
+    if (page.length < limit || allPostings.length >= (json.total || 0)) break;
+    offset += limit;
   }
+
+  return parseWorkday({ jobPostings: allPostings }, companyName, baseUrl, site);
 }
 
 // SmartRecruiters paginates (100/page). Public read API, no auth.
 async function fetchSmartRecruitersJobs(apiUrl, companyId, companyName) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS * 3);
   const limit = 100;
   let offset = 0;
   let allContent = [];
 
-  try {
-    while (true) {
-      const res = await fetch(`${apiUrl}?limit=${limit}&offset=${offset}`, { signal: controller.signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
+  while (true) {
+      const json = await runAtsRequest(atsPacers.smartrecruiters, () => fetchJson(`${apiUrl}?limit=${limit}&offset=${offset}`, FETCH_TIMEOUT_MS * 3));
       const page = json.content || [];
       allContent = allContent.concat(page);
       if (page.length < limit || allContent.length >= (json.totalFound || 0)) break;
       offset += limit;
-    }
-    return parseSmartRecruiters({ content: allContent }, companyName, companyId);
-  } finally {
-    clearTimeout(timer);
   }
+  return parseSmartRecruiters({ content: allContent }, companyName, companyId);
 }
 
 // ── Title filter ────────────────────────────────────────────────────
@@ -464,12 +515,10 @@ function loadSeenUrls(maxHistoryDays = 30) {
   // policy) stay permanent.
   const AGEABLE = new Set(['added', 'skipped_dup', 'skipped_title']);
   if (existsSync(SCAN_HISTORY_PATH)) {
-    const lines = readFileSync(SCAN_HISTORY_PATH, 'utf-8').split('\n');
-    for (const line of lines.slice(1)) { // skip header
-      const parts = line.split('\t');
-      const url = parts[0];
-      const dateStr = parts[1];
-      const status = parts[5];
+    for (const row of readHistoryRows(SCAN_HISTORY_PATH)) {
+      const url = row.url;
+      const dateStr = row.firstSeen;
+      const status = row.status;
       if (!url) continue;
       if (cutoffMs > 0 && AGEABLE.has(status) && dateStr) {
         const entryTime = new Date(dateStr).getTime();
@@ -544,7 +593,7 @@ function appendToPipeline(offers) {
   // insertOffersIntoPipeline create the "## Pendientes" section. (Reading it
   // unguarded ENOENT'd a brand-new install the moment the first scan found one.)
   const text = existsSync(PIPELINE_PATH) ? readFileSync(PIPELINE_PATH, 'utf-8') : '';
-  writeFileSync(PIPELINE_PATH, insertOffersIntoPipeline(text, offers), 'utf-8');
+  atomicWriteFileSync(PIPELINE_PATH, insertOffersIntoPipeline(text, offers), 'utf-8');
 }
 
 function ensureScanHistory() {
@@ -684,6 +733,8 @@ async function main() {
   const errors = [];
   const rejects = [];            // title/location rejects, logged for false-negative auditing
   const coverageOutcomes = [];   // per-company result, for the durable coverage log
+  let workdayBoardsSkipped = 0;
+  const atsBoardsSkipped = Object.fromEntries(ATS_FAMILIES.map(name => [name, 0]));
 
   const tasks = targets.map(company => async () => {
     const { type, url, meta } = company._api;
@@ -695,7 +746,9 @@ async function main() {
       } else if (type === 'smartrecruiters') {
         jobs = await fetchSmartRecruitersJobs(url, meta.companyId, company.name);
       } else {
-        const json = await fetchJson(url);
+        const json = atsPacers[type]
+          ? await runAtsRequest(atsPacers[type], () => fetchJson(url))
+          : await fetchJson(url);
         jobs = PARSERS[type](json, company.name, meta?.subdomain);
       }
       totalFound += jobs.length;
@@ -738,10 +791,17 @@ async function main() {
         newOffers.push({ ...job, source: `${type}-api` });
       }
     } catch (err) {
-      errors.push({ company: company.name, error: err.message });
+      const failure = scanFailureOutcome(err, type);
+      const { pausedFamily, paused } = failure;
+      if (paused) {
+        if (pausedFamily) atsBoardsSkipped[pausedFamily] += 1;
+        else workdayBoardsSkipped++;
+      } else {
+        errors.push({ company: company.name, error: err.message });
+      }
       coverageOutcomes.push({
         key: covKey, name: company.name, ats: type,
-        result: /HTTP 404/.test(err.message) ? 'http_404' : 'error',
+        result: failure.result,
       });
     }
   });
@@ -774,11 +834,19 @@ async function main() {
     }
     let prevCoverage = {};
     if (existsSync(SCAN_COVERAGE_PATH)) {
-      try { prevCoverage = JSON.parse(readFileSync(SCAN_COVERAGE_PATH, 'utf-8')); } catch { prevCoverage = {}; }
+      try {
+        prevCoverage = JSON.parse(readFileSync(SCAN_COVERAGE_PATH, 'utf-8'));
+      } catch (error) {
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const preserved = `${SCAN_COVERAGE_PATH}.unreadable-${stamp}`;
+        copyFileSync(SCAN_COVERAGE_PATH, preserved);
+        console.warn(`Warning: could not parse ${SCAN_COVERAGE_PATH}; preserved it as ${preserved} and continued with empty coverage. ${error.message}`);
+        prevCoverage = {};
+      }
     }
     const { coverage, alerts } = updateCoverage(prevCoverage, coverageOutcomes, date);
     coverageAlerts = alerts;
-    if (!dryRun) writeFileSync(SCAN_COVERAGE_PATH, JSON.stringify(coverage, null, 2), 'utf-8');
+    if (!dryRun) atomicWriteFileSync(SCAN_COVERAGE_PATH, JSON.stringify(coverage, null, 2), 'utf-8');
   }
 
   // 5. Write results
@@ -824,6 +892,19 @@ async function main() {
     }
   }
 
+  if (workdayPacer.tripped) {
+    console.log(`\nWorkday paused this scan after ${workdayPacer.reason}; ${workdayBoardsSkipped} boards skipped.`);
+  }
+  for (const family of ATS_FAMILIES) {
+    const pacer = atsPacers[family];
+    if (pacer.tripped) {
+      const label = family === 'smartrecruiters'
+        ? 'SmartRecruiters'
+        : family[0].toUpperCase() + family.slice(1);
+      console.log(`\n${label} paused this scan after ${pacer.reason}; ${atsBoardsSkipped[family]} boards skipped.`);
+    }
+  }
+
   if (newOffers.length > 0) {
     console.log('\nNew offers:');
     for (const o of newOffers) {
@@ -854,6 +935,12 @@ export {
 
 const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invokedDirectly) {
+  const exitCode = enforceArgs(process.argv.slice(2), {
+    flags: ['--dry-run', '--no-age-filter'],
+    valueFlags: ['--company', '--max-age-days', '--max-history-days'],
+    usage: 'Usage: node scan.mjs [--dry-run] [--no-age-filter] [--company NAME] [--max-age-days DAYS] [--max-history-days DAYS]',
+  });
+  if (exitCode !== null) process.exit(exitCode);
   main().catch(err => {
     console.error('Fatal:', err.message);
     process.exit(1);

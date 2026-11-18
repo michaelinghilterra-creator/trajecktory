@@ -1943,7 +1943,7 @@ function DiscoBadge({ label, color, title }) {
   );
 }
 
-function DiscoveryInbox({ inbox, onReload }) {
+function PendingDiscovery({ inbox, onReload }) {
   const [sortKey, setSortKey] = useStateP('company');
   const [sortDir, setSortDir] = useStateP('asc');
   const setSort = (key) => {
@@ -2016,6 +2016,172 @@ function DiscoveryInbox({ inbox, onReload }) {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CyberWatch() {
+  const [configState, setConfigState] = useStateP(null);
+  const [dates, setDates] = useStateP([]);
+  const [selectedDate, setSelectedDate] = useStateP('');
+  const [night, setNight] = useStateP(null);
+
+  useEffectP(() => {
+    let cancelled = false;
+    window.tjkGetJson('/api/sourcer-watch/dates')
+      .then(data => {
+        if (cancelled) return;
+        setConfigState(data.configured === false ? false : true);
+        const available = data.dates || [];
+        setDates(available);
+        setSelectedDate(available[0] || '');
+      })
+      .catch(() => { if (!cancelled) setConfigState(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffectP(() => {
+    if (configState !== true) return;
+    let cancelled = false;
+    const query = selectedDate ? `?date=${encodeURIComponent(selectedDate)}` : '';
+    window.tjkGetJson(`/api/sourcer-watch${query}`)
+      .then(data => { if (!cancelled) setNight(data); })
+      .catch(() => { if (!cancelled) setNight(null); });
+    return () => { cancelled = true; };
+  }, [configState, selectedDate]);
+
+  if (configState == null) return <div className="card padded-lg dim" style={{ fontSize: 12 }}>Loading cyber watch...</div>;
+  if (configState === false) {
+    return <div className="card padded-lg dim" style={{ fontSize: 12 }}>Cyber watch is not set up. Set TJK_SOURCER_STATE_DIR to enable it.</div>;
+  }
+
+  const totals = night?.totals || { found: 0, evaluated: 0, strong: 0, dropped: 0 };
+  const roles = night?.roles || [];
+  const outcomes = Object.entries(night?.byOutcome || {});
+  const health = Object.entries(night?.health || {});
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      <div className="card padded-lg col" style={{ gap: 10 }}>
+        <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label htmlFor="cyber-watch-date" className="dim" style={{ fontSize: 12 }}>Night</label>
+          <select id="cyber-watch-date" className="select" value={selectedDate} disabled={!dates.length} onChange={event => setSelectedDate(event.target.value)}>
+            {!dates.length && <option value="">No dates available</option>}
+            {dates.map(value => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </div>
+        <div style={{ fontSize: 12 }}>
+          Found {totals.found}, evaluated {totals.evaluated}, {totals.strong} at 3.5 or higher, dropped {totals.dropped}
+        </div>
+        {outcomes.length > 0 && <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {outcomes.map(([label, count]) => <span key={label} className="stat-chip"><b>{count}</b> {label}</span>)}
+        </div>}
+        {health.length > 0 && <div className="dim" style={{ fontSize: 11.5, lineHeight: 1.5 }}>
+          Health: {health.map(([site, counters]) => `${site}: ${Object.entries(counters).map(([key, value]) => `${key} ${value}`).join(', ')}`).join('; ')}
+        </div>}
+      </div>
+
+      <div className="card padded-lg">
+        <div className="tbl-wrap" style={{ border: 'none', borderRadius: 0, background: 'transparent' }}>
+          <table className="tbl pl-tbl">
+            <thead><tr>
+              <th style={{ textAlign: 'left' }}>Company</th>
+              <th style={{ textAlign: 'left' }}>Role</th>
+              <th style={{ textAlign: 'left' }}>Location</th>
+              <th style={{ textAlign: 'left' }}>Outcome</th>
+              <th style={{ textAlign: 'left' }}>Report number</th>
+            </tr></thead>
+            <tbody>
+              {roles.length === 0 && <tr><td colSpan={5}><div className="no-data" style={{ padding: 30, textAlign: 'center' }}>Nothing found by the watch on this date.</div></td></tr>}
+              {roles.map((role, index) => (
+                <tr key={`${role.site}:${role.url || index}`}>
+                  <td className="t-co-cell"><span className="co-name">{role.company || 'Unknown'}</span></td>
+                  <td className="t-role">
+                    {role.url ? <a className="link" href={window.safeHref(role.url)} target="_blank" rel="noopener noreferrer">{role.title || 'Untitled role'}</a> : (role.title || 'Untitled role')}
+                  </td>
+                  <td>{role.location || ''}</td>
+                  <td>
+                    <DiscoBadge label={role.outcome} color={role.outcome === 'evaluated' ? 'var(--green)' : role.outcome === 'dropped' ? 'var(--red)' : 'var(--accent)'} title={role.reason || role.outcome} />
+                    <div className="dim" style={{ fontSize: 10.5, marginTop: 3 }}>{role.outcome === 'evaluated' ? (role.score == null ? 'Score unavailable' : `${role.score.toFixed(1)}/5`) : role.reason}</div>
+                  </td>
+                  <td>{role.outcome === 'evaluated' && role.reportNum != null ? role.reportNum : ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BoardHealth({ summary }) {
+  if (!summary) return <div className="card padded-lg dim" style={{ fontSize: 12 }}>Loading board health...</div>;
+  if (summary.available === false) return <div className="card padded-lg dim" style={{ fontSize: 12 }}>Board health is not available until a scan records coverage.</div>;
+
+  const counts = summary.counts || {};
+  const problems = summary.problems || [];
+  const problemLabel = {
+    not_found: 'Not found, the board may have moved',
+    error: 'Error on last scan',
+    paused: 'Paused after a rate block',
+    quiet: 'No jobs for a long time',
+    no_feed: 'No readable feed',
+  };
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      <div className="card padded-lg" style={{ fontSize: 12, lineHeight: 1.5 }}>
+        {summary.healthy} of {summary.total} tracked boards read fine. {counts.not_found || 0} not found, {counts.error || 0} erroring, {counts.paused || 0} paused, {counts.quiet || 0} quiet, {counts.no_feed || 0} with no readable feed.
+      </div>
+      <div className="card padded-lg">
+        <div className="tbl-wrap" style={{ border: 'none', borderRadius: 0, background: 'transparent' }}>
+          <table className="tbl pl-tbl">
+            <thead><tr>
+              <th style={{ textAlign: 'left' }}>Company</th>
+              <th style={{ textAlign: 'left' }}>System</th>
+              <th style={{ textAlign: 'left' }}>Problem</th>
+              <th style={{ textAlign: 'left' }}>Last jobs seen</th>
+            </tr></thead>
+            <tbody>
+              {problems.length === 0 && <tr><td colSpan={4}><div className="no-data" style={{ padding: 30, textAlign: 'center' }}>Every tracked board read fine on the last scan.</div></td></tr>}
+              {problems.map(problem => (
+                <tr key={problem.key}>
+                  <td className="t-co-cell"><span className="co-name">{problem.name}</span></td>
+                  <td>{problem.ats || ''}</td>
+                  <td>{problemLabel[problem.problem] || problem.detail}</td>
+                  <td className="t-date">{problem.lastFound || 'Never'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DiscoveryInbox({ inbox, onReload }) {
+  const [discoveryView, setDiscoveryView] = useStateP('pending');
+  const [boardHealth, setBoardHealth] = useStateP(null);
+  useEffectP(() => {
+    let cancelled = false;
+    window.tjkGetJson('/api/scan-coverage/summary')
+      .then(data => { if (!cancelled) setBoardHealth(data); })
+      .catch(() => { if (!cancelled) setBoardHealth({ available: false }); });
+    return () => { cancelled = true; };
+  }, [inbox]);
+  const problemCount = boardHealth?.problems?.length || 0;
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      <div className="subtabs">
+        <button type="button" className={'subtab' + (discoveryView === 'pending' ? ' active' : '')} onClick={() => setDiscoveryView('pending')}>Pending live</button>
+        <button type="button" className={'subtab' + (discoveryView === 'cyber' ? ' active' : '')} onClick={() => setDiscoveryView('cyber')}>Cyber watch</button>
+        <button type="button" className={'subtab' + (discoveryView === 'boards' ? ' active' : '')} onClick={() => setDiscoveryView('boards')}>
+          Board health{problemCount > 0 && <span className="pill" style={{ marginLeft: 6, padding: '1px 5px', fontSize: 9 }}>{problemCount}</span>}
+        </button>
+      </div>
+      {discoveryView === 'pending' ? <PendingDiscovery inbox={inbox} onReload={onReload} />
+        : discoveryView === 'cyber' ? <CyberWatch />
+          : <BoardHealth summary={boardHealth} />}
     </div>
   );
 }

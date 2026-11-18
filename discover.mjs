@@ -34,8 +34,23 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import { loadEnvKey as loadEnvKeyFromPaths } from './lib/env-key.mjs';
 import { buildPool, nextSlice } from './lib/discover-queries.mjs';
-import { loadCursor, saveCursor } from './lib/discover-rotation.mjs';
+import { cursorAfterQueries, loadCursor, saveCursor } from './lib/discover-rotation.mjs';
 import { checkDiscoveredJobs } from './lib/discover-liveness.mjs';
+import { enforceArgs } from './lib/cli-args.mjs';
+import { readHistoryRows, readHistoryUrls } from './lib/scan-history.mjs';
+
+function isMain() {
+  try { return path.resolve(process.argv[1]) === fileURLToPath(import.meta.url); }
+  catch { return false; }
+}
+
+if (isMain()) {
+  const exitCode = enforceArgs(process.argv.slice(2), {
+    flags: ['--dry-run', '--verbose'],
+    usage: 'Usage: node discover.mjs [--dry-run] [--verbose]',
+  });
+  if (exitCode !== null) process.exit(exitCode);
+}
 
 const DRY_RUN   = process.argv.includes('--dry-run');
 const VERBOSE   = process.argv.includes('--verbose');
@@ -130,7 +145,13 @@ function extractCompanyHint(line, rawUrl) {
 
 function collectLocalUrls() {
   const found = new Map();
-  for (const path of [PIPELINE_PATH, HISTORY_PATH, APPS_PATH]) {
+  for (const row of readHistoryRows(HISTORY_PATH)) {
+    for (const m of [...row.url.matchAll(new RegExp(ATS_URL_RE.source, 'g'))]) {
+      const raw = m[0].replace(/[|)\].,;]+$/, '');
+      if (!found.has(raw)) found.set(raw, '');
+    }
+  }
+  for (const path of [PIPELINE_PATH, APPS_PATH]) {
     if (!existsSync(path)) continue;
     for (const line of readFileSync(path, 'utf8').split('\n')) {
       for (const m of [...line.matchAll(new RegExp(ATS_URL_RE.source, 'g'))]) {
@@ -174,9 +195,8 @@ function claimCompany(index, parsed, companyHint, skipped) {
 // or a different tracking param read as brand new — a different answer than
 // scan.mjs gave for the identical URL.
 function loadSeenUrls() {
-  const seen = new Set();
+  const seen = readHistoryUrls(HISTORY_PATH, { normalize: canonicalUrl });
   for (const [path, re] of [
-    [HISTORY_PATH,  /^([^\t]+)/],
     [PIPELINE_PATH, /(https?:\/\/[^\s|]+)/],
     [APPS_PATH,     /(https?:\/\/[^\s|)\]]+)/],
   ]) {
@@ -363,11 +383,24 @@ async function main() {
   if (BRAVE_KEY && braveQueries.length) {
     console.log(`Brave rotation: queries ${braveRotation.from}-${braveRotation.to} of ${braveRotation.total}`);
     console.log(`\n🌐 Phase 2: Brave Search (${braveQueries.length} rotated ATS queries)...`);
+    let braveQueriesRun = 0;
+    let braveRateLimited = false;
     for (let i = 0; i < braveQueries.length; i++) {
       process.stdout.write(`   [${i + 1}/${braveQueries.length}] `);
       let results;
-      try { results = await braveSearch(braveQueries[i]); }
-      catch (err) { console.log(`error: ${err.message}`); continue; }
+      try {
+        results = await braveSearch(braveQueries[i]);
+        braveQueriesRun += 1;
+      } catch (err) {
+        braveQueriesRun += 1;
+        console.log(`error: ${err.message}`);
+        if (/Brave API HTTP 429/.test(err.message)) {
+          braveRateLimited = true;
+          console.log(`   Brave asked us to slow down; ${braveQueries.length - i - 1} queries left for the next run.`);
+          break;
+        }
+        continue;
+      }
 
       let added = 0;
       for (const { url, title } of results) {
@@ -406,7 +439,9 @@ async function main() {
       phase2Closed.push(...checked.closed);
       console.log(`   Liveness: ${phase2Jobs.length} open, ${phase2Closed.length} closed (skipped), ${checked.replaced.length} swapped for the current posting`);
     }
-    if (!DRY_RUN) saveCursor(DATA_DIR, braveRotation.nextCursor);
+    if (!DRY_RUN) saveCursor(DATA_DIR, braveRateLimited
+      ? cursorAfterQueries(braveRotation, braveQueriesRun)
+      : braveRotation.nextCursor);
   }
 
   // ── Phase 3: Muse API ───────────────────────────────────────────────
@@ -492,11 +527,6 @@ async function main() {
   }
 
   console.log('\n✨ Discovery complete.\n');
-}
-
-function isMain() {
-  try { return path.resolve(process.argv[1]) === fileURLToPath(import.meta.url); }
-  catch { return false; }
 }
 
 if (isMain()) main().catch(err => {
