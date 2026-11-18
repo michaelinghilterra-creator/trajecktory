@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.31.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.30.2...v5.31.0) (2026-11-18)
+
+
+### Features
+
+* find more contacts in the app, add Discovery health views, and harden scanning and data writes ([#531](https://github.com/michaelinghilterra-creator/trajecktory/issues/531)) ([5c022b1](https://github.com/michaelinghilterra-creator/trajecktory/commit/5c022b1fbf05ac1167a2e35384a5c66cf903b563))
+
 ## [5.30.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.30.1...v5.30.2) (2026-11-17)
 
 
