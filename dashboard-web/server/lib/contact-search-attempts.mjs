@@ -29,6 +29,15 @@ const BLOCKED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 export const SEARCH_TYPES = Object.freeze(['talent', 'principal']);
 export const SEARCH_CAP = 2;
 
+// Maps a caller-supplied search type onto one of the two known literals, or
+// null. Entry fields are only ever written under the returned literal, so a
+// crafted type such as "__proto__" can never become a property name.
+function knownType(type) {
+  if (type === 'talent') return 'talent';
+  if (type === 'principal') return 'principal';
+  return null;
+}
+
 // The entry for a company, created on demand. Returns null for a blank name or
 // a prototype-polluting key, so callers never touch Object.prototype.
 function entryFor(company, attempts, create) {
@@ -56,7 +65,9 @@ function entryFor(company, attempts, create) {
  *
  * Mutates the in-memory map. Caller flushes once via writeAttempts().
  */
-export function recordAttempt(company, type, appDate, attempts) {
+export function recordAttempt(company, rawType, appDate, attempts) {
+  const type = knownType(rawType);
+  if (!type) return;
   const entry = entryFor(company, attempts, true);
   if (!entry) return;
   const today = localDate();
@@ -78,7 +89,9 @@ export function recordAttempt(company, type, appDate, attempts) {
  * could not be read. Kept for visibility only. It never moves the try count or
  * lastSearched, so a run of failures can never park a company.
  */
-export function recordSearchError(company, type, message, attempts) {
+export function recordSearchError(company, rawType, message, attempts) {
+  const type = knownType(rawType);
+  if (!type) return;
   const entry = entryFor(company, attempts, true);
   if (!entry) return;
   if (!entry.errors || typeof entry.errors !== 'object') entry.errors = {};
@@ -115,7 +128,8 @@ export function resetAttempts(company, type, attempts, options = {}) {
 export function resetEntry(entry, type, { unconfirmedOnly = false } = {}) {
   if (!entry || typeof entry !== 'object') return 0;
   let removed = 0;
-  for (const t of (type ? [type] : SEARCH_TYPES)) {
+  const wanted = type ? [knownType(type)].filter(Boolean) : SEARCH_TYPES;
+  for (const t of wanted) {
     const count = entry[t] || 0;
     const confirmed = Math.min(count, entry.confirmed?.[t] || 0);
     const keep = unconfirmedOnly ? confirmed : 0;
