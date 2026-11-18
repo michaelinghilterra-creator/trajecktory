@@ -7,6 +7,7 @@ import { normalizeCompany } from './lib/identity.mjs';
 import {
   atsSlug,
   buildPortalsEntry,
+  insertPortalsEntries,
   normalizeToken,
 } from './lib/portals.mjs';
 
@@ -148,8 +149,10 @@ function appendEntry(portalsRaw, result, match, today) {
     const safeName = String(result.name).replace(/[\r\n:]+/g, ' ').trim();
     yamlBlock = `\n  - name: ${safeName}\n    careers_url: ${match.careersUrl}\n    notes: "${note}"\n    enabled: true`;
   }
-  const eol = portalsRaw.includes('\r\n') ? '\r\n' : '\n';
-  return portalsRaw.trimEnd() + eol + yamlBlock.split('\n').join(eol) + eol;
+  // insertPortalsEntries keeps the entry inside tracked_companies. Appending at the
+  // end of the file put it in whatever top-level section came last, where the
+  // scanner never reads it.
+  return insertPortalsEntries(portalsRaw, [yamlBlock]);
 }
 
 export function migratePortalsText(portalsRaw, result, { allowSlugOnly = false, today = '' } = {}) {

@@ -135,6 +135,26 @@ check(/careers_url: https:\/\/job-boards\.greenhouse\.io\/examplewidgets/.test(a
 check(/api: https:\/\/boards-api\.greenhouse\.io\/v1\/boards\/examplewidgets\/jobs/.test(applied), 'Greenhouse entry includes its API');
 check(fs.readdirSync(applyTmp).some(name => name.startsWith('portals.yml.bak-probe-')), 'apply creates a timestamped backup');
 
+// A section after tracked_companies must not swallow the new entry.
+const sectionTmp = makeSandbox('board-probe-trailing-section');
+fs.mkdirSync(path.join(sectionTmp, 'data'));
+fs.writeFileSync(path.join(sectionTmp, 'data/scan-coverage.json'), fs.readFileSync(path.join(applyTmp, 'data/scan-coverage.json')));
+fs.writeFileSync(path.join(sectionTmp, 'portals.yml'), [
+  portalsFixture,
+  'owned_elsewhere:',
+  '  - name: Quennox Ratchet Works',
+  '    careers_url: https://jobs.example.test/quennox',
+  '    owner: external',
+  '',
+].join('\n'), 'utf8');
+await main(['--apply', '--only', 'Example Widgets Inc.', '--no-delay'], { fetchFn: verifiedFetch, root: sectionTmp });
+const sectionDoc = yaml.load(fs.readFileSync(path.join(sectionTmp, 'portals.yml'), 'utf8'));
+check(sectionDoc.tracked_companies.some(entry => entry.enabled === true
+  && entry.careers_url === 'https://job-boards.greenhouse.io/examplewidgets'),
+  'the new board entry lands inside tracked_companies when another section follows');
+check(sectionDoc.owned_elsewhere.length === 1 && sectionDoc.owned_elsewhere[0].name === 'Quennox Ratchet Works',
+  'the section after tracked_companies is left unchanged');
+
 const sameSlugTmp = makeSandbox('board-probe-same-slug-cross-ats');
 fs.mkdirSync(path.join(sameSlugTmp, 'data'));
 fs.writeFileSync(path.join(sameSlugTmp, 'data/scan-coverage.json'), JSON.stringify({
