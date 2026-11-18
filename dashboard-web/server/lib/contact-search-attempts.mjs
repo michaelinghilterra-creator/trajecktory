@@ -3,7 +3,7 @@ import path from 'path';
 import { DATA_DIR } from '../config.mjs';
 import { normCompany } from './tt-reconcile-core.mjs';
 
-const ATTEMPTS_PATH = path.join(DATA_DIR, 'contact-search-attempts.json');
+export const ATTEMPTS_PATH = path.join(DATA_DIR, 'contact-search-attempts.json');
 
 /**
  * Read attempts map from disk. Returns {} if file missing or corrupt.
@@ -106,9 +106,14 @@ export function isAtCap(company, type, appDate, attempts, cap = SEARCH_CAP) {
  * real empty searches and drops only the older ones that cannot be verified.
  * Returns the number of tries removed. Mutates the in-memory map.
  */
-export function resetAttempts(company, type, attempts, { unconfirmedOnly = false } = {}) {
-  const entry = entryFor(company, attempts, false);
-  if (!entry) return 0;
+export function resetAttempts(company, type, attempts, options = {}) {
+  return resetEntry(entryFor(company, attempts, false), type, options);
+}
+
+// The same reset on an entry already in hand. The reset script walks the stored
+// keys directly, so it must not send them back through the name normalizer.
+export function resetEntry(entry, type, { unconfirmedOnly = false } = {}) {
+  if (!entry || typeof entry !== 'object') return 0;
   let removed = 0;
   for (const t of (type ? [type] : SEARCH_TYPES)) {
     const count = entry[t] || 0;

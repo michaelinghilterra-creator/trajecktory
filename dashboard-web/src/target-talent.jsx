@@ -1806,6 +1806,25 @@ window.FindContactsPanel = FindContactsPanel;
 
 const STEPS = ["Preview", "Discover", "Apply"];
 
+// Companies parked after two searches that found nobody, each with a way back
+// into the list. Errors and timeouts never park a company, so everything here
+// had two finished searches (or was parked before that rule existed).
+function CappedCompanies({ items, busyKey, onRetry }) {
+  if (!items.length) return null;
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ color: "var(--orange)", fontSize: 11, marginBottom: 4 }}>{items.length} {items.length === 1 ? "company was" : "companies were"} skipped: searched twice with no results.</div>
+      {items.map(c => (
+        <div key={c.search + "::" + c.company} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "3px 0" }}>
+          <span style={{ flex: 1 }}>{c.company}</span>
+          <button className="btn sm" disabled={busyKey === c.search + "::" + c.company} onClick={() => onRetry(c)}
+            title="Clear the two empty searches so this company is searched again.">Give it another try</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -1820,6 +1839,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
   const [scanning, setScanning] = useState(false);
   const [discoverJob, setDiscoverJob] = useState(null);
   const [discoverJobId, setDiscoverJobId] = useState(null);
+  const [retryKey, setRetryKey] = useState(null);
   const seenSuggestions = useRef(new Set());
   const dismissedSuggestions = useRef(new Set());
   const reloadTimer = useRef(null);
@@ -1914,6 +1934,25 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
   }, [discoverJobId, absorbDiscoverJob]);
 
   const toggleSet = (setter, key) => setter(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
+
+  // "Give it another try": clear the parked company's empty searches, then
+  // re-read the preview so it moves from the skipped list into the gap list,
+  // ticked, without disturbing what is already ticked.
+  const retryCapped = async (c) => {
+    const key = c.search + "::" + c.company;
+    setRetryKey(key); setError(null);
+    try {
+      const r = await window.tjkMutate("/api/tt-reconcile/reset-attempts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ company: c.company, search: c.search }) });
+      const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+      if (!r.ok || d.error) throw new Error(d.error || `HTTP ${r.status}`);
+      const fresh = await fetch(`/api/tt-reconcile/preview?mode=${initialMode}`).then(x => x.json());
+      if (fresh.error) throw new Error(fresh.error);
+      setPreview(fresh);
+      (c.search === "principal" ? setPrincipalGapSel : setGapSel)(sel => new Set(sel).add(c.company));
+    } catch (e) { setError(e.message); }
+    setRetryKey(null);
+  };
+  const cappedFor = search => (preview.cappedCompanies || []).filter(c => c.search === search);
 
   const runDiscover = async () => {
     setStep(1); setScanning(true); setError(null);
@@ -2038,7 +2077,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
                   ))}
                 <div className="rec-section-label" style={{ marginTop: 22 }}><TIcon d={TI.building} size={12} /> Companies with nobody to talk to &middot; {gapSel.size} selected</div>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Companies in your pipeline with no contact yet.</div>
-                {(preview.searchCapped || 0) > 0 && <div style={{ color: "var(--orange)", fontSize: 11, marginBottom: 6 }}>{preview.searchCapped} company{preview.searchCapped === 1 ? " was" : "ies were"} skipped: searched twice with no results.</div>}
+                <CappedCompanies items={cappedFor("talent")} busyKey={retryKey} onRetry={retryCapped} />
                 {preview.companiesNeedingContacts.length === 0
                   ? <div className="empty" style={{ padding: "12px 0" }}>All companies covered.</div>
                   : preview.companiesNeedingContacts.map(c => (
@@ -2053,7 +2092,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
                   <>
                     <div className="rec-section-label" style={{ marginTop: 22 }}><TIcon d={TI.users} size={12} /> Companies where nobody can make the decision &middot; {principalGapSel.size} selected</div>
                     <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>These companies have contacts, but nobody who can influence the hire.</div>
-                    {(preview.searchCapped || 0) > 0 && <div style={{ color: "var(--orange)", fontSize: 11, marginBottom: 6 }}>{preview.searchCapped} company{preview.searchCapped === 1 ? " was" : "ies were"} skipped: searched twice with no results.</div>}
+                    <CappedCompanies items={cappedFor("principal")} busyKey={retryKey} onRetry={retryCapped} />
                     {preview.companiesNeedingPrincipal.length === 0
                       ? <div className="empty" style={{ padding: "12px 0" }}>Every company has a decision-maker.</div>
                       : preview.companiesNeedingPrincipal.map(c => (

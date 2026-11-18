@@ -15,7 +15,7 @@ import { mergeStakeholderAdditions, validateStakeholder, knownDomainKey } from '
 import { findExistingContact, heldContactRows } from '../../../lib/contact-match.mjs';
 import { parseReferralsMd } from '../lib/referrals.mjs';
 import { readReconcileDismissed, addReconcileDismissed, readMute } from '../lib/sidecars.mjs';
-import { readAttempts, recordAttempt, recordSearchError, writeAttempts } from '../lib/contact-search-attempts.mjs';
+import { readAttempts, recordAttempt, recordSearchError, resetAttempts, writeAttempts, SEARCH_TYPES } from '../lib/contact-search-attempts.mjs';
 import { currentBatch } from '../lib/pricing.mjs';
 import { startCadences } from '../lib/cadence-start.mjs';
 import { withWasTag } from '../lib/contact-revive.mjs';
@@ -290,6 +290,28 @@ router.get('/api/tt-reconcile/preview', (req, res) => {
       ? req.query.mode : undefined;
     const attempts = readAttempts();
     res.json(reconcilePreview(apps, ttRows, { mode, attempts, muted: readMute() }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/tt-reconcile/reset-attempts
+// body: { company, search? }  search is 'talent' or 'principal'; omit for both.
+// "Give it another try": clears the empty-search count that parked a company,
+// so it returns to the gap list on the next preview. Nothing else is touched.
+router.post('/api/tt-reconcile/reset-attempts', (req, res) => {
+  try {
+    const { company, search } = req.body || {};
+    if (typeof company !== 'string' || !normCompany(company)) {
+      return res.status(400).json({ error: 'company required' });
+    }
+    if (search != null && !SEARCH_TYPES.includes(search)) {
+      return res.status(400).json({ error: `search must be one of: ${SEARCH_TYPES.join(', ')}` });
+    }
+    const attempts = readAttempts();
+    const removed = resetAttempts(company, search || null, attempts);
+    if (removed > 0) writeAttempts(attempts);
+    res.json({ ok: true, removed });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -87,6 +87,7 @@ AI-powered job search, run from a local dashboard: pipeline tracking, offer scor
 | `data/follow-ups.md` | Follow-up history tracker |
 | `scan.mjs` | Zero-token portal scanner — hits Greenhouse/Ashby/Lever APIs directly, zero LLM cost |
 | `repair-workday-urls.mjs` | Restores the careers-site segment in stored Workday links that the scanner saved without one before v5.13.1 (`node repair-workday-urls.mjs` dry run, then `--apply`). The site is read from `portals.yml`; a tenant with several sites, or none known, is reported and left alone. Only the url cell is written, with a timestamped backup and a byte-identical check of every other cell. |
+| `reset-contact-search-attempts.mjs` | Gives companies parked by the contact search cap (two empty searches) another try. Dry run by default, `--apply` writes after a timestamped backup; `--tier talent` or `--tier principal` narrows it. Tries counted before errors stopped counting cannot be told apart from real empty searches, so it clears every unconfirmed try and keeps confirmed ones unless `--all` is passed. |
 | `check-liveness.mjs` | Job posting liveness checker |
 | `data/liveness-observations.tsv` | Every verdict `verify-actionable.mjs` reached while liveness discarding is off, for measuring the checker against reality |
 | `liveness-core.mjs` | Shared liveness logic (expired signals win over generic Apply text) |

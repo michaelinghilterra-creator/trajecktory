@@ -581,6 +581,7 @@ for (const suite of [
   'tests/tt-reconcile.test.mjs',
   'tests/contact-search-attempts.test.mjs',
   'tests/discover-attempts.test.mjs',
+  'tests/reset-contact-search-attempts.test.mjs',
   'tests/discover-error-copy.test.mjs',
   'tests/tt-linkedin.test.mjs',
   'tests/connect-queue.test.mjs',
