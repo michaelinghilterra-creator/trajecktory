@@ -546,6 +546,7 @@ for (const suite of [
   'tests/pipeline-firstseen.test.mjs',
   'tests/scan-coverage-summary.test.mjs',
   'tests/scan-history.test.mjs',
+  'tests/prune-history.test.mjs',
   'tests/discovery-history-cache.test.mjs',
   'tests/workflow-persistence.test.mjs',
   'tests/triage-results.test.mjs',
