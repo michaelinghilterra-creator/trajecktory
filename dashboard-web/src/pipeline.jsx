@@ -2114,15 +2114,74 @@ function CyberWatch() {
   );
 }
 
+function BoardHealth({ summary }) {
+  if (!summary) return <div className="card padded-lg dim" style={{ fontSize: 12 }}>Loading board health...</div>;
+  if (summary.available === false) return <div className="card padded-lg dim" style={{ fontSize: 12 }}>Board health is not available until a scan records coverage.</div>;
+
+  const counts = summary.counts || {};
+  const problems = summary.problems || [];
+  const problemLabel = {
+    not_found: 'Not found, the board may have moved',
+    error: 'Error on last scan',
+    paused: 'Paused after a rate block',
+    quiet: 'No jobs for a long time',
+    no_feed: 'No readable feed',
+  };
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      <div className="card padded-lg" style={{ fontSize: 12, lineHeight: 1.5 }}>
+        {summary.healthy} of {summary.total} tracked boards read fine. {counts.not_found || 0} not found, {counts.error || 0} erroring, {counts.paused || 0} paused, {counts.quiet || 0} quiet, {counts.no_feed || 0} with no readable feed.
+      </div>
+      <div className="card padded-lg">
+        <div className="tbl-wrap" style={{ border: 'none', borderRadius: 0, background: 'transparent' }}>
+          <table className="tbl pl-tbl">
+            <thead><tr>
+              <th style={{ textAlign: 'left' }}>Company</th>
+              <th style={{ textAlign: 'left' }}>System</th>
+              <th style={{ textAlign: 'left' }}>Problem</th>
+              <th style={{ textAlign: 'left' }}>Last jobs seen</th>
+            </tr></thead>
+            <tbody>
+              {problems.length === 0 && <tr><td colSpan={4}><div className="no-data" style={{ padding: 30, textAlign: 'center' }}>Every tracked board read fine on the last scan.</div></td></tr>}
+              {problems.map(problem => (
+                <tr key={problem.key}>
+                  <td className="t-co-cell"><span className="co-name">{problem.name}</span></td>
+                  <td>{problem.ats || ''}</td>
+                  <td>{problemLabel[problem.problem] || problem.detail}</td>
+                  <td className="t-date">{problem.lastFound || 'Never'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DiscoveryInbox({ inbox, onReload }) {
   const [discoveryView, setDiscoveryView] = useStateP('pending');
+  const [boardHealth, setBoardHealth] = useStateP(null);
+  useEffectP(() => {
+    let cancelled = false;
+    window.tjkGetJson('/api/scan-coverage/summary')
+      .then(data => { if (!cancelled) setBoardHealth(data); })
+      .catch(() => { if (!cancelled) setBoardHealth({ available: false }); });
+    return () => { cancelled = true; };
+  }, [inbox]);
+  const problemCount = boardHealth?.problems?.length || 0;
   return (
     <div className="col" style={{ gap: 16 }}>
       <div className="subtabs">
         <button type="button" className={'subtab' + (discoveryView === 'pending' ? ' active' : '')} onClick={() => setDiscoveryView('pending')}>Pending live</button>
         <button type="button" className={'subtab' + (discoveryView === 'cyber' ? ' active' : '')} onClick={() => setDiscoveryView('cyber')}>Cyber watch</button>
+        <button type="button" className={'subtab' + (discoveryView === 'boards' ? ' active' : '')} onClick={() => setDiscoveryView('boards')}>
+          Board health{problemCount > 0 && <span className="pill" style={{ marginLeft: 6, padding: '1px 5px', fontSize: 9 }}>{problemCount}</span>}
+        </button>
       </div>
-      {discoveryView === 'pending' ? <PendingDiscovery inbox={inbox} onReload={onReload} /> : <CyberWatch />}
+      {discoveryView === 'pending' ? <PendingDiscovery inbox={inbox} onReload={onReload} />
+        : discoveryView === 'cyber' ? <CyberWatch />
+          : <BoardHealth summary={boardHealth} />}
     </div>
   );
 }

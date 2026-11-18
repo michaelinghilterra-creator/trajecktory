@@ -5,13 +5,14 @@ import { canonicalUrl, normalizeCompany, sameRole } from '../lib/identity.mjs';
 import { parseTracker } from '../lib/tracker.mjs';
 import { buildTitleFilter } from '../lib/scan-core.mjs';
 import { localToday } from '../lib/local-date.mjs';
+import { readHistoryRows } from '../lib/scan-history.mjs';
 
 const candidates = JSON.parse(fs.readFileSync('batch/scan-candidates.json', 'utf8'));
 const portals = yaml.load(fs.readFileSync('portals.yml', 'utf8'));
 const passesTitle = buildTitleFilter(portals.title_filter);
 
-const histRaw = fs.readFileSync('data/scan-history.tsv', 'utf8');
-const histUrls = new Set(histRaw.split('\n').slice(1).map(l => canonicalUrl(l.split('\t')[0])).filter(Boolean));
+const historyRows = [...readHistoryRows('data/scan-history.tsv')];
+const histUrls = new Set(historyRows.map(row => canonicalUrl(row.url)).filter(Boolean));
 
 const pipeRaw = fs.readFileSync('data/pipeline.md', 'utf8');
 const pipeUrls = new Set();
@@ -64,7 +65,7 @@ if (mH) {
 if (out.added.length) fs.writeFileSync('data/pipeline.md', pipe);
 
 // Append to scan-history.tsv
-let hist = histRaw;
+let hist = 'url\tfirst_seen\tportal\ttitle\tcompany\tstatus\n' + historyRows.map(row => row.raw).join('\n');
 if (!hist.endsWith('\n')) hist += '\n';
 const histRows = [];
 for (const c of out.added) histRows.push(`${c.url}\t${today}\t${c.query}\t${c.title}\t${c.company}\tadded`);

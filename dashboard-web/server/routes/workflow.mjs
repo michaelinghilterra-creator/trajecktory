@@ -1,9 +1,11 @@
 import express from 'express';
 import { exec } from 'child_process';
 import { readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import fs from 'fs';
+import { dirname, join } from 'path';
 import { ROOT_DIR } from '../config.mjs';
 import { WORKFLOW_STEPS, tailLines } from '../lib/workflow.mjs';
+import { atomicWriteFileSync } from '../../../lib/atomic-write.mjs';
 
 export const router = express.Router();
 
@@ -64,6 +66,60 @@ router.post('/api/pipeline/needs-manual/resolve', (req, res) => {
 // into a job record the frontend polls.
 
 const workflowJobs = new Map();
+const WORKFLOW_JOBS_FILE = process.env.TJK_WORKFLOW_JOBS_FILE || join(ROOT_DIR, 'logs', 'workflow-jobs.json');
+const MAX_PERSISTED_WORKFLOW_JOBS = 50;
+const WORKFLOW_INTERRUPTED_MESSAGE = 'Interrupted by a dashboard restart. Steps already finished were kept. Run it again to continue.';
+
+export function persistWorkflowJobs(file = WORKFLOW_JOBS_FILE, jobs = workflowJobs) {
+  try {
+    fs.mkdirSync(dirname(file), { recursive: true });
+    const entries = [...jobs.entries()]
+      .sort((a, b) => (b[1]?.startedAt || 0) - (a[1]?.startedAt || 0))
+      .slice(0, MAX_PERSISTED_WORKFLOW_JOBS);
+    atomicWriteFileSync(file, JSON.stringify(entries), 'utf8');
+    return true;
+  } catch (error) {
+    console.warn(`[workflow jobs] failed to write ${file}: ${error.message}`);
+    return false;
+  }
+}
+
+export function loadWorkflowJobs(file = WORKFLOW_JOBS_FILE, jobs = workflowJobs, now = Date.now) {
+  try {
+    if (!fs.existsSync(file)) return false;
+    const entries = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!Array.isArray(entries)) throw new Error('stored workflow jobs are not an array');
+    let interrupted = false;
+    for (const [id, job] of entries.slice(0, MAX_PERSISTED_WORKFLOW_JOBS)) {
+      if (!id || !job || typeof job !== 'object') continue;
+      if (job.status === 'running') {
+        const stamp = now();
+        jobs.set(id, {
+          ...job,
+          status: 'interrupted',
+          error: WORKFLOW_INTERRUPTED_MESSAGE,
+          interruptedAt: stamp,
+          finishedAt: stamp,
+        });
+        interrupted = true;
+      } else {
+        jobs.set(id, job);
+      }
+    }
+    if (interrupted) persistWorkflowJobs(file, jobs);
+    return true;
+  } catch (error) {
+    console.warn(`[workflow jobs] failed to read or parse ${file}: ${error.message}`);
+    return false;
+  }
+}
+
+function setWorkflowJob(jobId, job) {
+  workflowJobs.set(jobId, job);
+  persistWorkflowJobs();
+}
+
+loadWorkflowJobs();
 export const postEvalChains = new Map();
 
 export function claimPostEvalChain(evaluateJobId, chains = postEvalChains, now = Date.now) {
@@ -93,16 +149,16 @@ router.post('/api/workflow/:step', (req, res) => {
   if (!def || typeof def.cmd !== 'string') return res.status(400).json({ error: `Unknown step: ${step}` });
 
   const jobId = `wf-${step}-${Date.now()}`;
-  workflowJobs.set(jobId, { step, status: 'running', label: def.label, output: '', startedAt: Date.now() });
+  setWorkflowJob(jobId, { step, status: 'running', label: def.label, output: '', startedAt: Date.now() });
 
   const projectRoot = ROOT_DIR;
-  const child = exec(def.cmd, { cwd: projectRoot, maxBuffer: 5 * 1024 * 1024 }, (err, stdout, stderr) => {
+  exec(def.cmd, { cwd: projectRoot, maxBuffer: 5 * 1024 * 1024 }, (err, stdout, stderr) => {
     const job = workflowJobs.get(jobId) || {};
     const output = (stdout || '') + (stderr ? '\n[stderr]\n' + stderr : '');
     if (err && err.code !== 0) {
-      workflowJobs.set(jobId, { ...job, status: 'error', error: err.message, output, summary: tailLines(output), finishedAt: Date.now() });
+      setWorkflowJob(jobId, { ...job, status: 'error', error: err.message, output, summary: tailLines(output), finishedAt: Date.now() });
     } else {
-      workflowJobs.set(jobId, { ...job, status: 'done', output, summary: def.summarize(output), finishedAt: Date.now() });
+      setWorkflowJob(jobId, { ...job, status: 'done', output, summary: def.summarize(output), finishedAt: Date.now() });
     }
   });
 

@@ -37,6 +37,7 @@ import { buildPool, nextSlice } from './lib/discover-queries.mjs';
 import { cursorAfterQueries, loadCursor, saveCursor } from './lib/discover-rotation.mjs';
 import { checkDiscoveredJobs } from './lib/discover-liveness.mjs';
 import { enforceArgs } from './lib/cli-args.mjs';
+import { readHistoryRows, readHistoryUrls } from './lib/scan-history.mjs';
 
 function isMain() {
   try { return path.resolve(process.argv[1]) === fileURLToPath(import.meta.url); }
@@ -144,7 +145,13 @@ function extractCompanyHint(line, rawUrl) {
 
 function collectLocalUrls() {
   const found = new Map();
-  for (const path of [PIPELINE_PATH, HISTORY_PATH, APPS_PATH]) {
+  for (const row of readHistoryRows(HISTORY_PATH)) {
+    for (const m of [...row.url.matchAll(new RegExp(ATS_URL_RE.source, 'g'))]) {
+      const raw = m[0].replace(/[|)\].,;]+$/, '');
+      if (!found.has(raw)) found.set(raw, '');
+    }
+  }
+  for (const path of [PIPELINE_PATH, APPS_PATH]) {
     if (!existsSync(path)) continue;
     for (const line of readFileSync(path, 'utf8').split('\n')) {
       for (const m of [...line.matchAll(new RegExp(ATS_URL_RE.source, 'g'))]) {
@@ -188,9 +195,8 @@ function claimCompany(index, parsed, companyHint, skipped) {
 // or a different tracking param read as brand new — a different answer than
 // scan.mjs gave for the identical URL.
 function loadSeenUrls() {
-  const seen = new Set();
+  const seen = readHistoryUrls(HISTORY_PATH, { normalize: canonicalUrl });
   for (const [path, re] of [
-    [HISTORY_PATH,  /^([^\t]+)/],
     [PIPELINE_PATH, /(https?:\/\/[^\s|]+)/],
     [APPS_PATH,     /(https?:\/\/[^\s|)\]]+)/],
   ]) {

@@ -46,7 +46,7 @@ window.RunWizardTab = function RunWizardTab({ toast }) {
             .then(r => r.json())
             .then(job => {
               setJobs(j => ({ ...j, [phase.id]: job }));
-              if (job.status === 'done' || job.status === 'error') {
+              if (job.status === 'done' || job.status === 'error' || job.status === 'interrupted') {
                 clearInterval(poll);
                 delete pollersRef.current[phase.id];
               }
@@ -67,6 +67,7 @@ window.RunWizardTab = function RunWizardTab({ toast }) {
   const busy = Object.values(jobs).some(j => j?.status === 'running');
 
   function dot(status) {
+    if (status === 'interrupted') return { ch: '!', color: 'var(--orange)' };
     if (status === 'running') return { ch: '◐', color: 'var(--yellow)' };
     if (status === 'done')    return { ch: '✓', color: 'var(--green)' };
     if (status === 'warn')    return { ch: '⚠', color: 'var(--yellow)' };

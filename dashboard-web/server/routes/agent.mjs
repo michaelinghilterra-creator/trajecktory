@@ -114,8 +114,11 @@ function loadPersistedJobs() {
     const cutoff = Date.now() - 6 * 60 * 60 * 1000;   // drop anything older than 6h
     for (const [id, job] of entries) {
       if (!job || (job.startedAt && job.startedAt < cutoff)) continue;
+      const interruptedMessage = job.mode === 'pipeline'
+        ? 'Interrupted by a dashboard restart. Finished evaluations were kept. Click Run to continue with the rest.'
+        : 'Interrupted by a dashboard restart. Click Run to retry.';
       agentJobs.set(id, job.status === 'running'
-        ? { ...job, status: 'interrupted', error: 'Interrupted by a dashboard restart. Click Run to retry.', interruptedAt: Date.now() }
+        ? { ...job, status: 'interrupted', error: interruptedMessage, interruptedAt: Date.now() }
         : job);
     }
   } catch (error) {

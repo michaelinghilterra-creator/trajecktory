@@ -887,7 +887,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           if (error || !jobId) { setJobs(j => ({ ...j, [id]: { status: 'error', error: error || 'failed to start' } })); return resolve('error'); }
           const poll = setInterval(() => {
             fetch(`/api/workflow/status/${jobId}`).then(r => r.json()).then(job => {
-              if (job.status === 'done' || job.status === 'error') {
+              if (job.status === 'done' || job.status === 'error' || job.status === 'interrupted') {
                 clearInterval(poll); delete pollersRef.current[id];
                 setJobs(j => ({ ...j, [id]: job }));
                 if (job.status === 'done') onDataChanged && onDataChanged();
@@ -1009,7 +1009,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           fetch(`/api/workflow/status/${jobId}`)
             .then(r => r.json())
             .then(job => {
-              if (job.status === 'done' || job.status === 'error') {
+              if (job.status === 'done' || job.status === 'error' || job.status === 'interrupted') {
                 clearInterval(poll);
                 delete pollersRef.current[step.id];
                 setJobs(j => ({ ...j, [step.id]: job }));
@@ -1295,7 +1295,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
               ))}
               {job?.status === 'interrupted' && (
                 <div className="workflow-summary" style={{ color: 'var(--orange)' }}>
-                  Run interrupted{typeof job.progressTotal === 'number' && job.progressTotal > 0 && (job.evaluationsDone || 0) > 0 ? ` at ${Math.min(job.evaluationsDone, job.progressTotal)} of ${job.progressTotal}` : ''}. Click Run to retry.
+                  {job.error || `Run interrupted${typeof job.progressTotal === 'number' && job.progressTotal > 0 && (job.evaluationsDone || 0) > 0 ? ` at ${Math.min(job.evaluationsDone, job.progressTotal)} of ${job.progressTotal}` : ''}. Click Run to retry.`}
                 </div>
               )}
               {job?.error && job.status !== 'interrupted' && (

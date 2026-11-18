@@ -28,6 +28,7 @@ import { createWorkdayPacer } from './lib/workday-pacer.mjs';
 import { createHostPacer, isRateBlock } from './lib/host-pacer.mjs';
 import { atomicWriteFileSync } from './lib/atomic-write.mjs';
 import { enforceArgs } from './lib/cli-args.mjs';
+import { readHistoryRows } from './lib/scan-history.mjs';
 const parseYaml = yaml.load;
 
 /** The scanner reads only locally tracked companies, never externally owned ones. */
@@ -514,12 +515,10 @@ function loadSeenUrls(maxHistoryDays = 30) {
   // policy) stay permanent.
   const AGEABLE = new Set(['added', 'skipped_dup', 'skipped_title']);
   if (existsSync(SCAN_HISTORY_PATH)) {
-    const lines = readFileSync(SCAN_HISTORY_PATH, 'utf-8').split('\n');
-    for (const line of lines.slice(1)) { // skip header
-      const parts = line.split('\t');
-      const url = parts[0];
-      const dateStr = parts[1];
-      const status = parts[5];
+    for (const row of readHistoryRows(SCAN_HISTORY_PATH)) {
+      const url = row.url;
+      const dateStr = row.firstSeen;
+      const status = row.status;
       if (!url) continue;
       if (cutoffMs > 0 && AGEABLE.has(status) && dateStr) {
         const entryTime = new Date(dateStr).getTime();
