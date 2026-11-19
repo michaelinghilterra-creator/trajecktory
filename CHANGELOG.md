@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.32.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.32.2...v5.32.3) (2026-11-19)
+
+
+### Bug Fixes
+
+* make the contact search entry lookup provably safe from prototype writes ([#539](https://github.com/michaelinghilterra-creator/trajecktory/issues/539)) ([05a5adc](https://github.com/michaelinghilterra-creator/trajecktory/commit/05a5adc190c9b77f98ee8fc297ece7c2b0773eb7))
+
 ## [5.32.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.32.1...v5.32.2) (2026-11-19)
 
 
