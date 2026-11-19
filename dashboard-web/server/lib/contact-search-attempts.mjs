@@ -25,7 +25,6 @@ export function writeAttempts(attempts) {
   fs.renameSync(tempPath, ATTEMPTS_PATH);
 }
 
-const BLOCKED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 export const SEARCH_TYPES = Object.freeze(['talent', 'principal']);
 export const SEARCH_CAP = 2;
 
@@ -40,14 +39,23 @@ function knownType(type) {
 
 // The entry for a company, created on demand. Returns null for a blank name or
 // a prototype-polluting key, so callers never touch Object.prototype.
+//
+// Written so that the guarantee does not depend on the name normalizer: the three
+// dangerous names are refused by direct comparison, an existing entry is read as
+// the map's OWN property (never through the prototype chain), and a new entry is
+// returned as the fresh object itself rather than read back out of the map.
 function entryFor(company, attempts, create) {
   const key = normCompany(company);
-  if (!key || BLOCKED_KEYS.has(key)) return null;
-  if (!Object.hasOwn(attempts, key)) {
-    if (!create) return null;
-    attempts[key] = {};
+  if (!key || key === '__proto__' || key === 'constructor' || key === 'prototype') return null;
+  const own = Object.getOwnPropertyDescriptor(attempts, key);
+  if (own) {
+    const existing = own.value;
+    return existing && typeof existing === 'object' ? existing : null;
   }
-  return attempts[key];
+  if (!create) return null;
+  const fresh = {};
+  Object.defineProperty(attempts, key, { value: fresh, enumerable: true, writable: true, configurable: true });
+  return fresh;
 }
 
 /**
