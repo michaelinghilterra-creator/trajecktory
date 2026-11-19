@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.32.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.32.0...v5.32.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* retry Widen via Claude search when the agent returns no company list ([#535](https://github.com/michaelinghilterra-creator/trajecktory/issues/535)) ([f5399e1](https://github.com/michaelinghilterra-creator/trajecktory/commit/f5399e17f429757d62aae55471eb0503a8d670d3))
+
 ## [5.32.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.31.0...v5.32.0) (2026-11-19)
 
 
