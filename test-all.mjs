@@ -729,6 +729,7 @@ for (const suite of [
   'tests/batch-runner-sandbox.test.mjs',
   'tests/batch-runner-min-score.test.mjs',
   'tests/obsidian-nightly.test.mjs',
+  'tests/env-file.test.mjs',
   'tests/obsidian-postfix.test.mjs',
   'tests/prune-gated.test.mjs',
   'tests/inbound-classify-gaps.test.mjs',

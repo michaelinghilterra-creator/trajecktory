@@ -4,16 +4,14 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { parseEnvText } from '../../lib/env-file.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load .env from the dashboard-web directory (one level up from server/).
 const envPath = path.resolve(__dirname, '../.env');
 if (fs.existsSync(envPath)) {
-  for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
-    const m = line.match(/^([^#=]+)=(.*)$/);
-    if (m) process.env[m[1].trim()] = m[2].trim();
-  }
+  Object.assign(process.env, parseEnvText(fs.readFileSync(envPath, 'utf8')));
 }
 
 // Repo root (dashboard-web/server -> dashboard-web -> repo root).
