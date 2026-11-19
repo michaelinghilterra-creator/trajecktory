@@ -2970,13 +2970,19 @@ function TwcPanel({ toast }) {
           <span className="mono dim" style={{ fontSize: 11 }}>To</span>{dateInput(to, setTo)}
           <button className="btn primary sm" onClick={generate} disabled={loading}>{loading ? 'Loading…' : 'Generate'}</button>
           {blocked
-            ? <button type="button" className="btn sm" disabled title="Look at the items below first">Download CSV</button>
+            ? <>
+              <button type="button" className="btn sm" disabled title="Look at the items below first">Download CSV</button>
+              <button type="button" className="dim" onClick={() => document.getElementById('activity-held-items')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                style={{ border: 0, background: 'none', padding: 0, fontSize: 11.5, cursor: 'pointer', textDecoration: 'underline' }}>
+                Held: {gate.count} {gate.count === 1 ? 'item' : 'items'} below need a look first.
+              </button>
+            </>
             : <a className="btn sm" href={`/api/setup/twc/export?from=${from}&to=${to}`} download>Download CSV</a>}
         </div>
       </div>
 
       {gate && gate.count > 0 && (
-        <div className="card padded-lg col" style={{ gap: 8, borderLeft: '3px solid var(--orange, #f59e0b)' }}>
+        <div id="activity-held-items" className="card padded-lg col" style={{ gap: 8, borderLeft: '3px solid var(--orange, #f59e0b)' }}>
           <div style={{ fontSize: 13, fontWeight: 600 }}>{gate.count} thing{gate.count === 1 ? '' : 's'} to look at before you send this</div>
           <div className="dim" style={{ fontSize: 12, lineHeight: 1.5 }}>{blocked ? 'The download is held until these are dealt with, so the log says only what you can back up.' : 'The download still works. These are warnings so the log says only what you can back up.'}</div>
           {gate.warnings.map((w, i) => (

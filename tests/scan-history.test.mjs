@@ -1,6 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { readHistoryRows, readHistoryUrls } from '../lib/scan-history.mjs';
+import {
+  AGEABLE_STATUSES,
+  compactHistory,
+  isAgedOut,
+  readHistoryRows,
+  readHistoryUrls,
+} from '../lib/scan-history.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
 
 let passed = 0;
@@ -12,6 +18,21 @@ function check(cond, label) {
 
 const dir = makeSandbox('scan-history');
 try {
+  const cutoff = new Date('2035-01-01T00:00:00Z').getTime();
+  check(AGEABLE_STATUSES.join(',') === 'added,skipped_dup,skipped_title',
+    'exports the scanner ageable statuses');
+  for (const status of AGEABLE_STATUSES) {
+    check(isAgedOut({ status, firstSeen: '2030-01-01' }, cutoff),
+      `${status} ages out before the cutoff`);
+  }
+  for (const status of ['skipped_expired', 'skipped_location', 'skipped_other']) {
+    check(!isAgedOut({ status, firstSeen: '2030-01-01' }, cutoff),
+      `${status} remains permanent`);
+  }
+  check(!isAgedOut({ status: 'skipped_title', firstSeen: '' }, cutoff)
+    && !isAgedOut({ status: 'skipped_title', firstSeen: 'bad-date' }, cutoff),
+  'empty and unreadable dates never age out');
+
   const file = path.join(dir, 'scan-history.tsv');
   const header = 'url\tfirst_seen\tportal\ttitle\tcompany\tstatus';
   const lines = [
@@ -39,6 +60,49 @@ try {
   const streamed = readHistoryUrls(generated, { chunkSize: 31 });
   check(streamed.size === oldResult.size && [...oldResult].every(url => streamed.has(url)), 'matches the old whole file URL result on 2,000 rows');
   check([...readHistoryRows(generated, { chunkSize: 13 })].length === 2000, 'yields every generated row');
+
+  const compactFile = path.join(dir, 'compact.tsv');
+  const longTitle = `Boundary ${'x'.repeat(80)}`;
+  const compactLines = [
+    `${header}\r`,
+    `https://example.test/jobs/old-dup\t2030-01-01\tlever\t${longTitle}\tZorblax Systems\tskipped_dup\r`,
+    'https://example.test/jobs/old-title\t2031-02-03\tashby\tAnalyst\tQuennox Labs\tskipped_title\r',
+    'https://example.test/jobs/old-added\t2030-03-04\tlever\tBuilder\tZorblax Systems\tadded\r',
+    'https://example.test/jobs/old-expired\t2030-04-05\tlever\tBuilder\tQuennox Labs\tskipped_expired\r',
+    'https://example.test/jobs/old-location\t2030-05-06\tlever\tBuilder\tZorblax Systems\tskipped_location\r',
+    'https://example.test/jobs/new-title\t2039-06-07\tlever\tBuilder\tQuennox Labs\tskipped_title\r',
+  ];
+  const compactFixture = `${compactLines.join('\n')}\n`;
+  fs.writeFileSync(compactFile, compactFixture, 'utf8');
+  let written;
+  const compacted = compactHistory(compactFile, {
+    cutoffMs: cutoff,
+    chunkSize: 17,
+    write: (filePath, content, encoding) => { written = { filePath, content, encoding }; },
+  });
+  const expectedKept = `${[compactLines[0], ...compactLines.slice(3)].join('\n')}\n`;
+  check(compacted.before === 6 && compacted.kept === 4 && compacted.dropped === 2,
+    'compaction drops only aged ageable skip rows');
+  check(written?.filePath === compactFile && written.encoding === 'utf8'
+    && written.content === expectedKept,
+  'compaction preserves CRLF kept lines byte-identically and in order across chunk boundaries');
+  check(written.content.includes('\tadded\r\n')
+    && written.content.includes('\tskipped_expired\r\n')
+    && written.content.includes('\tskipped_location\r\n'),
+  'default compaction keeps added and permanent skip statuses');
+
+  const unchangedFile = path.join(dir, 'unchanged.tsv');
+  fs.writeFileSync(unchangedFile, `${header}\n${lines[0]}\n`, 'utf8');
+  let unchangedWrites = 0;
+  const unchanged = compactHistory(unchangedFile, {
+    cutoffMs: new Date('2030-01-01T00:00:00Z').getTime(),
+    write: () => { unchangedWrites++; },
+  });
+  check(unchanged.dropped === 0 && unchangedWrites === 0,
+    'compaction does not write when no rows are dropped');
+  check(JSON.stringify(compactHistory(path.join(dir, 'missing-compact.tsv'), { cutoffMs: cutoff }))
+    === JSON.stringify({ before: 0, kept: 0, dropped: 0 }),
+  'compaction handles a missing file');
 } finally {
   fs.rmSync(dir, { recursive: true, force: true });
 }
