@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.32.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.31.0...v5.32.0) (2026-11-19)
+
+
+### Features
+
+* screen contact suggestions and let the scanner compact its own history ([#533](https://github.com/michaelinghilterra-creator/trajecktory/issues/533)) ([89f114d](https://github.com/michaelinghilterra-creator/trajecktory/commit/89f114d24e785a468b600a9acebec8c678b42850))
+
 ## [5.31.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.30.2...v5.31.0) (2026-11-18)
 
 
