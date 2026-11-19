@@ -1675,6 +1675,7 @@ window.GmailDraftBtn = function GmailDraftBtn({ to, subject, body, size = "sm" }
   const [busy, setBusy] = React.useState(false);
   const [done, setDone] = React.useState(false);
   const gmail = useGmailState();
+  React.useEffect(() => { setDone(false); }, [to, subject, body]);
   if (!to) return null;
   // Undefined state (still loading) counts as usable: the button is enabled for a
   // moment before the answer arrives, which is better than flickering disabled.
@@ -1699,9 +1700,10 @@ window.GmailDraftBtn = function GmailDraftBtn({ to, subject, body, size = "sm" }
       });
       const d = await res.json().catch(() => ({}));
       if (res.ok && d.ok) {
+        // The check stays until the message changes. It used to clear after four
+        // seconds, which is about when the user is over in Gmail and cannot see it.
         setDone(true);
         window.tjkToast?.('Draft created in Gmail. Review and send it there.', 'success');
-        setTimeout(() => setDone(false), 4000);
       } else if (res.status === 403 && d.needsReconnect) {
         window.tjkToast?.('Reconnect Gmail to enable drafts (Review tab, then Connect).', 'error');
       } else {

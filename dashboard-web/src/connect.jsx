@@ -294,8 +294,11 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
       linkedinDone: channel === 'linkedin' ? true : linkedinDone,
       emailDone: channel === 'email' ? true : emDone,
     };
-    if (onChannelDone) onChannelDone(c.source, c.id, state);
-    else if (state.linkedinDone && state.emailDone && onDone) onDone(c.source, c.id);
+    // The trailing true asks the queue to hold its refresh until the save lands. A queue
+    // that supports it hands back settle(); one that does not refreshes at once and
+    // returns nothing, which is still correct because the server answers in order.
+    if (onChannelDone) return onChannelDone(c.source, c.id, state, true);
+    if (state.linkedinDone && state.emailDone && onDone) return onDone(c.source, c.id, true);
   };
 
   const markLiSent = () => {
@@ -304,6 +307,10 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
     if (!base) { setLiSending(false); toast && toast('Log this engagement from the Social tab: influencers have no correspondence store.', 'warn'); return; }
     const kind = alreadyInvited ? 'LinkedIn message' : 'LinkedIn connection request';
     const body = (note?.response || '').trim() || `${kind} sent to ${c.name || 'this contact'}.`;
+    // Move on at once: the row leaves (or its channel ticks) now and the save runs
+    // behind it. A failed save puts the row back and says so.
+    setLiDone(true);
+    const settle = finishChannel('linkedin');
     window.tjkMutate(`${base}/correspondence`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       // This card is the LinkedIn motion, so tag the channel explicitly. Without
@@ -312,14 +319,18 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
       body: JSON.stringify({ direction: 'Sent', channel: 'LinkedIn', subject: kind, body }),
     }).then(r => r.json())
       .then(res => {
-        if (res.error) { toast && toast(res.error, 'error'); setLiSending(false); return; }
-        setLiDone(true);
+        if (res.error) throw new Error(res.error);
         setLiSending(false);
         toast && toast(`Marked sent — ${c.name || 'contact'}`, 'success');
         if (alreadyInvited && !freeDm && onInmailSent) onInmailSent();
-        finishChannel('linkedin');
+        settle && settle();
       })
-      .catch(e => { toast && toast(e.message, 'error'); setLiSending(false); });
+      .catch(e => {
+        setLiDone(false);
+        setLiSending(false);
+        toast && toast(`Not logged, ${c.name || 'contact'} is back in the queue: ${e.message}`, 'error');
+        settle && settle();
+      });
   };
 
   // Dispo a stale contact (left the company, or changed to an unrelated role) so
@@ -662,18 +673,25 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
     setEmSending(true);
     if (!base) { setEmSending(false); toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
     const sentBody = (emBody || '').trim() || `Emailed ${c.name || 'this contact'}${c.company ? ` at ${c.company}` : ''}.`;
+    // Same as the LinkedIn side: move on at once, save behind it, put the row back on failure.
+    setEmDone(true);
+    const settle = finishChannel('email');
     window.tjkMutate(`${base}/correspondence`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ direction: 'Sent', subject: emSubject || 'Outreach email', body: sentBody }),
     }).then(r => r.json())
       .then(res => {
-        if (res.error) { toast && toast(res.error, 'error'); setEmSending(false); return; }
-        setEmDone(true);
+        if (res.error) throw new Error(res.error);
         setEmSending(false);
         toast && toast(`Email logged (verified touch): ${c.name || 'contact'}`, 'success');
-        finishChannel('email');
+        settle && settle();
       })
-      .catch(e => { toast && toast(e.message, 'error'); setEmSending(false); });
+      .catch(e => {
+        setEmDone(false);
+        setEmSending(false);
+        toast && toast(`Not logged, ${c.name || 'contact'} is back in the queue: ${e.message}`, 'error');
+        settle && settle();
+      });
   };
 
   const chipStyle = (channelDone) => ({
@@ -1158,6 +1176,19 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
     .then(d => setMutedContacts(Array.isArray(d.muted) ? d.muted : []))
     .catch(() => { /* the list is a convenience; never break the queue over it */ });
 
+  // Mark sent removes the row at once and saves behind it. Until that save lands the
+  // refresh is held, so the next click (usually a Gmail draft for the next person) is
+  // not stuck behind a queue rebuild. One refresh runs when the last pending save settles.
+  const savingRef = React.useRef(new Set());
+  const holdRefresh = (source, id) => {
+    const key = `${source}:${id}`;
+    savingRef.current.add(key);
+    return () => {
+      savingRef.current.delete(key);
+      if (savingRef.current.size === 0) load();
+    };
+  };
+
   const load = () => {
     if (externalItems) { onReload && onReload(); return; }
     return fetch('/api/followups/queue').then(r => r.json())
@@ -1166,7 +1197,9 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   };
 
   // Keep in sync when the parent re-supplies the list after a reload.
-  useEffectCq(() => { if (externalItems) setQueue(items); }, [items]);
+  // Rows whose Mark sent is still saving are kept out: a refresh that started before the
+  // click would otherwise put the person back for a moment.
+  useEffectCq(() => { if (externalItems) setQueue(items.filter(c => !savingRef.current.has(`${c.source}:${c.id}`))); }, [items]);
   useEffectCq(() => { if (!externalItems) load(); }, []);
   // On mount too, or a contact muted in an earlier session has no way back.
   useEffectCq(() => { loadMuted(); }, []);
@@ -1207,19 +1240,22 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   // Single-channel rows (LinkedIn / email) drop off after one touch; drop optimistically
   // then re-fetch so siblings at the same company refresh their "already reached out
   // today" context. Stable source:id keys keep in-progress drafts alive across the reload.
-  const dropRow = (source, id) => {
+  const dropRow = (source, id, defer) => {
     setQueue(q => (q || []).filter(c => !(c.source === source && String(c.id) === String(id))));
+    if (defer) return holdRefresh(source, id);
     load();
   };
   // A dual-channel ("both") row stays until BOTH channels are touched: update in place,
   // or remove once both are done.
-  const onChannelDone = (source, id, state) => {
+  const onChannelDone = (source, id, state, defer) => {
     const isRow = (c) => c.source === source && String(c.id) === String(id);
+    const removing = !!(state && state.linkedinDone && state.emailDone);
     setQueue(q => {
       const list = q || [];
-      if (state && state.linkedinDone && state.emailDone) return list.filter(c => !isRow(c));
+      if (removing) return list.filter(c => !isRow(c));
       return list.map(c => isRow(c) ? { ...c, linkedinDone: state.linkedinDone, emailDone: state.emailDone } : c);
     });
+    if (defer) return removing ? holdRefresh(source, id) : () => { if (savingRef.current.size === 0) load(); };
     load();
   };
 

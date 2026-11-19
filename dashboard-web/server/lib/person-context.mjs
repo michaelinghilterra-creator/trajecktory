@@ -63,15 +63,30 @@ export function bucketOwner(source, id, opts = {}) {
   }
 }
 
+// Resolving people reads every row of every book, so a caller that walks a whole
+// queue must not pay for it once per contact. A caller that passes the SAME opts
+// object for each lookup (the follow-up queue does) gets one resolution for the
+// whole walk; a fresh opts object always resolves again, so nothing goes stale.
+const resolvedByOpts = new WeakMap();
+function peopleByRef(opts) {
+  const cached = resolvedByOpts.get(opts);
+  if (cached) return cached;
+  const people = resolvePeople({
+    ta: opts.ta ?? opts.taRows ?? parseTargetTalentMd(),
+    referrals: opts.referrals ?? opts.referralRows ?? parseReferralsMd(),
+    influencers: opts.influencers ?? readInfluencers(),
+    pins: opts.pins ?? readPins(),
+  });
+  const index = new Map();
+  for (const person of people) for (const ref of person.refs) if (!index.has(ref)) index.set(ref, person);
+  resolvedByOpts.set(opts, index);
+  return index;
+}
+
 export function getPersonContext(source, id, opts = {}) {
   try {
-    const ta = opts.ta ?? opts.taRows ?? parseTargetTalentMd();
-    const referrals = opts.referrals ?? opts.referralRows ?? parseReferralsMd();
-    const influencers = opts.influencers ?? readInfluencers();
-    const pins = opts.pins ?? readPins();
     const ref = contactRef(source, id);
-    const person = resolvePeople({ ta, referrals, influencers, pins })
-      .find(candidate => candidate.refs.includes(ref));
+    const person = peopleByRef(opts).get(ref);
     if (!person) return null;
 
     // The three views each rebuild the timeline, so read each store once and share it.
