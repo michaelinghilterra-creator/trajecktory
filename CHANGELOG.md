@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.32.4](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.32.3...v5.32.4) (2026-11-19)
+
+
+### Bug Fixes
+
+* read dashboard env settings saved with Windows line endings ([#541](https://github.com/michaelinghilterra-creator/trajecktory/issues/541)) ([f52fcb4](https://github.com/michaelinghilterra-creator/trajecktory/commit/f52fcb4caea03e92c290c586e26ef3f4559fc803))
+
 ## [5.32.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.32.2...v5.32.3) (2026-11-19)
 
 
