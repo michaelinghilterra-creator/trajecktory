@@ -61,10 +61,14 @@ check(allTracked.message.includes('3035 jobs across 12 boards') && allTracked.me
   'the scan.mjs health line is appended');
 
 const noProposals = diagnoseEmptyScan({ merge: { added: 0, rolesAdded: 0, proposed: 0, parseErrors: ['no PORTAL_ADDITIONS block found in the agent output'] }, webSearchCount: 4 });
-check(noProposals.code === 'no-proposals' && noProposals.message.includes('no PORTAL_ADDITIONS block'), 'no proposals surfaces the parse problem');
+check(noProposals.code === 'no-block' && noProposals.message.includes('never returned its list'), 'a missing block names the missing company list');
+const invalidBlock = diagnoseEmptyScan({ merge: { added: 0, rolesAdded: 0, proposed: 0, parseErrors: ['PORTAL_ADDITIONS block is not valid JSON: Unexpected token'] }, webSearchCount: 4 });
+check(invalidBlock.code === 'no-proposals', 'a different parse problem remains no-proposals');
 
 const noSearch = diagnoseEmptyScan({ merge: { added: 0, rolesAdded: 0, proposed: 0 }, webSearchCount: 0 });
 check(noSearch.code === 'no-searches', 'zero web searches gives no-searches');
+const noSearchNoBlock = diagnoseEmptyScan({ merge: { added: 0, rolesAdded: 0, proposed: 0, parseErrors: ['no PORTAL_ADDITIONS block found in the agent output'] }, webSearchCount: 0, stalled: true });
+check(noSearchNoBlock.code === 'no-searches', 'a zero-search run with no block still reports no-searches, not no-block');
 
 const mergeErr = diagnoseEmptyScan({ merge: { added: 0, error: 'portals.yml is not valid YAML' }, webSearchCount: 3 });
 check(mergeErr.code === 'merge-error' && mergeErr.message.includes('not valid YAML'), 'a merge error is reported with its text');

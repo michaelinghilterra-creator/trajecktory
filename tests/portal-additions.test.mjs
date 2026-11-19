@@ -21,7 +21,7 @@ import { join } from 'path';
 import yaml from 'js-yaml';
 import { makeSandbox } from './helpers/sandbox.mjs';
 import {
-  parsePortalAdditions, sanitizeCompanyName, verifyBoardLive, mergePortalAdditions,
+  outputHasPortalBlock, parsePortalAdditions, sanitizeCompanyName, verifyBoardLive, mergePortalAdditions,
   START_MARKER, END_MARKER,
 } from '../lib/portal-additions.mjs';
 
@@ -34,6 +34,21 @@ function check(cond, msg) {
 console.log('portal-additions.test.mjs');
 
 const wrap = (arr) => `some agent prose\n${START_MARKER}\n${JSON.stringify(arr)}\n${END_MARKER}\ntrailing summary`;
+
+check(outputHasPortalBlock(`${START_MARKER}\n[]\n${END_MARKER}`) === true,
+  'detects output containing both portal markers');
+check(outputHasPortalBlock(START_MARKER) === false,
+  'rejects output missing the end marker');
+check(outputHasPortalBlock(END_MARKER) === false,
+  'rejects output missing the start marker');
+check(outputHasPortalBlock(`${END_MARKER}\n${START_MARKER}`) === false,
+  'rejects output whose end marker comes first');
+check(outputHasPortalBlock('') === false,
+  'rejects empty output');
+check(outputHasPortalBlock(undefined) === false,
+  'rejects undefined output');
+check(outputHasPortalBlock(wrap([])) === true,
+  'accepts a portal block holding an empty list');
 
 // ── parse + validate ─────────────────────────────────────────────────────────
 {
