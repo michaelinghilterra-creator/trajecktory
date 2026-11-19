@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.32.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.32.1...v5.32.2) (2026-11-19)
+
+
+### Bug Fixes
+
+* make the follow-up queue respond at once after each action ([#537](https://github.com/michaelinghilterra-creator/trajecktory/issues/537)) ([d87bde4](https://github.com/michaelinghilterra-creator/trajecktory/commit/d87bde4e32bb71c308ae40091be8cb9b38656e4e))
+
 ## [5.32.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.32.0...v5.32.1) (2026-11-19)
 
 
