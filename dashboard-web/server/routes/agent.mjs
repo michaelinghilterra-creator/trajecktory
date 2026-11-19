@@ -7,8 +7,8 @@ import { ROOT_DIR, DATA_DIR, APPS_MD } from '../config.mjs';
 import { reconcileHandled } from '../../../lib/pipeline.mjs';
 import { reconcileTriageResults } from '../../../lib/reconcile-triage.mjs';
 import { clearClosedFromNeedsManual } from '../../../lib/needs-manual.mjs';
-import { parsePortalAdditions, mergePortalAdditions, writeTrackedCompanyList, START_MARKER as PORTAL_START, END_MARKER as PORTAL_END } from '../../../lib/portal-additions.mjs';
-import { scanDiscoveryStalled } from '../../../lib/scan-stall.mjs';
+import { parsePortalAdditions, outputHasPortalBlock, mergePortalAdditions, writeTrackedCompanyList, START_MARKER as PORTAL_START, END_MARKER as PORTAL_END } from '../../../lib/portal-additions.mjs';
+import { scanDiscoveryStalled, scanDiscoveryNoBlock } from '../../../lib/scan-stall.mjs';
 import { createStreamFacts } from '../lib/agent-stream-facts.mjs';
 import { buildScanDiscoverySummary, diagnoseEmptyEval, diagnoseEmptyScan, logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
 import { apiKeyActive } from '../lib/anthropic.mjs';
@@ -543,6 +543,16 @@ const SCAN_STALL_FAILED_WHY =
   'stronger model. This is a transient model stall, not a data problem — your ' +
   'API-scanned roles are unaffected. Try Agent Scan again, or set Agent Scan to ' +
   'Sonnet in Setup → Models & cost.';
+// The second failure shape: the agent searched, then finished without returning
+// its structured company list. It gets the same single retry, with its own wording
+// so the UI never claims "no web search" for a run that did search.
+const SCAN_NO_BLOCK_RETRY_WHY =
+  'The agent finished without returning its list of companies. ' +
+  'Retrying automatically on a stronger model…';
+const SCAN_NO_BLOCK_FAILED_WHY =
+  'The agent finished without returning its list of companies, even after an automatic ' +
+  'retry on a stronger model. This is a transient model slip, not a data problem — your ' +
+  'API-scanned roles are unaffected. Try Agent Scan again.';
 
 function summarizeToolUse(block) {
   const name = block.name || 'tool';
@@ -1192,11 +1202,14 @@ async function runAgent(jobId, mode, target) {
     // scan.mjs is idempotent (re-dedups to 0 new), so re-running the full prompt
     // is safe; the extra API-tier pass is cheap next to a wasted widen.
         const searches1 = (agentJobs.get(jobId) || {}).webSearchCount || 0;
-        if (scanDiscoveryStalled({ webSearchCount: searches1, added: portalMerge.added, rolesAdded: portalMerge.rolesAdded })) {
+        const firstNoSearch = scanDiscoveryStalled({ webSearchCount: searches1, added: portalMerge.added, rolesAdded: portalMerge.rolesAdded });
+        const firstNoBlock = !firstNoSearch
+          && scanDiscoveryNoBlock({ blockPresent: outputHasPortalBlock(res.result), added: portalMerge.added, rolesAdded: portalMerge.rolesAdded });
+        if (firstNoSearch || firstNoBlock) {
           scanStalled = true;
           scanRetried = true;
           const j1 = agentJobs.get(jobId) || {};
-          agentJobs.set(jobId, { ...j1, status: 'running', scanStalled: true, scanRetried: true, activity: 'Discovery stalled — retrying on a stronger model…', warning: SCAN_STALL_RETRY_WHY });
+          agentJobs.set(jobId, { ...j1, status: 'running', scanStalled: true, scanRetried: true, activity: 'Discovery stalled — retrying on a stronger model…', warning: firstNoBlock ? SCAN_NO_BLOCK_RETRY_WHY : SCAN_STALL_RETRY_WHY });
           const retry = await runClaudeAgent(jobId, mode, target, { forceModel: 'sonnet', deferLog: true });
           if (retry.logRecord) scanLogRecords.push(retry.logRecord);
           if (retry.ok) {
@@ -1209,9 +1222,14 @@ async function runAgent(jobId, mode, target) {
           // search. Clear the interim warning on success; name the failure on a
           // second stall so the UI stops sending the user hunting.
           const searches2 = (agentJobs.get(jobId) || {}).webSearchCount || 0;
-          const stillStalled = scanDiscoveryStalled({ webSearchCount: searches2, added: portalMerge.added, rolesAdded: portalMerge.rolesAdded });
+          const stillNoSearch = scanDiscoveryStalled({ webSearchCount: searches2, added: portalMerge.added, rolesAdded: portalMerge.rolesAdded });
+          const stillNoBlock = !stillNoSearch && scanDiscoveryNoBlock({
+            blockPresent: outputHasPortalBlock(retry.ok ? retry.result : res.result),
+            added: portalMerge.added,
+            rolesAdded: portalMerge.rolesAdded,
+          });
           const j3 = agentJobs.get(jobId) || {};
-          agentJobs.set(jobId, { ...j3, warning: stillStalled ? SCAN_STALL_FAILED_WHY : undefined });
+          agentJobs.set(jobId, { ...j3, warning: stillNoSearch ? SCAN_STALL_FAILED_WHY : stillNoBlock ? SCAN_NO_BLOCK_FAILED_WHY : undefined });
         }
       }
     } finally {

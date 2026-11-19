@@ -17,7 +17,7 @@
  * Run: node tests/scan-stall.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { scanDiscoveryStalled } from '../lib/scan-stall.mjs';
+import { scanDiscoveryNoBlock, scanDiscoveryStalled } from '../lib/scan-stall.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -53,6 +53,21 @@ check(scanDiscoveryStalled({}) === true,
   'empty object → treated as a stall (no evidence of search)');
 check(scanDiscoveryStalled(undefined) === true,
   'undefined arg does not throw and defaults to a stall');
+
+check(scanDiscoveryNoBlock({ blockPresent: false, added: 0, rolesAdded: 0 }) === true,
+  'an absent block with nothing produced needs a retry');
+check(scanDiscoveryNoBlock({ blockPresent: false, added: 1, rolesAdded: 0 }) === false,
+  'an absent block after adding a company does not need a retry');
+check(scanDiscoveryNoBlock({ blockPresent: false, added: 0, rolesAdded: 1 }) === false,
+  'an absent block after adding a role does not need a retry');
+check(scanDiscoveryNoBlock({ blockPresent: true, added: 0, rolesAdded: 0 }) === false,
+  'a present empty block is an honest empty result');
+check(scanDiscoveryNoBlock({ blockPresent: undefined }) === false,
+  'an unknown block state does not trigger a retry');
+check(scanDiscoveryNoBlock({}) === false,
+  'an empty object does not trigger a retry');
+check(scanDiscoveryNoBlock(undefined) === false,
+  'an undefined argument does not throw or trigger a retry');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

@@ -134,9 +134,12 @@ export function diagnoseEmptyScan({ merge, webSearchCount = 0, scanStats = null,
   }
   if (m.added > 0 || m.rolesAdded > 0) return null;
   if (scanStats && scanStats.newOffers > 0) return null;   // scan.mjs itself found postings, so the run was productive
-  if (stalled || webSearchCount === 0) return result('no-searches', 'The agent issued no web search, so discovery did not run.');
   const proposed = Number.isFinite(m.proposed) ? m.proposed : 0;
   const parseErrors = Array.isArray(m.parseErrors) ? m.parseErrors : [];
+  if (webSearchCount > 0 && proposed === 0 && String(parseErrors[0] || '').includes('no PORTAL_ADDITIONS block')) {
+    return result('no-block', `The agent ran ${searches} but never returned its list of companies, even after one retry.`);
+  }
+  if (stalled || webSearchCount === 0) return result('no-searches', 'The agent issued no web search, so discovery did not run.');
   if (proposed === 0) {
     const why = parseErrors[0] ? ` Parse problem: ${String(parseErrors[0]).slice(0, 160)}.` : '';
     return result('no-proposals', `The agent ran ${searches} but named no company to add.${why}`);
