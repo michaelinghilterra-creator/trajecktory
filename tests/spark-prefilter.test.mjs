@@ -24,6 +24,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { splitAtThreshold, discardRows } from '../spark-prefilter.mjs';
+import { buildPreamble, LOCATION_PROCEDURE } from '../lib/spark-eval.mjs';
 import { appendTriageResults } from '../lib/triage-results.mjs';
 import { appendGateHistory } from '../lib/gate-history.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
@@ -118,6 +119,25 @@ const row = (id, over) => ({
   check(res.appended === 1, 'exactly one row reaches triage-results.tsv for three scored postings');
   check(!text.includes('/keep1') && !text.includes('/keep2'), 'neither survivor appears anywhere in the file');
   check(text.split('\n').filter(Boolean).length === 2, 'the file holds the header and one data row, nothing else');
+}
+
+// ── location procedure ─────────────────────────────────────────────────────
+{
+  const preamble = buildPreamble();
+  const heading = '# Location rating procedure';
+  check(preamble.split(heading).length - 1 === 1, 'the location procedure appears exactly once in the preamble');
+  check(preamble.indexOf(heading) < preamble.indexOf('# Output contract'), 'the location procedure appears before the output contract');
+
+  const allowedKeys = new Set([
+    'location.policy.onsite_ok',
+    'location.policy.hybrid_ok',
+    'location.policy.hard_no',
+  ]);
+  const policyKeys = LOCATION_PROCEDURE.match(/location\.policy\.[a-z_]+/g) ?? [];
+  check(policyKeys.every(key => allowedKeys.has(key)), 'the location procedure names only allowed policy keys');
+
+  const forbiddenValues = [/\bTX\b/i, /Texas/i, /Dallas/i, /Austin/i, /New York/i, /San Francisco/i, /London/i, /Toronto/i, /\$/i, /K\/yr/i];
+  check(forbiddenValues.every(pattern => !pattern.test(LOCATION_PROCEDURE)), 'the location procedure contains no place or pay values');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
