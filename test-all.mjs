@@ -484,6 +484,7 @@ for (const suite of [
   'tests/ats-gone.test.mjs',
   'tests/needs-manual.test.mjs',
   'tests/spark-prefilter.test.mjs',
+  'tests/spark-readout.test.mjs',
   'tests/event-store.test.mjs',
   'tests/event-store-perf.test.mjs',
   'tests/legacy-files.test.mjs',
