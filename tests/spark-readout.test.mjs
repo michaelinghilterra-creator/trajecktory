@@ -143,11 +143,26 @@ function modelResponse(body, requests, options = {}) {
     choices: [{ logprobs: { content: [{ top_logprobs: [{ token: '3', logprob: 0 }] }] } }],
   });
   check((await probeReadout()).ok === true, 'probe accepts a digit as the first top token');
-  globalThis.fetch = async () => okResponse({
-    choices: [{ logprobs: { content: [{ top_logprobs: [{ token: '{"', logprob: 0 }] }] } }],
-  });
+
+  let retryCalls = 0;
+  globalThis.fetch = async (_url, init) => {
+    retryCalls++;
+    const prefix = JSON.parse(init.body).messages[1].content;
+    return okResponse({
+      choices: [{ logprobs: { content: [{ top_logprobs: [{ token: prefix.endsWith(' ') ? '3' : ' ', logprob: 0 }] }] } }],
+    });
+  };
+  check((await probeReadout()).ok === true && retryCalls === 2, 'probe accepts a digit from the spaced-prefix retry');
+
+  let failedCalls = 0;
+  globalThis.fetch = async () => {
+    failedCalls++;
+    return okResponse({
+      choices: [{ logprobs: { content: [{ top_logprobs: [{ token: '{"', logprob: 0 }] }] } }],
+    });
+  };
   const probe = await probeReadout();
-  check(probe.ok === false && probe.reason.includes('continue_final_message'), 'probe explains when the endpoint ignores the assistant continuation');
+  check(probe.ok === false && failedCalls === 2 && probe.reason.includes('continue_final_message'), 'probe explains when both calls ignore the assistant continuation');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
