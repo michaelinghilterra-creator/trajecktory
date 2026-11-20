@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.33.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.32.4...v5.33.0) (2026-11-20)
+
+
+### Features
+
+* probability readout judge and location fixes for the Spark pre-filter ([#543](https://github.com/michaelinghilterra-creator/trajecktory/issues/543)) ([8147b43](https://github.com/michaelinghilterra-creator/trajecktory/commit/8147b43ed809caf3bde46ff447b15394fd4ea058))
+
 ## [5.32.4](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.32.3...v5.32.4) (2026-11-19)
 
 
