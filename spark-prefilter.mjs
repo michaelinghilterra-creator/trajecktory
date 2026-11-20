@@ -61,7 +61,7 @@ import { appendGateHistory } from './lib/gate-history.mjs';
 import { readPipelineRows } from './lib/pipeline.mjs';
 import { localToday } from './lib/local-date.mjs';
 import {
-  SPARK_URL, SPARK_MODEL, SPARK_CONCURRENCY, isConfigured, buildPreamble, scoreMany,
+  SPARK_URL, SPARK_MODEL, SPARK_CONCURRENCY, SPARK_JUDGE, isConfigured, buildPreamble, scoreMany,
 } from './lib/spark-eval.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -283,19 +283,32 @@ async function main() {
     console.log('TJK_SPARK_MODEL in .env). Nothing was read or written.');
     return;
   }
+  if (SPARK_JUDGE !== 'readout' && SPARK_JUDGE !== 'report') {
+    console.log('spark-prefilter: TJK_SPARK_JUDGE must be readout or report. Nothing was read or written.');
+    return;
+  }
   if (!existsSync(PIPELINE)) {
     console.log(`spark-prefilter: no pipeline at ${PIPELINE}. Nothing to do.`);
     return;
   }
 
   const { items, skipped } = collectItems();
-  console.log(`endpoint ${SPARK_URL}  model ${SPARK_MODEL}  T=${THRESHOLD}  concurrency ${SPARK_CONCURRENCY}`);
+  console.log(`endpoint ${SPARK_URL}  model ${SPARK_MODEL}  T=${THRESHOLD}  concurrency ${SPARK_CONCURRENCY}  judge ${SPARK_JUDGE}`);
   console.log(`pending rows scoreable: ${items.length}${skipped.length ? `  (skipped ${skipped.length}, left pending)` : ''}\n`);
   if (!items.length) {
     for (const s of skipped) console.log(`  pending  ${s.url}  — ${s.why}`);
     return;
   }
 
+  if (SPARK_JUDGE === 'readout') {
+    const { probeReadout } = await import('./lib/spark-readout.mjs');
+    const probe = await probeReadout();
+    if (!probe.ok) {
+      console.log(`\nREADOUT PROBE FAILED: ${probe.reason}`);
+      console.log('Nothing written. Every row stays pending. Set TJK_SPARK_JUDGE=report to use the older judge on this endpoint.');
+      return;
+    }
+  }
   const preamble = buildPreamble();
   const t0 = Date.now();
   let done = 0;

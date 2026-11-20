@@ -1,0 +1,81 @@
+{
+ "preamble": "# Invented rubric\n\nRate the posting for Zorblax Widgetry fit.",
+ "jd": "Director of Revenue Operations at Quennox Ratchet Works. Remote US. \"Quoted\" text, and a backslash \\ here.",
+ "format_section": "# Output format\n\nYour reply is one JSON object written by the scoring engine:\n{\"fields\":{\"jdLevel\":\"...\",\"compStated\":\"...\"},\"ratings\":{\"fit\":<integer 0 to 5>,\"northStar\":<integer 0 to 5>,\"level\":<integer 0 to 5>,\"comp\":<integer 0 to 5>,\"location\":<integer 0 to 5>,\"buildDepth\":<integer 0 to 5>,\"redFlags\":<integer 0 to 5>},\"after\":{\"scoreCeiling\":\"<one of n, 0, 1, 2, 3, 4, 5>\",\"ceilingReason\":\"...\"}}\n\nEach rating is a single digit. Meaning of each rating:\n- fit (Fit / CV Match): 0 = worst, 5 = best\n- northStar (North Star Alignment): 0 = worst, 5 = best\n- level (Level Match): 0 = worst, 5 = best\n- comp (Comp): 0 = worst, 5 = best\n- location (Location / Logistics): 0 = worst, 5 = best\n- buildDepth (Build Depth): 0 = worst, 5 = best\n- redFlags (Red Flags): 0 = worst, 5 = best\n\nFields:\n- jdLevel: free text, at most 12 tokens\n- compStated: free text, at most 24 tokens\n- scoreCeiling: one of n, 0, 1, 2, 3, 4, 5 (written after the ratings). n means no ceiling; otherwise the highest overall score this role can get\n- ceilingReason: free text, at most 40 tokens (written after the ratings)\n\nWrite each text field as plain prose with no quote characters.",
+ "user": "# Invented rubric\n\nRate the posting for Zorblax Widgetry fit.\n\n# Output format\n\nYour reply is one JSON object written by the scoring engine:\n{\"fields\":{\"jdLevel\":\"...\",\"compStated\":\"...\"},\"ratings\":{\"fit\":<integer 0 to 5>,\"northStar\":<integer 0 to 5>,\"level\":<integer 0 to 5>,\"comp\":<integer 0 to 5>,\"location\":<integer 0 to 5>,\"buildDepth\":<integer 0 to 5>,\"redFlags\":<integer 0 to 5>},\"after\":{\"scoreCeiling\":\"<one of n, 0, 1, 2, 3, 4, 5>\",\"ceilingReason\":\"...\"}}\n\nEach rating is a single digit. Meaning of each rating:\n- fit (Fit / CV Match): 0 = worst, 5 = best\n- northStar (North Star Alignment): 0 = worst, 5 = best\n- level (Level Match): 0 = worst, 5 = best\n- comp (Comp): 0 = worst, 5 = best\n- location (Location / Logistics): 0 = worst, 5 = best\n- buildDepth (Build Depth): 0 = worst, 5 = best\n- redFlags (Red Flags): 0 = worst, 5 = best\n\nFields:\n- jdLevel: free text, at most 12 tokens\n- compStated: free text, at most 24 tokens\n- scoreCeiling: one of n, 0, 1, 2, 3, 4, 5 (written after the ratings). n means no ceiling; otherwise the highest overall score this role can get\n- ceilingReason: free text, at most 40 tokens (written after the ratings)\n\nWrite each text field as plain prose with no quote characters.\n\n---\n\n# Item to score\n\nDirector of Revenue Operations at Quennox Ratchet Works. Remote US. \"Quoted\" text, and a backslash \\ here.",
+ "prefixes": [
+  {
+   "kind": "field",
+   "key": "jdLevel",
+   "prefix": "{\"fields\":{\"jdLevel\":\""
+  },
+  {
+   "kind": "field",
+   "key": "compStated",
+   "prefix": "{\"fields\":{\"jdLevel\":\"Director\",\"compStated\":\""
+  },
+  {
+   "kind": "rating",
+   "key": "fit",
+   "prefix": "{\"fields\":{\"jdLevel\":\"Director\",\"compStated\":\"$1 to $2 (invented) \\\"base\\\"\\tcafé\\n\"},\"ratings\":{\"fit\":"
+  },
+  {
+   "kind": "rating",
+   "key": "northStar",
+   "prefix": "{\"fields\":{\"jdLevel\":\"Director\",\"compStated\":\"$1 to $2 (invented) \\\"base\\\"\\tcafé\\n\"},\"ratings\":{\"fit\":3,\"northStar\":"
+  },
+  {
+   "kind": "rating",
+   "key": "level",
+   "prefix": "{\"fields\":{\"jdLevel\":\"Director\",\"compStated\":\"$1 to $2 (invented) \\\"base\\\"\\tcafé\\n\"},\"ratings\":{\"fit\":3,\"northStar\":4,\"level\":"
+  },
+  {
+   "kind": "rating",
+   "key": "comp",
+   "prefix": "{\"fields\":{\"jdLevel\":\"Director\",\"compStated\":\"$1 to $2 (invented) \\\"base\\\"\\tcafé\\n\"},\"ratings\":{\"fit\":3,\"northStar\":4,\"level\":5,\"comp\":"
+  },
+  {
+   "kind": "rating",
+   "key": "location",
+   "prefix": "{\"fields\":{\"jdLevel\":\"Director\",\"compStated\":\"$1 to $2 (invented) \\\"base\\\"\\tcafé\\n\"},\"ratings\":{\"fit\":3,\"northStar\":4,\"level\":5,\"comp\":2,\"location\":"
+  },
+  {
+   "kind": "rating",
+   "key": "buildDepth",
+   "prefix": "{\"fields\":{\"jdLevel\":\"Director\",\"compStated\":\"$1 to $2 (invented) \\\"base\\\"\\tcafé\\n\"},\"ratings\":{\"fit\":3,\"northStar\":4,\"level\":5,\"comp\":2,\"location\":4,\"buildDepth\":"
+  },
+  {
+   "kind": "rating",
+   "key": "redFlags",
+   "prefix": "{\"fields\":{\"jdLevel\":\"Director\",\"compStated\":\"$1 to $2 (invented) \\\"base\\\"\\tcafé\\n\"},\"ratings\":{\"fit\":3,\"northStar\":4,\"level\":5,\"comp\":2,\"location\":4,\"buildDepth\":3,\"redFlags\":"
+  },
+  {
+   "kind": "after",
+   "key": "scoreCeiling",
+   "prefix": "{\"fields\":{\"jdLevel\":\"Director\",\"compStated\":\"$1 to $2 (invented) \\\"base\\\"\\tcafé\\n\"},\"ratings\":{\"fit\":3,\"northStar\":4,\"level\":5,\"comp\":2,\"location\":4,\"buildDepth\":3,\"redFlags\":1},\"after\":{\"scoreCeiling\":\""
+  },
+  {
+   "kind": "after",
+   "key": "ceilingReason",
+   "prefix": "{\"fields\":{\"jdLevel\":\"Director\",\"compStated\":\"$1 to $2 (invented) \\\"base\\\"\\tcafé\\n\"},\"ratings\":{\"fit\":3,\"northStar\":4,\"level\":5,\"comp\":2,\"location\":4,\"buildDepth\":3,\"redFlags\":1},\"after\":{\"scoreCeiling\":\"n\",\"ceilingReason\":\""
+  }
+ ],
+ "inputs": {
+  "before": {
+   "jdLevel": "Director",
+   "compStated": "$1 to $2 (invented) \"base\"\tcafé\n"
+  },
+  "ratings": {
+   "fit": 3,
+   "northStar": 4,
+   "level": 5,
+   "comp": 2,
+   "location": 4,
+   "buildDepth": 3,
+   "redFlags": 1
+  },
+  "after_done_for_reason": {
+   "scoreCeiling": "n"
+  }
+ }
+}
