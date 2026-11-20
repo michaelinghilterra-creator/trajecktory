@@ -41,7 +41,11 @@ for (const expected of golden.prefixes) {
     }
     actual = ratingPrefix(golden.inputs.before, prior, expected.key);
   } else {
-    const done = expected.key === 'scoreCeiling' ? {} : golden.inputs.after_done_for_reason;
+    const done = expected.key === 'scoreCeiling'
+      ? {}
+      : expected.key === 'ceilingBasis'
+        ? golden.inputs.after_done_for_basis
+        : golden.inputs.after_done_for_reason;
     actual = afterPrefix(golden.inputs.before, golden.inputs.ratings, done, expected.key);
   }
   check(actual === expected.prefix, `${expected.kind} prefix for ${expected.key} matches the golden string`);
@@ -75,9 +79,18 @@ function okResponse(data) {
 function modelResponse(body, requests, options = {}) {
   requests.push(body);
   const prefix = body.messages[1].content;
-  const isChoice = prefix.includes('"scoreCeiling":"');
+  const isCeiling = prefix.includes('"scoreCeiling":"') && !prefix.includes('"ceilingBasis":"');
+  const isBasis = prefix.includes('"ceilingBasis":"');
+  const isLocation = prefix.includes('"location":') && !prefix.includes('"buildDepth":');
+  const isChoice = isCeiling || isBasis;
   if (body.logprobs) {
-    let token = isChoice ? 'n' : '4';
+    let token = isCeiling
+      ? (options.scoreCeiling ?? 'n')
+      : isBasis
+        ? (options.ceilingBasis ?? 'n')
+        : isLocation
+          ? (options.locationRating ?? '4')
+          : '4';
     if (options.massRetry && !isChoice && !options.retriedOnce) {
       if (!prefix.endsWith(' ')) token = 'word';
       else options.retriedOnce = true;
@@ -88,6 +101,15 @@ function modelResponse(body, requests, options = {}) {
     });
   }
   return okResponse({ choices: [{ message: { content: 'Director"' } }], usage: { completion_tokens: 2 } });
+}
+
+async function readoutCase(id, options) {
+  const requests = [];
+  globalThis.fetch = async (_url, init) => modelResponse(JSON.parse(init.body), requests, options);
+  return scoreOneReadout(
+    { id, jdText: `Invented posting ${id} for Zorblax Widgetry.` },
+    { preamble: '# P' },
+  );
 }
 
 {
@@ -102,6 +124,34 @@ function modelResponse(body, requests, options = {}) {
   check(requests.every((body) => body.continue_final_message === true && body.temperature === 0), 'every request continues the assistant prefix at zero temperature');
   const ratings = requests.filter((body) => body.logprobs);
   check(ratings.every((body) => body.top_logprobs === 20 && body.max_tokens === 1), 'rating requests ask for one token and twenty log probabilities');
+}
+
+{
+  const locationAuthored = await readoutCase('location-authored', {
+    scoreCeiling: '1', ceilingBasis: 'l', locationRating: '4',
+  });
+  const codeLocation = await readoutCase('code-location', {
+    scoreCeiling: 'n', locationRating: '1',
+  });
+  const levelAuthored = await readoutCase('level-authored', {
+    scoreCeiling: '2', ceilingBasis: 'v', locationRating: '4',
+  });
+  const rawLocation = JSON.parse(locationAuthored.raw);
+  const rawCode = JSON.parse(codeLocation.raw);
+  const rawLevel = JSON.parse(levelAuthored.raw);
+
+  check(locationAuthored.data.scoreCeiling === null && rawLocation.scoreCeiling === null &&
+    locationAuthored.score > levelAuthored.score,
+  'a model-authored location cap is dropped and scores above the surviving level cap');
+  check(codeLocation.data.scoreCeiling === 1.5 && rawCode.scoreCeiling === 1.5 &&
+    codeLocation.data.ceilingReason.includes('location rating 1') && rawCode.ceilingReason.includes('location rating 1'),
+  'location rating 1 receives the shipped code cap and reason');
+  check(levelAuthored.data.scoreCeiling === 2 && levelAuthored.data.ceilingBasis === 'level' &&
+    rawLevel.scoreCeiling === 2 && rawLevel.ceilingBasis === 'level',
+  'a model-authored level cap survives with its mapped basis');
+  check(locationAuthored.data.globalScore.every((entry) => Number.isInteger(entry.hardVal)) &&
+    rawLocation.globalScore.every((entry) => Number.isInteger(entry.hardVal)),
+  'every globalScore entry has an integer hardVal');
 }
 
 {

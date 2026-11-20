@@ -24,7 +24,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { splitAtThreshold, discardRows } from '../spark-prefilter.mjs';
-import { buildPreamble, LOCATION_PROCEDURE } from '../lib/spark-eval.mjs';
+import { buildPreamble, LOCATION_PROCEDURE, productionVerdict } from '../lib/spark-eval.mjs';
 import { appendTriageResults } from '../lib/triage-results.mjs';
 import { appendGateHistory } from '../lib/gate-history.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
@@ -138,6 +138,38 @@ const row = (id, over) => ({
 
   const forbiddenValues = [/\bTX\b/i, /Texas/i, /Dallas/i, /Austin/i, /New York/i, /San Francisco/i, /London/i, /Toronto/i, /\$/i, /K\/yr/i];
   check(forbiddenValues.every(pattern => !pattern.test(LOCATION_PROCEDURE)), 'the location procedure contains no place or pay values');
+}
+
+// Model-written location caps are dropped only in the pre-filter path.
+{
+  const dimensions = ['fit', 'northStar', 'level', 'comp', 'location', 'buildDepth', 'redFlags'];
+  const report = {
+    schema: 'trajecktory-report/v1',
+    company: 'Zorblax Widgetry',
+    role: 'Director of Invented Systems',
+    summary: { seniority: 'Director', compStated: '' },
+    levelMatch: { jdLevel: 'Director' },
+    globalScore: dimensions.map((key) => ({ key, dim: key, val: 4, max: 5, evidence: 'Invented evidence' })),
+    scoreCeiling: 1.5,
+    ceilingBasis: 'location',
+    ceilingReason: 'Invented location cap',
+    recommendation: '',
+  };
+  const dropped = await productionVerdict(JSON.stringify(report));
+  check(dropped.ok && dropped.score > 2 && dropped.data.droppedLocationCap === 1.5,
+    'productionVerdict drops a model-written location cap');
+
+  const level = await productionVerdict(JSON.stringify({ ...report, ceilingBasis: 'level' }));
+  check(level.ok && level.score <= 1.5, 'productionVerdict preserves a model-written level cap');
+
+  const lowLocation = await productionVerdict(JSON.stringify({
+    ...report,
+    globalScore: report.globalScore.map((entry) => entry.key === 'location' ? { ...entry, val: 1 } : entry),
+    scoreCeiling: null,
+    ceilingBasis: '',
+    ceilingReason: '',
+  }));
+  check(lowLocation.ok && lowLocation.score <= 1.5, 'productionVerdict applies the code cap from a low location rating');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
