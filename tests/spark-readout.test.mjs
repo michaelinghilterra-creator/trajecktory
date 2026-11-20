@@ -95,8 +95,11 @@ function modelResponse(body, requests, options = {}) {
       if (!prefix.endsWith(' ')) token = 'word';
       else options.retriedOnce = true;
     }
+    const topLogprobs = isLocation && options.locationTopLogprobs
+      ? options.locationTopLogprobs
+      : [{ token, logprob: 0 }];
     return okResponse({
-      choices: [{ logprobs: { content: [{ top_logprobs: [{ token, logprob: 0 }] }] } }],
+      choices: [{ logprobs: { content: [{ top_logprobs: topLogprobs }] } }],
       usage: { completion_tokens: 1 },
     });
   }
@@ -146,6 +149,25 @@ async function readoutCase(id, options) {
   check(codeLocation.data.scoreCeiling === 1.5 && rawCode.scoreCeiling === 1.5 &&
     codeLocation.data.ceilingReason.includes('location rating 1') && rawCode.ceilingReason.includes('location rating 1'),
   'location rating 1 receives the shipped code cap and reason');
+  const unsureLocation = await readoutCase('unsure-location', {
+    scoreCeiling: 'n',
+    locationTopLogprobs: [
+      { token: '1', logprob: Math.log(0.6) },
+      { token: '3', logprob: Math.log(0.4) },
+    ],
+  });
+  check(unsureLocation.data.scoreCeiling === null,
+    'location expected rating 1.8 does not receive the code cap');
+  const confidentLocation = await readoutCase('confident-location', {
+    scoreCeiling: 'n',
+    locationTopLogprobs: [
+      { token: '1', logprob: Math.log(0.9) },
+      { token: '2', logprob: Math.log(0.1) },
+    ],
+  });
+  check(confidentLocation.data.scoreCeiling === 1.5 &&
+    confidentLocation.data.ceilingReason.includes('location rating 1'),
+  'location expected rating 1.1 receives the code cap and reason');
   check(levelAuthored.data.scoreCeiling === 2 && levelAuthored.data.ceilingBasis === 'level' &&
     rawLevel.scoreCeiling === 2 && rawLevel.ceilingBasis === 'level',
   'a model-authored level cap survives with its mapped basis');
