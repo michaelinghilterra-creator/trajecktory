@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.33.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.33.0...v5.33.1) (2026-11-22)
+
+
+### Bug Fixes
+
+* one identity for percent-encoded paths and careers-page job embeds ([#545](https://github.com/michaelinghilterra-creator/trajecktory/issues/545)) ([87303aa](https://github.com/michaelinghilterra-creator/trajecktory/commit/87303aa9a432243d65d750012796da37df695a92))
+
 ## [5.33.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.32.4...v5.33.0) (2026-11-20)
 
 
