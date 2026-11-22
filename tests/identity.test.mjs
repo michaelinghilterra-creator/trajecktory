@@ -44,6 +44,35 @@ check(canonicalUrl('https://x.com/a/') === 'https://x.com/a', 'strips a trailing
 check(canonicalUrl('https://jobs.lever.co/co/uuid/apply') === 'https://jobs.lever.co/co/uuid', 'strips a trailing /apply');
 check(canonicalUrl('https://jobs.ashbyhq.com/co/uuid/application') === 'https://jobs.ashbyhq.com/co/uuid', 'strips a trailing /application');
 check(canonicalUrl('') === '' && canonicalUrl(null) === '' && canonicalUrl(undefined) === '', 'empty/null/undefined are safe');
+check(canonicalUrl('https://x.example.test/job/Senior-Manager,-Ops-NY/1441')
+    === canonicalUrl('https://x.example.test/job/Senior-Manager%2C-Ops-NY/1441'),
+  'encoded comma and literal comma identify one posting');
+check(canonicalUrl('https://x.example.test/job/Senior-Manager,-Ops-NY/1441')
+    === canonicalUrl('https://x.example.test/job/Senior-Manager%2c-Ops-NY/1441'),
+  'lowercase encoded comma and literal comma identify one posting');
+check(canonicalUrl('https://x.example.test/job/a%2Fb/1441')
+    !== canonicalUrl('https://x.example.test/job/a/b/1441'),
+  'encoded slash stays distinct from literal slash');
+check(canonicalUrl('https://x.example.test/job/Senior%20Manager/1441')
+    === 'https://x.example.test/job/Senior%20Manager/1441',
+  'encoded space stays encoded with uppercase hex');
+check(canonicalUrl('https://x.example.test/job/1441?jobid=A%26B')
+    === 'https://x.example.test/job/1441?jobid=A%26B',
+  'encoded ampersand in a query value stays byte identical');
+check(canonicalUrl('https://x.wd1.myworkdayjobs.com/Careers/job/New-York/Senior-Manager%2C-Ops_JR1441')
+    === canonicalUrl('https://x.wd1.myworkdayjobs.com/Careers/job/New-York/Senior-Manager,-Ops_JR1441'),
+  'Workday path normalization happens before its identity branch');
+check(canonicalUrl('https://x.example.test/careers/?gnk=job&gni=AAA&gns=LinkedIn')
+    === 'https://x.example.test/careers?gni=AAA',
+  'careers embed keeps only its posting id');
+check(canonicalUrl('https://x.example.test/careers/?gnk=job&gni=AAA&gns=LinkedIn')
+    !== canonicalUrl('https://x.example.test/careers/?gnk=job&gni=BBB&gns=LinkedIn'),
+  'careers embeds with different posting ids stay distinct');
+check(canonicalUrl('https://x.example.test/job/1441?utm_source=test')
+    === 'https://x.example.test/job/1441',
+  'tracking source is still stripped');
+check(canonicalUrl('https://x.example.test/job/1441') === 'https://x.example.test/job/1441',
+  'plain URL without escapes or query is unchanged');
 
 // ── junk local: references are UNRESOLVABLE (regression: the $file batch) ──────
 // A local: path carrying an unexpanded template variable is not a real path, and
