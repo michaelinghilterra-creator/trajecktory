@@ -173,13 +173,13 @@ const liveFetch = async () => ({ ok: true, json: async () => ({ jobs: [1] }) });
   // Right company, wrong ATS: the Greenhouse board 404s but the same slug is live
   // on Ashby. It is added on Ashby (api URL built for Ashby) and the move is recorded.
   const p = tmpPortals();
-  const ashbyOnly = async (url) => String(url).includes('api.ashbyhq.com')
+  const ashbyOnly = async (url) => new URL(String(url)).hostname === 'api.ashbyhq.com'
     ? { ok: true, json: async () => ({ jobs: [] }) }
     : { ok: false, json: async () => ({}) };
   const { companies } = parsePortalAdditions(wrap([{ name: 'Wrongats Co', ats: 'greenhouse', slug: 'wrongats' }]));
   const r = await mergePortalAdditions(p, companies, { today: '2026-08-10', fetchImpl: ashbyOnly });
   check(r.added === 1 && r.skippedDead === 0, 'a slug live on another ATS is re-homed, not skipped as dead');
-  check(r.entries[0].ats === 'ashby' && r.entries[0].careers_url.includes('ashbyhq.com'), 'the re-homed entry points at the ATS that answered');
+  check(r.entries[0].ats === 'ashby' && new URL(r.entries[0].careers_url).hostname === 'jobs.ashbyhq.com', 'the re-homed entry points at the ATS that answered');
   check(r.rehomedNames.length === 1 && r.rehomedNames[0].includes('greenhouse -> ashby'), 'the move is named in rehomedNames');
   check(readFileSync(p, 'utf8').includes('careers_url: https://jobs.ashbyhq.com/wrongats'), 'portals.yml gets the Ashby careers_url, not a Greenhouse one');
 }
