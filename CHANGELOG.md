@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.33.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.33.1...v5.33.2) (2026-11-23)
+
+
+### Bug Fixes
+
+* re-home Agent Scan boards proposed on the wrong ATS ([#547](https://github.com/michaelinghilterra-creator/trajecktory/issues/547)) ([ce2a21f](https://github.com/michaelinghilterra-creator/trajecktory/commit/ce2a21f7cfe4b530baf9458247186b717c2d25b1))
+
 ## [5.33.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.33.0...v5.33.1) (2026-11-22)
 
 
