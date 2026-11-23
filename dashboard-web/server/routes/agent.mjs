@@ -1355,6 +1355,7 @@ async function runAgent(jobId, mode, target) {
     const wins = [];
     if (portalMerge.added) wins.push(`${portalMerge.added} new compan${portalMerge.added === 1 ? 'y' : 'ies'} added to your scan list`);
     if (portalMerge.rolesAdded) wins.push(`${portalMerge.rolesAdded} live role${portalMerge.rolesAdded === 1 ? '' : 's'} added to your pipeline`);
+    if (portalMerge.rehomedNames && portalMerge.rehomedNames.length) wins.push(`moved to the right ATS: ${portalMerge.rehomedNames.join(', ')}`);
     const skips = [];
     if (portalMerge.skippedDuplicate) skips.push(`${portalMerge.skippedDuplicate} already tracked`);
     if (portalMerge.skippedOwned) skips.push(`${portalMerge.skippedOwned} owned elsewhere`);
