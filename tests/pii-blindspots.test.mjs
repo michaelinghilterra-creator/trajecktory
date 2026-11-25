@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * pii-blindspots.test.mjs pins pure term derivation, precision filtering,
- * normalization, safe masking, and added-line findings with invented data.
+ * normalization, safe masking, decoded base64 and hex matches, and added-line
+ * findings with invented data.
  *
  * Run: node tests/pii-blindspots.test.mjs   (exit 0 = pass, 1 = fail)
  */
@@ -44,6 +45,16 @@ const referrals = [
 ].join('\n');
 
 const terms = deriveTerms({ profile, cv: '', apps, targetTalent, referrals });
+function realTerms() {
+  return [
+    ...terms.identity,
+    ...terms.people,
+    ...terms.companies,
+    ...terms.titles,
+    ...terms.phones,
+    ...terms.emails,
+  ];
+}
 check(terms.identity.has('Zorina Quell'), 'identity includes the full name');
 check(terms.identity.has('Zorina'), 'identity includes the first name alone');
 check(terms.people.has('Orlena Venn'), 'contact book includes a third-party full name');
@@ -92,7 +103,34 @@ check(!encodedRuleFindings.some(finding => finding.file === 'git-url.md'), '40 c
 check(!encodedRuleFindings.some(finding => finding.file === 'abbreviated.md'), 'abbreviated hex id in a markdown link target is ignored');
 check(!encodedRuleFindings.some(finding => finding.file === 'base64-url.md'), 'base64 run in an HTTPS URL is ignored');
 
-const duplicateLine = 'Call 202-555-0147, then retry 202-555-0147.';
+const b64 = value => Buffer.from(value, 'utf8').toString('base64');
+const b64url = value => Buffer.from(value, 'utf8').toString('base64url');
+const hex = value => Buffer.from(value, 'utf8').toString('hex');
+const decodedLines = [
+  { file: 'b64-phone.mjs', line: `const v = "${b64('call 202-555-0147')}";` },
+  { file: 'b64url-company.mjs', line: `const v = "${b64url('team at Quartz Nebula Labs??')}";` },
+  { file: 'hex-person.mjs', line: `const v = "${hex('Orlena Venn')}";` },
+  { file: 'b64-identity.mjs', line: `const v = "${b64('hello Zorina')}";` },
+  { file: 'nested.mjs', line: `const v = "${b64(b64('202.555.0147'))}";` },
+  { file: 'url-hidden.md', line: `https://example.test/p/${b64url('Orlena Venn')}` },
+  { file: 'b64-generic.mjs', line: `const v = "${b64('first sales manager data')}";` },
+  { file: 'random-hash.mjs', line: `const v = "${'9f'.repeat(4)}${'c3a1'.repeat(6)}";` },
+];
+const decodedFindings = scanAddedLines(decodedLines, terms).findings;
+const decodedHit = (file, kind, via) => decodedFindings.some(finding => finding.file === file
+  && finding.kind === kind && finding.via === via);
+check(decodedHit('b64-phone.mjs', 'phone', 'base64'), 'base64 phone is decoded into a phone finding');
+check(decodedHit('b64url-company.mjs', 'company', 'base64'), 'base64url company is decoded into a company finding');
+check(decodedHit('hex-person.mjs', 'person', 'hex'), 'hex third-party name is decoded into a person finding');
+check(decodedHit('b64-identity.mjs', 'identity', 'base64'), 'base64 first name is decoded into an identity finding');
+check(decodedHit('nested.mjs', 'phone', 'base64+base64'), 'base64 of base64 phone is decoded two levels');
+check(decodedHit('url-hidden.md', 'person', 'base64'), 'encoded name inside a URL segment is still a finding');
+check(!decodedFindings.some(finding => finding.file === 'b64-generic.mjs'), 'encoded generic words produce no finding');
+check(!decodedFindings.some(finding => finding.file === 'random-hash.mjs' && finding.via), 'random hex decodes to no finding');
+check(decodedFindings.every(finding => !realTerms().includes(finding.maskedTerm)), 'decoded findings never expose an unmasked real term');
+check(!scanned.findings.some(finding => finding.via), 'plain matches carry no decoded marker');
+
+const duplicateLine ='Call 202-555-0147, then retry 202-555-0147.';
 const duplicateFindings = scanAddedLines([
   { file: 'duplicate.mjs', line: duplicateLine },
   { file: 'separate.mjs', line: 'First location: 202-555-0147.' },
@@ -102,15 +140,7 @@ check(duplicateFindings.filter(finding => finding.file === 'duplicate.mjs').leng
 check(duplicateFindings.filter(finding => finding.file === 'separate.mjs').length === 2, 'different lines matching the same term yield two findings');
 check(duplicateFindings[0]?.fixture === duplicateLine, 'the first occurrence is the surviving finding');
 
-const realTerms = [
-  ...terms.identity,
-  ...terms.people,
-  ...terms.companies,
-  ...terms.titles,
-  ...terms.phones,
-  ...terms.emails,
-];
-check(scanned.findings.every(finding => !realTerms.includes(finding.maskedTerm)), 'no finding exposes an unmasked real term');
+check(scanned.findings.every(finding => !realTerms().includes(finding.maskedTerm)), 'no finding exposes an unmasked real term');
 check(maskValue('Invented') === 'I******d', 'mask keeps first and last character');
 check(maskValue('abc') === '***', 'mask returns three stars for short input');
 
