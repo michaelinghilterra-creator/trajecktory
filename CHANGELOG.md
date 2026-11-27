@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.34.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.33.2...v5.34.0) (2026-11-27)
+
+
+### Features
+
+* decode base64 and hex runs in the PII blind-spot checker ([#549](https://github.com/michaelinghilterra-creator/trajecktory/issues/549)) ([dbc2c91](https://github.com/michaelinghilterra-creator/trajecktory/commit/dbc2c91bf5bddc3c6826c73e24b61db66abd2e8b))
+
 ## [5.33.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.33.1...v5.33.2) (2026-11-23)
 
 
