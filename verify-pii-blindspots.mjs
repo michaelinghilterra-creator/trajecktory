@@ -123,7 +123,8 @@ function outputText(result) {
 
   for (const finding of result.findings) {
     const masked = finding.maskedTerm === null ? 'human review required' : finding.maskedTerm;
-    console.log(`  [${finding.kind}] ${finding.file}: ${finding.fixture}`);
+    const decoded = finding.via ? ` (decoded from ${finding.via})` : '';
+    console.log(`  [${finding.kind}]${decoded} ${finding.file}: ${finding.fixture}`);
     console.log(`      matched: ${masked}`);
   }
   for (const file of result.identityAllowTouched) {
